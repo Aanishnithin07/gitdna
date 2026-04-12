@@ -202,6 +202,37 @@ function extractCommitData(events) {
   return { messages: messages.slice(0, 20), hours };
 }
 
+function isValidGithubUsername(name) {
+  if (!name || name.length > 39) return false;
+  if (name.startsWith("-") || name.endsWith("-")) return false;
+  return /^[A-Za-z0-9-]+$/.test(name);
+}
+
+function parseGithubUsername(input) {
+  const raw = (input || "").trim();
+  if (!raw) return "";
+
+  const withoutAt = raw.startsWith("@") ? raw.slice(1) : raw;
+  const looksLikeUrl = /^(https?:\/\/|www\.|github\.com\/)/i.test(withoutAt);
+
+  if (looksLikeUrl) {
+    try {
+      const normalizedUrl = /^https?:\/\//i.test(withoutAt) ? withoutAt : `https://${withoutAt}`;
+      const url = new URL(normalizedUrl);
+      const host = url.hostname.toLowerCase();
+      if (host !== "github.com" && host !== "www.github.com") return "";
+
+      const firstSegment = url.pathname.split("/").filter(Boolean)[0] || "";
+      return isValidGithubUsername(firstSegment) ? firstSegment : "";
+    } catch {
+      return "";
+    }
+  }
+
+  const candidate = withoutAt.split("/").filter(Boolean)[0] || "";
+  return isValidGithubUsername(candidate) ? candidate : "";
+}
+
 function AnimatedCounter({ target, delay = 0, duration = 1600 }) {
   const [val, setVal] = useState(0);
   useEffect(() => {
@@ -363,9 +394,20 @@ function LandingPage({ onAnalyze }) {
   const [username, setUsername] = useState("");
   const [loading, setLoading] = useState(false);
   const [blink, setBlink] = useState(true);
+  const [inputError, setInputError] = useState("");
   const recentProfiles = ["torvalds", "gaearon", "antirez"];
   useEffect(() => { const t = setInterval(() => setBlink(b => !b), 500); return () => clearInterval(t); }, []);
-  const handle = () => { if (username.trim()) { setLoading(true); onAnalyze(username.trim()); } };
+  const handle = () => {
+    const parsedUsername = parseGithubUsername(username);
+    if (!parsedUsername) {
+      setInputError("Enter a valid GitHub username or profile URL");
+      return;
+    }
+    setInputError("");
+    setLoading(true);
+    setUsername(parsedUsername);
+    onAnalyze(parsedUsername);
+  };
   return (
     <div className="gd-root" style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", minHeight: "100vh", padding: "40px 20px", position: "relative", zIndex: 2 }}>
       <div className="gd-grid-bg" /><div className="gd-scanlines" /><div className="gd-vignette" />
@@ -397,13 +439,21 @@ function LandingPage({ onAnalyze }) {
               <input
                 className="gd-input"
                 style={{ borderRadius: "0 4px 4px 0", borderLeft: "none" }}
-                placeholder="username"
+                placeholder="username or github.com/username"
                 value={username}
-                onChange={e => setUsername(e.target.value)}
+                onChange={e => {
+                  setUsername(e.target.value);
+                  if (inputError) setInputError("");
+                }}
                 onKeyDown={e => e.key === "Enter" && handle()}
                 autoFocus
               />
             </div>
+            {inputError && (
+              <div style={{ marginTop: 8, color: "#ff8b8b", fontFamily: "Share Tech Mono,monospace", fontSize: "0.62rem", letterSpacing: "0.03em" }}>
+                {inputError}
+              </div>
+            )}
           </div>
           <button className="gd-btn" onClick={handle} disabled={loading || !username.trim()} style={{ width: "100%", fontSize: "0.8rem" }}>
             {loading ? "INITIALIZING..." : "▶ EXECUTE ANALYSIS"}
@@ -421,7 +471,10 @@ function LandingPage({ onAnalyze }) {
                   key={profile}
                   type="button"
                   className="gd-recent-pill"
-                  onClick={() => setUsername(profile)}
+                  onClick={() => {
+                    setUsername(profile);
+                    if (inputError) setInputError("");
+                  }}
                 >
                   @{profile}
                 </button>
@@ -722,6 +775,13 @@ export default function GitDNA() {
     : {};
 
   async function analyze(username) {
+    const parsedUsername = parseGithubUsername(username);
+    if (!parsedUsername) {
+      setError("Enter a valid GitHub username or profile URL.");
+      setPhase("error");
+      return;
+    }
+
     setPhase("loading");
     setLoadingStep(0);
     setError("");
@@ -731,7 +791,7 @@ export default function GitDNA() {
 
     try {
       advanceTo(0);
-      const userRes = await fetch(`https://api.github.com/users/${username}`, {
+      const userRes = await fetch(`https://api.github.com/users/${parsedUsername}`, {
         headers: githubHeaders,
       });
       if (!userRes.ok) {
@@ -739,14 +799,14 @@ export default function GitDNA() {
         throw new Error(userRes.status === 404 ? `User "${username}" not found on GitHub.` : "GitHub API error. Try again.");
       }
       const user = await userRes.json();
-      const profileUsername = user.login || username;
+      const profileUsername = user.login || parsedUsername;
 
       advanceTo(1);
       const repos = [];
       let page = 1;
       while (true) {
         const reposRes = await fetch(
-          `https://api.github.com/users/${username}/repos?per_page=100&sort=pushed&page=${page}`,
+          `https://api.github.com/users/${parsedUsername}/repos?per_page=100&sort=pushed&page=${page}`,
           {
             headers: githubHeaders,
           }
@@ -768,7 +828,7 @@ export default function GitDNA() {
       const score = calcDevScore(user, Array.isArray(repos) ? repos : []);
 
       advanceTo(3);
-      const eventsRes = await fetch(`https://api.github.com/users/${username}/events/public?per_page=30`, {
+      const eventsRes = await fetch(`https://api.github.com/users/${parsedUsername}/events/public?per_page=30`, {
         headers: githubHeaders,
       });
       if (!eventsRes.ok && isRateLimited(eventsRes.status)) throw new Error(RATE_LIMIT_MESSAGE);
@@ -876,7 +936,8 @@ Return this exact JSON structure with creative, specific, personalized content:
     autoAnalyzeRef.current = true;
     const urlUsername = new URLSearchParams(window.location.search).get("u");
     if (urlUsername && urlUsername.trim()) {
-      analyze(urlUsername.trim());
+      const parsedUsername = parseGithubUsername(urlUsername.trim());
+      if (parsedUsername) analyze(parsedUsername);
     }
   }, []);
 
