@@ -526,7 +526,12 @@ function normalizeAnalysisPayload(payload, fallbackUsername) {
     repos: normalizedRepos,
     totalStars,
     recentCommits: githubPayload.recentCommits ?? (githubPayload.recent_commit_messages?.length || 0),
-    contributions: Array.isArray(githubPayload.contributions) ? githubPayload.contributions : [],
+    contributions: Array.isArray(githubPayload.contributions)
+      ? githubPayload.contributions.map((entry) => ({
+          date: entry?.date || "",
+          count: Number(entry?.count || 0),
+        })).filter((entry) => entry.date)
+      : [],
   };
 
   return {
@@ -598,6 +603,40 @@ function buildContributionSeries(rawContributions) {
     });
   }
   return series;
+}
+
+async function resolveContributionSeries(username, existingContributions = []) {
+  const preloaded = Array.isArray(existingContributions)
+    ? existingContributions.map((entry) => ({
+        date: entry?.date || "",
+        count: Number(entry?.count || 0),
+      })).filter((entry) => entry.date)
+    : [];
+
+  if (preloaded.length > 0) {
+    return buildContributionSeries(preloaded);
+  }
+
+  const fetched = await fetchContributionData(username);
+  if (fetched.length > 0) {
+    return buildContributionSeries(fetched);
+  }
+
+  return [];
+}
+
+async function withContributionSeries(bundle) {
+  const username = bundle?.username || bundle?.github?.user?.login;
+  if (!username) return bundle;
+
+  const contributions = await resolveContributionSeries(username, bundle?.github?.contributions || []);
+  return {
+    ...bundle,
+    github: {
+      ...bundle.github,
+      contributions,
+    },
+  };
 }
 
 function formatContributionDate(date) {
@@ -792,9 +831,14 @@ function ContributionHeatmap({ contributions }) {
   const tooltipWrapRef = useRef(null);
   const [tooltip, setTooltip] = useState(null);
 
-  const safeContributions = Array.isArray(contributions) ? contributions.slice(-364) : [];
+  const normalizedInput = Array.isArray(contributions)
+    ? contributions.map((entry) => ({
+        date: entry?.date || "",
+        count: Number(entry?.count || 0),
+      })).filter((entry) => entry.date)
+    : [];
 
-  if (safeContributions.length === 0) {
+  if (normalizedInput.length === 0) {
     return (
       <div style={{ color: "rgba(200,232,255,0.42)", fontFamily: "Share Tech Mono,monospace", fontSize: "0.72rem" }}>
         Contribution history unavailable for this profile.
@@ -802,9 +846,25 @@ function ContributionHeatmap({ contributions }) {
     );
   }
 
+  const safeContributions = buildContributionSeries(normalizedInput);
+
   const weeks = [];
   for (let w = 0; w < 52; w += 1) {
     weeks.push(safeContributions.slice(w * 7, w * 7 + 7));
+  }
+
+  const monthLabels = [];
+  let previousMonthKey = "";
+  for (let weekIndex = 0; weekIndex < weeks.length; weekIndex += 1) {
+    const firstDay = weeks[weekIndex][0];
+    if (!firstDay?.date) continue;
+    const date = new Date(`${firstDay.date}T00:00:00`);
+    const monthLabel = date.toLocaleDateString(undefined, { month: "short" });
+    const monthKey = `${date.getFullYear()}-${date.getMonth()}`;
+    if (weekIndex === 0 || monthKey !== previousMonthKey) {
+      monthLabels.push({ weekIndex, label: monthLabel, key: monthKey });
+      previousMonthKey = monthKey;
+    }
   }
 
   const getCellColor = (count) => {
@@ -820,7 +880,7 @@ function ContributionHeatmap({ contributions }) {
     if (!wrapRect) return;
     setTooltip({
       text: `${day.count} commits on ${formatContributionDate(day.date)}`,
-      x: Math.max(8, Math.min(event.clientX - wrapRect.left + 14, wrapRect.width - 210)),
+      x: Math.max(8, Math.min(event.clientX - wrapRect.left + 14, wrapRect.width - 230)),
       y: Math.max(8, event.clientY - wrapRect.top - 34),
     });
   };
@@ -845,35 +905,103 @@ function ContributionHeatmap({ contributions }) {
     else break;
   }
 
+  const legendColors = [
+    "rgba(0,220,255,0.06)",
+    "rgba(0,220,255,0.2)",
+    "rgba(0,220,255,0.45)",
+    "rgba(0,220,255,0.7)",
+    "#00dcff",
+  ];
+
+  const dayLabels = [
+    { row: 1, label: "Mon" },
+    { row: 3, label: "Wed" },
+    { row: 5, label: "Fri" },
+  ];
+
   return (
     <div>
       <div ref={tooltipWrapRef} style={{ position: "relative", overflowX: "auto", paddingBottom: 6 }}>
-        <div style={{ display: "flex", gap: 2, minWidth: 674 }}>
-          {weeks.map((week, weekIndex) => (
-            <div key={`week-${weekIndex}`} style={{ display: "flex", flexDirection: "column", gap: 2 }}>
-              {week.map((day, dayIndex) => {
-                const flatIndex = weekIndex * 7 + dayIndex;
-                const isRecent = flatIndex >= safeContributions.length - 28;
+        <div style={{ minWidth: 760, width: "fit-content" }}>
+          <div style={{ marginLeft: 54, marginBottom: 6, position: "relative", height: 20 }}>
+            {monthLabels.map((month) => (
+              <div
+                key={`${month.key}-${month.weekIndex}`}
+                style={{
+                  position: "absolute",
+                  left: month.weekIndex * 13,
+                  fontFamily: "Share Tech Mono,monospace",
+                  fontSize: "0.72rem",
+                  color: "rgba(200,232,255,0.86)",
+                }}
+              >
+                {month.label}
+              </div>
+            ))}
+          </div>
+
+          <div style={{ display: "flex", gap: 10, alignItems: "flex-start" }}>
+            <div style={{ width: 44, display: "grid", gridTemplateRows: "repeat(7, 11px)", rowGap: 2 }}>
+              {Array.from({ length: 7 }).map((_, row) => {
+                const label = dayLabels.find((entry) => entry.row === row)?.label || "";
                 return (
                   <div
-                    key={day.date}
-                    onMouseEnter={(event) => placeTooltip(event, day)}
-                    onMouseMove={(event) => placeTooltip(event, day)}
-                    onMouseLeave={() => setTooltip(null)}
+                    key={`day-row-${row}`}
                     style={{
-                      width: 11,
-                      height: 11,
-                      borderRadius: 2,
-                      background: getCellColor(day.count),
-                      boxShadow: isRecent && day.count > 0 ? "0 0 8px rgba(0,220,255,0.35)" : "none",
-                      border: "1px solid rgba(0,220,255,0.08)",
-                      transition: "transform .12s ease, box-shadow .2s ease",
+                      fontFamily: "Share Tech Mono,monospace",
+                      fontSize: "0.66rem",
+                      color: "rgba(200,232,255,0.86)",
+                      lineHeight: "11px",
                     }}
-                  />
+                  >
+                    {label}
+                  </div>
                 );
               })}
             </div>
-          ))}
+
+            <div style={{ display: "flex", gap: 2 }}>
+              {weeks.map((week, weekIndex) => (
+                <div key={`week-${weekIndex}`} style={{ display: "flex", flexDirection: "column", gap: 2 }}>
+                  {week.map((day, dayIndex) => {
+                    const flatIndex = weekIndex * 7 + dayIndex;
+                    const isRecent = flatIndex >= safeContributions.length - 28;
+                    return (
+                      <div
+                        key={day.date}
+                        onMouseEnter={(event) => placeTooltip(event, day)}
+                        onMouseMove={(event) => placeTooltip(event, day)}
+                        onMouseLeave={() => setTooltip(null)}
+                        style={{
+                          width: 11,
+                          height: 11,
+                          borderRadius: 2,
+                          background: getCellColor(day.count),
+                          boxShadow: isRecent && day.count > 0 ? "0 0 8px rgba(0,220,255,0.35)" : "none",
+                          border: "1px solid rgba(0,220,255,0.08)",
+                          transition: "transform .12s ease, box-shadow .2s ease",
+                        }}
+                      />
+                    );
+                  })}
+                </div>
+              ))}
+            </div>
+          </div>
+
+          <div style={{ marginTop: 12, marginLeft: 54, display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12 }}>
+            <span style={{ fontFamily: "Rajdhani,sans-serif", fontSize: "0.72rem", color: "rgba(200,232,255,0.6)" }}>Learn how we count contributions</span>
+            <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+              <span style={{ fontFamily: "Rajdhani,sans-serif", fontSize: "0.72rem", color: "rgba(200,232,255,0.7)" }}>Less</span>
+              {legendColors.map((color, index) => (
+                <span
+                  key={`legend-${index}`}
+                  style={{ width: 11, height: 11, borderRadius: 2, background: color, border: "1px solid rgba(0,220,255,0.08)", display: "inline-block" }}
+                />
+              ))}
+              <span style={{ fontFamily: "Rajdhani,sans-serif", fontSize: "0.72rem", color: "rgba(200,232,255,0.7)" }}>More</span>
+            </div>
+          </div>
         </div>
 
         {tooltip && (
@@ -891,7 +1019,7 @@ function ContributionHeatmap({ contributions }) {
               padding: "6px 8px",
               borderRadius: 4,
               whiteSpace: "nowrap",
-              zIndex: 8,
+              zIndex: 30,
               boxShadow: "0 0 12px rgba(0,220,255,0.2)",
             }}
           >
@@ -2481,8 +2609,9 @@ export default function GitDNA() {
 
     const endpoint = `${API_URL}/api/analyze/${encodeURIComponent(parsedUsername)}`;
 
-    const applyResult = (payload) => {
-      const bundle = normalizeAnalysisPayload(payload, parsedUsername);
+    const applyResult = async (payload) => {
+      let bundle = normalizeAnalysisPayload(payload, parsedUsername);
+      bundle = await withContributionSeries(bundle);
       setGithub(bundle.github);
       setAiData(bundle.aiData);
       setDevScore(bundle.devScore);
@@ -2522,7 +2651,7 @@ export default function GitDNA() {
       setLoadingMessage(fallbackMessage);
       setLoadingFeed((prev) => prev.includes(fallbackMessage) ? prev : [...prev, fallbackMessage]);
       const data = await fetchProfilePayload(parsedUsername);
-      applyResult(data);
+      await applyResult(data);
     };
 
     try {
@@ -2535,7 +2664,7 @@ export default function GitDNA() {
         const source = new EventSource(endpoint);
         streamRef.current = source;
 
-        source.onmessage = (event) => {
+        source.onmessage = async (event) => {
           if (!event?.data) return;
           let packet;
           try {
@@ -2564,7 +2693,11 @@ export default function GitDNA() {
           if (packet.done) {
             source.close();
             streamRef.current = null;
-            applyResult(packet.data || {});
+            try {
+              await applyResult(packet.data || {});
+            } catch (err) {
+              handleFailure(err?.message || "Analysis failed.");
+            }
           }
         };
 
@@ -2616,8 +2749,13 @@ export default function GitDNA() {
         setLoadingFeed((prev) => prev.includes(LOADING_STEPS[7]) ? prev : [...prev, LOADING_STEPS[7]]);
       }
 
-      const leftBundle = normalizeAnalysisPayload(leftPayload, leftUsername);
-      const rightBundle = normalizeAnalysisPayload(rightPayload, rightUsername);
+      let leftBundle = normalizeAnalysisPayload(leftPayload, leftUsername);
+      let rightBundle = normalizeAnalysisPayload(rightPayload, rightUsername);
+
+      [leftBundle, rightBundle] = await Promise.all([
+        withContributionSeries(leftBundle),
+        withContributionSeries(rightBundle),
+      ]);
 
       let analysis = "";
       try {
