@@ -27,6 +27,32 @@ const LOADING_STEPS = [
 
 const RATE_LIMIT_MESSAGE = "RATE LIMIT HIT — Add a GitHub token in .env or wait 60 minutes";
 const FOUNDER_HANDLE = "aanishnithin07";
+const TORVALDS_HANDLE = "torvalds";
+const FOUNDER_LOADING_STEPS = [
+  "WAIT... THIS SIGNATURE IS FAMILIAR",
+  "CROSS-REFERENCING FOUNDER DATABASE",
+  "DNA MATCH CONFIRMED — ORIGIN DETECTED",
+  "INITIATING FOUNDER PROTOCOL",
+  "THE ARCHITECT HAS ENTERED THE SYSTEM",
+];
+const TORVALDS_LOADING_STEPS = [
+  "SCANNING LEGEND...",
+  "INDEXING KERNEL COMMITS",
+  "MAPPING DISTRIBUTED SYSTEM IMPACT",
+  "ANALYZING COMMIT BEHAVIOR",
+  "DECODING OPEN SOURCE LEADERSHIP",
+  "RUNNING LEGACY RESONANCE ENGINE",
+  "SYNTHESIZING PROFILE",
+  "RENDERING PSYCHOLOGICAL MATRIX",
+  "FINALIZING PROFILE",
+  "LEGEND PROFILE READY — INITIALIZING",
+];
+const FOUNDER_FAST_FACTS = [
+  "GitDNA was built by this developer. The algorithm you're looking at? He designed it at midnight.",
+  "Aanish coded the engine that reads everyone else's DNA. The scanner cannot scan the one who built the scanner.",
+  "0 to GitDNA in one idea. Some developers use tools. This one forges them.",
+];
+const EMPTY_REPO_ROAST = "Zero stars. Every legend started here.\nThe commit log doesn't lie — you showed up.";
 
 const CSS = `
 @import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@400;600;700;900&family=Share+Tech+Mono&family=Rajdhani:wght@300;400;500;600;700&display=swap');
@@ -106,6 +132,22 @@ html,body{max-width:100%;overflow-x:hidden}
   65%{opacity:1;color:#39ff14;text-shadow:0 0 18px rgba(57,255,20,.85)}
   100%{opacity:1;color:var(--dna-final);text-shadow:var(--dna-final-shadow);transform:translateY(0) scale(1)}
 }
+@keyframes ultra-hue{from{filter:hue-rotate(0deg)}to{filter:hue-rotate(360deg)}}
+@keyframes founder-dashboard-rise{from{opacity:.2;transform:translateY(42px)}to{opacity:1;transform:translateY(0)}}
+@keyframes founder-cinematic-text{
+  0%,18%{opacity:0;transform:translateY(10px) scale(.98)}
+  35%,72%{opacity:1;transform:translateY(0) scale(1)}
+  100%{opacity:0;transform:translateY(-10px) scale(1.02)}
+}
+@keyframes founder-shimmer{0%{transform:translateX(-120%)}100%{transform:translateX(140%)}}
+@keyframes torvalds-screen-glitch{
+  0%{filter:none;transform:none}
+  20%{filter:contrast(1.35) saturate(1.2) hue-rotate(-16deg);transform:skewX(-1.2deg) translateX(-2px)}
+  40%{filter:contrast(1.5) hue-rotate(14deg);transform:skewX(1.2deg) translateX(2px)}
+  60%{filter:contrast(1.15) saturate(1.4);transform:skewX(-.7deg)}
+  100%{filter:none;transform:none}
+}
+@keyframes toast-down{from{opacity:0;transform:translateY(-24px)}to{opacity:1;transform:translateY(0)}}
 
 .gd-glitch{animation:glitch 5s infinite}
 .gd-card{border:1px solid rgba(0,220,255,0.18);background:rgba(4,14,26,0.88);backdrop-filter:blur(14px);border-radius:6px;animation:pulse-border 4s ease-in-out infinite;position:relative}
@@ -178,6 +220,19 @@ html,body{max-width:100%;overflow-x:hidden}
 .gd-founder-burst{position:fixed;inset:-20%;pointer-events:none;z-index:65;mix-blend-mode:screen;background:radial-gradient(circle at center,rgba(255,210,92,.95) 0%,rgba(255,179,0,.32) 28%,rgba(179,71,234,.22) 46%,rgba(0,220,255,.16) 63%,rgba(0,0,0,0) 78%);animation:founder-burst .95s ease-out forwards}
 
 .gd-founder-header{border-color:rgba(255,179,0,0.38);box-shadow:0 0 18px rgba(255,179,0,0.2),0 0 26px rgba(179,71,234,0.14),inset 0 0 12px rgba(255,179,0,0.05)}
+.gd-founder-header-shimmer{position:absolute;inset:0;pointer-events:none;overflow:hidden;border-radius:6px}
+.gd-founder-header-shimmer::after{content:'';position:absolute;inset:-20% 0;background:linear-gradient(110deg,transparent 34%,rgba(255,215,0,.02) 42%,rgba(255,215,0,.3) 50%,rgba(255,215,0,.02) 58%,transparent 66%);animation:founder-shimmer 6s linear infinite}
+
+.gd-ultra-mode .gd-card,
+.gd-ultra-mode .gd-btn,
+.gd-ultra-mode .gd-badge-cyan,
+.gd-ultra-mode .gd-neon-line,
+.gd-ultra-mode .gd-input,
+.gd-ultra-mode .gd-section-label,
+.gd-ultra-mode .gd-active-dot,
+.gd-ultra-mode .gd-header-ring{animation:ultra-hue 4s linear infinite}
+
+.gd-torvalds-screen{animation:torvalds-screen-glitch .23s steps(2,end) 3}
 
 .gd-tier-header-legendary{border-color:rgba(255,179,0,0.55)!important;box-shadow:0 0 20px rgba(255,179,0,0.24),inset 0 0 12px rgba(255,179,0,0.08)}
 .gd-tier-header-elite{border-color:rgba(179,71,234,0.55)!important;box-shadow:0 0 18px rgba(179,71,234,0.26),inset 0 0 12px rgba(179,71,234,0.08)}
@@ -207,6 +262,24 @@ html,body{max-width:100%;overflow-x:hidden}
 .gd-duel-vs{width:96px;height:96px;border-radius:50%;display:flex;align-items:center;justify-content:center;border:1px solid rgba(255,179,0,.55);background:radial-gradient(circle at 35% 35%,rgba(255,179,0,.3),rgba(35,18,0,.95));color:#ffd166;font-size:1.5rem;font-weight:900;letter-spacing:.08em;animation:duel-vs-pop .8s ease-out forwards,duel-pulse 1.2s ease-in-out .9s infinite}
 .gd-duel-label{font-family:'Share Tech Mono',monospace;font-size:.58rem;letter-spacing:.16em;margin-bottom:8px}
 .gd-duel-sub{margin-top:16px;text-align:center;font-family:'Share Tech Mono',monospace;font-size:.64rem;letter-spacing:.16em;color:rgba(255,179,0,.66)}
+
+.gd-global-badge{position:fixed;z-index:9999;pointer-events:none;padding:4px 10px;border-radius:999px;font-family:'Share Tech Mono',monospace;font-size:.58rem;letter-spacing:.1em;text-transform:uppercase}
+.gd-ultra-badge{left:12px;bottom:12px;background:rgba(57,255,20,.14);border:1px solid rgba(57,255,20,.4);color:#39ff14}
+
+.gd-fixed-overlay{position:fixed;inset:0;z-index:9999;pointer-events:none}
+.gd-konami-flash{background:#39ff14}
+.gd-konami-message{display:flex;align-items:center;justify-content:center}
+.gd-konami-message > div{font-family:'Orbitron',monospace;font-size:clamp(1.4rem,5vw,2.2rem);font-weight:900;letter-spacing:.12em;color:#39ff14;text-shadow:0 0 16px rgba(57,255,20,.85)}
+
+.gd-toast{position:fixed;z-index:9999;pointer-events:none;padding:10px 12px;border-radius:8px;font-family:'Share Tech Mono',monospace;font-size:.64rem;letter-spacing:.06em;max-width:min(92vw,420px);line-height:1.45;animation:toast-down .35s ease forwards}
+.gd-toast button{pointer-events:auto}
+.gd-toast-close{margin-left:8px;background:transparent;border:1px solid currentColor;border-radius:4px;color:inherit;font-size:.55rem;padding:2px 6px;cursor:pointer}
+.gd-toast-action{margin-top:7px;background:transparent;border:1px solid currentColor;border-radius:4px;color:inherit;font-size:.58rem;padding:4px 8px;cursor:pointer}
+
+.gd-cursor-trail-dot{position:fixed;z-index:9999;pointer-events:none;width:3px;height:3px;border-radius:50%;background:#00dcff;box-shadow:0 0 8px rgba(0,220,255,.7);transition:opacity .6s linear}
+
+.gd-founder-cinematic{position:fixed;inset:0;z-index:9999;pointer-events:none;background:#000;display:flex;align-items:center;justify-content:center}
+.gd-founder-cinematic-text{font-family:'Orbitron',monospace;font-size:clamp(2rem,8vw,4rem);font-weight:900;letter-spacing:.1em;color:#fff;animation:founder-cinematic-text 1.7s ease .3s forwards;opacity:0}
 
 .gd-founder-card{position:relative;border:1px solid rgba(255,179,0,0.34);background:radial-gradient(circle at 10% 0%,rgba(255,179,0,0.2),rgba(16,11,2,0.95) 42%,rgba(7,8,16,0.94) 100%);backdrop-filter:blur(12px);border-radius:6px;overflow:hidden;box-shadow:0 0 18px rgba(255,179,0,0.14),0 0 30px rgba(179,71,234,0.1)}
 .gd-founder-card::before{content:'';position:absolute;inset:0;background:linear-gradient(120deg,transparent 15%,rgba(255,179,0,.14) 36%,rgba(179,71,234,.16) 50%,rgba(0,220,255,.12) 64%,transparent 86%);background-size:200% 100%;animation:founder-pan 7s linear infinite;pointer-events:none}
@@ -317,6 +390,37 @@ function parseGithubUsername(input) {
 
 function isFounderLogin(login) {
   return (login || "").toLowerCase() === FOUNDER_HANDLE;
+}
+
+function getLoadingSequenceForUsername(username) {
+  const login = (username || "").toLowerCase();
+  if (login === FOUNDER_HANDLE) return FOUNDER_LOADING_STEPS;
+  if (login === TORVALDS_HANDLE) return TORVALDS_LOADING_STEPS;
+  return LOADING_STEPS;
+}
+
+function mapLoadingStep(rawStep, totalSteps) {
+  const safeTotalSteps = Math.max(1, Number(totalSteps) || 1);
+  const maxBackendStep = Math.max(1, LOADING_STEPS.length - 1);
+  const clampedRaw = Math.max(0, Math.min(Number(rawStep) || 0, maxBackendStep));
+  if (safeTotalSteps === 1) return 0;
+  return Math.round((clampedRaw / maxBackendStep) * (safeTotalSteps - 1));
+}
+
+function getStarTier(totalStars) {
+  const stars = Number(totalStars || 0);
+  if (stars >= 1000) return "elite";
+  if (stars >= 100) return "century";
+  return null;
+}
+
+function isNightOwlProfile(bundle) {
+  const avgHour = Number(bundle?.github?.avg_commit_hour);
+  if (Number.isFinite(avgHour)) {
+    return avgHour >= 22 || avgHour < 6;
+  }
+  const chronotypeTitle = (bundle?.aiData?.chronotype?.title || "").toLowerCase();
+  return /midnight|night|evening|owl/.test(chronotypeTitle);
 }
 
 function getTierMeta(tier) {
@@ -556,7 +660,7 @@ function AnimatedCounter({ target, delay = 0, duration = 1600, ticker = false })
   return <>{val.toLocaleString()}</>;
 }
 
-function ScoreRing({ score }) {
+function ScoreRing({ score, specialMode = null }) {
   const r = 54, circ = 2 * Math.PI * r;
   const [off, setOff] = useState(circ);
   const [progress, setProgress] = useState(0);
@@ -577,34 +681,42 @@ function ScoreRing({ score }) {
     }, 400);
     return () => clearTimeout(t);
   }, [score, circ]);
-  const scoreColor = score >= 80 ? "#39ff14" : score >= 60 ? "#00dcff" : score >= 40 ? "#ffb300" : "#ff4545";
-  const ringColor = "#00dcff";
+  const useGold = specialMode === "gold";
+  const scoreColor = useGold
+    ? "#FFD700"
+    : (score >= 80 ? "#39ff14" : score >= 60 ? "#00dcff" : score >= 40 ? "#ffb300" : "#ff4545");
+  const ringColor = useGold ? "#FFD700" : "#00dcff";
+  const outerTrack = useGold ? "rgba(255,215,0,0.09)" : "rgba(0,220,255,0.07)";
+  const innerTrack = useGold ? "rgba(255,215,0,0.05)" : "rgba(0,220,255,0.04)";
+  const dropShadow = useGold ? "drop-shadow(0 0 18px rgba(255,215,0,0.95))" : "drop-shadow(0 0 10px rgba(0,220,255,0.95))";
+  const sparkFill = useGold ? "#ffe27a" : "#c6ffff";
+  const sparkShadow = useGold ? "drop-shadow(0 0 14px rgba(255,215,0,1))" : "drop-shadow(0 0 8px rgba(0,220,255,1))";
   const sparkAngle = progress * 2 * Math.PI;
   const sparkX = 65 + r * Math.cos(sparkAngle);
   const sparkY = 65 + r * Math.sin(sparkAngle);
   return (
     <div style={{ position: "relative", width: 130, height: 130, flexShrink: 0 }}>
       <svg width="130" height="130" style={{ transform: "rotate(-90deg)", position: "absolute", inset: 0 }}>
-        <circle cx="65" cy="65" r={r} fill="none" stroke="rgba(0,220,255,0.07)" strokeWidth="7" />
-        <circle cx="65" cy="65" r={r} fill="none" stroke="rgba(0,220,255,0.04)" strokeWidth="7"
+        <circle cx="65" cy="65" r={r} fill="none" stroke={outerTrack} strokeWidth="7" />
+        <circle cx="65" cy="65" r={r} fill="none" stroke={innerTrack} strokeWidth="7"
           strokeDasharray="4 8" />
         <circle cx="65" cy="65" r={r} fill="none" stroke={ringColor} strokeWidth="11" strokeLinecap="round"
           strokeDasharray={circ} strokeDashoffset={off}
           style={{ filter: "blur(4px)", opacity: 0.55 }} />
         <circle cx="65" cy="65" r={r} fill="none" stroke={ringColor} strokeWidth="7" strokeLinecap="round"
           strokeDasharray={circ} strokeDashoffset={off}
-          style={{ filter: "drop-shadow(0 0 10px rgba(0,220,255,0.95))" }} />
+          style={{ filter: dropShadow }} />
         {progress > 0.002 && (
-          <circle cx={sparkX} cy={sparkY} r="3.2" fill="#c6ffff"
-            style={{ filter: "drop-shadow(0 0 8px rgba(0,220,255,1))" }} />
+          <circle cx={sparkX} cy={sparkY} r="3.2" fill={sparkFill}
+            style={{ filter: sparkShadow }} />
         )}
-        <circle cx="65" cy="65" r="40" fill="none" stroke="rgba(0,220,255,0.04)" strokeWidth="1" />
+        <circle cx="65" cy="65" r="40" fill="none" stroke={innerTrack} strokeWidth="1" />
       </svg>
       <div style={{ position: "absolute", inset: 0, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center" }}>
         <div style={{ fontFamily: "Orbitron,monospace", fontSize: "1.75rem", fontWeight: 900, color: scoreColor, lineHeight: 1, textShadow: `0 0 12px ${scoreColor}88` }}>
           <AnimatedCounter target={score} delay={500} duration={1800} />
         </div>
-        <div style={{ fontFamily: "Share Tech Mono,monospace", fontSize: "0.55rem", color: "rgba(0,220,255,0.4)", letterSpacing: "0.2em", marginTop: 3 }}>DEV SCORE</div>
+        <div style={{ fontFamily: "Share Tech Mono,monospace", fontSize: "0.55rem", color: useGold ? "rgba(255,215,0,0.45)" : "rgba(0,220,255,0.4)", letterSpacing: "0.2em", marginTop: 3 }}>DEV SCORE</div>
       </div>
     </div>
   );
@@ -939,7 +1051,7 @@ function TopRepositories({ repos, username }) {
   );
 }
 
-function DNASequence({ seq }) {
+function DNASequence({ seq, goldMode = false }) {
   const chars = (seq || "4F6E3A1D9C2B8E7F").split("");
   const [visibleCount, setVisibleCount] = useState(0);
 
@@ -957,17 +1069,23 @@ function DNASequence({ seq }) {
   return (
     <div style={{ display: "flex", gap: 4, flexWrap: "wrap", justifyContent: "center" }}>
       {chars.map((c, i) => (
+        (() => {
+          const color = goldMode ? "#FFD700" : (i % 2 === 0 ? "#00dcff" : "#b347ea");
+          const shadow = goldMode ? "0 0 10px rgba(255,215,0,0.7)" : (i % 2 === 0 ? "0 0 8px rgba(0,220,255,0.5)" : "0 0 8px rgba(179,71,234,0.5)");
+          return (
         <span key={i} style={{
           fontFamily: "Share Tech Mono,monospace", fontSize: "0.75rem",
           opacity: i < visibleCount ? 1 : 0,
-          color: i % 2 === 0 ? "#00dcff" : "#b347ea",
-          textShadow: i % 2 === 0 ? "0 0 8px rgba(0,220,255,0.5)" : "0 0 8px rgba(179,71,234,0.5)",
+          color,
+          textShadow: shadow,
           transform: i < visibleCount ? "translateY(0) scale(1)" : "translateY(4px) scale(0.8)",
           transition: "opacity .08s linear",
           animation: i < visibleCount ? "dna-lock .25s ease both" : "none",
-          "--dna-final": i % 2 === 0 ? "#00dcff" : "#b347ea",
-          "--dna-final-shadow": i % 2 === 0 ? "0 0 8px rgba(0,220,255,0.5)" : "0 0 8px rgba(179,71,234,0.5)",
+          "--dna-final": color,
+          "--dna-final-shadow": shadow,
         }}>{c}</span>
+          );
+        })()
       ))}
     </div>
   );
@@ -1272,7 +1390,7 @@ function BackgroundCanvas({ attractRef = null, attractActive = false }) {
   return <canvas ref={canvasRef} className="gd-bg-canvas" aria-hidden="true" />;
 }
 
-function LandingPage({ onAnalyze }) {
+function LandingPage({ onAnalyze, ultraMode = false }) {
   const [username, setUsername] = useState("");
   const [loading, setLoading] = useState(false);
   const [blink, setBlink] = useState(true);
@@ -1293,7 +1411,7 @@ function LandingPage({ onAnalyze }) {
     onAnalyze(parsedUsername);
   };
   return (
-    <div className="gd-root" style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", minHeight: "100vh", padding: "40px 20px", position: "relative", zIndex: 2 }}>
+    <div className={`gd-root${ultraMode ? " gd-ultra-mode" : ""}`} style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", minHeight: "100vh", padding: "40px 20px", position: "relative", zIndex: 2 }}>
       <BackgroundCanvas attractRef={inputRef} attractActive={isInputFocused} />
       <div className="gd-scanlines" />
 
@@ -1385,12 +1503,14 @@ function LandingPage({ onAnalyze }) {
   );
 }
 
-function LoadingPage({ step, message, feed }) {
-  const pct = Math.round(((step + 1) / LOADING_STEPS.length) * 100);
-  const currentMessage = message || LOADING_STEPS[step] || LOADING_STEPS[0];
-  const displayFeed = Array.isArray(feed) && feed.length > 0 ? feed : LOADING_STEPS.slice(0, Math.max(step + 1, 1));
+function LoadingPage({ step, message, feed, steps = LOADING_STEPS, ultraMode = false }) {
+  const safeSteps = Array.isArray(steps) && steps.length > 0 ? steps : LOADING_STEPS;
+  const safeStep = Math.max(0, Math.min(step, safeSteps.length - 1));
+  const pct = Math.round(((safeStep + 1) / safeSteps.length) * 100);
+  const currentMessage = message || safeSteps[safeStep] || safeSteps[0];
+  const displayFeed = Array.isArray(feed) && feed.length > 0 ? feed : safeSteps.slice(0, Math.max(safeStep + 1, 1));
   return (
-    <div className="gd-root" style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", minHeight: "100vh", padding: 20, position: "relative", zIndex: 2 }}>
+    <div className={`gd-root${ultraMode ? " gd-ultra-mode" : ""}`} style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", minHeight: "100vh", padding: 20, position: "relative", zIndex: 2 }}>
       <BackgroundCanvas />
       <div className="gd-scanlines" />
 
@@ -1406,7 +1526,7 @@ function LoadingPage({ step, message, feed }) {
         </div>
 
         <div style={{ fontFamily: "Share Tech Mono,monospace", fontSize: "0.68rem", color: "rgba(0,220,255,0.4)", letterSpacing: "0.15em", marginBottom: 10 }}>
-          SYSTEM PROCESS {String(step + 1).padStart(2, "0")}/{LOADING_STEPS.length}
+          SYSTEM PROCESS {String(safeStep + 1).padStart(2, "0")}/{safeSteps.length}
         </div>
         <div style={{ fontFamily: "Orbitron,monospace", fontSize: "clamp(0.7rem,2vw,0.9rem)", color: "#00dcff", letterSpacing: "0.12em", fontWeight: 600, marginBottom: 28, textShadow: "0 0 10px rgba(0,220,255,0.4)", minHeight: 24 }}>
           {currentMessage}
@@ -1438,31 +1558,59 @@ function LoadingPage({ step, message, feed }) {
   );
 }
 
-function Dashboard({ github, aiData, devScore, langs, username, onReset, onCompare, compareBusy }) {
+function Dashboard({
+  github,
+  aiData,
+  devScore,
+  langs,
+  username,
+  onReset,
+  onCompare,
+  compareBusy,
+  isFounderState,
+  starTier,
+  nightOwlToastVisible,
+  onNightOwlDismiss,
+  ultraMode,
+}) {
   const { user, totalStars, recentCommits, contributions, repos } = github;
   const acctYears = ((Date.now() - new Date(user.created_at)) / (1000 * 60 * 60 * 24 * 365)).toFixed(1);
-  const devClass = aiData?.devClass || "Unknown Archetype";
+  const founderActive = isFounderState || isFounderLogin(user.login);
+  const isTorvalds = (user.login || "").toLowerCase() === "torvalds";
+  const effectiveDevClass = founderActive ? "THE ORIGIN NODE" : (isTorvalds ? "THE PROGENITOR 🐧" : (aiData?.devClass || "Unknown Archetype"));
   const archetype = aiData?.archetype || { tier: "RISING" };
-  const tierMeta = getTierMeta(archetype.tier);
+  const tierMeta = getTierMeta(founderActive ? "LEGENDARY" : archetype.tier);
   const chronotype = aiData?.chronotype || { title: "Unknown", description: "Analysis unavailable." };
   const collab = aiData?.collaborationStyle || { title: "Unknown", description: "Analysis unavailable." };
   const strengthReport = aiData?.strengthReport || "Strength profile unavailable.";
   const warningSign = aiData?.warningSign || "Blindspot profile unavailable.";
   const traits = aiData?.traits;
-  const facts = aiData?.fastFacts || [];
+  const aiFacts = aiData?.fastFacts || [];
+  const roastMode = !founderActive && totalStars === 0 && (user.public_repos || 0) < 5;
+  const facts = founderActive
+    ? FOUNDER_FAST_FACTS
+    : (roastMode ? [EMPTY_REPO_ROAST, ...aiFacts.filter((fact) => fact !== EMPTY_REPO_ROAST)].slice(0, 3) : aiFacts);
   const dna = aiData?.dnaSequence || "0000000000000000";
   const shareCardRef = useRef(null);
   const shareFlashTimeoutRef = useRef(null);
   const unlockFlashTimeoutRef = useRef(null);
   const founderBurstTimeoutRef = useRef(null);
-  const isFounder = isFounderLogin(user.login);
+  const founderCinematicTimeoutRef = useRef(null);
+  const torvaldsGlitchTimeoutRef = useRef(null);
+  const longSessionTimeoutRef = useRef(null);
+  const starToastShowTimeoutRef = useRef(null);
+  const starToastHideTimeoutRef = useRef(null);
   const [isGeneratingCard, setIsGeneratingCard] = useState(false);
   const [showCardSaved, setShowCardSaved] = useState(false);
   const [showUnlockFlash, setShowUnlockFlash] = useState(true);
   const [showFounderBurst, setShowFounderBurst] = useState(false);
+  const [showFounderCinematic, setShowFounderCinematic] = useState(false);
+  const [showTorvaldsGlitch, setShowTorvaldsGlitch] = useState(false);
   const [showCompareModal, setShowCompareModal] = useState(false);
   const [opponentUsername, setOpponentUsername] = useState("");
   const [compareError, setCompareError] = useState("");
+  const [showLongSessionToast, setShowLongSessionToast] = useState(false);
+  const [showStarToast, setShowStarToast] = useState(false);
 
   const cardEntranceStyle = (index) => ({
     opacity: 0,
@@ -1470,27 +1618,69 @@ function Dashboard({ github, aiData, devScore, langs, username, onReset, onCompa
     "--scan-delay": `${index * 150}ms`,
   });
 
+  const profileSharePath = `/?u=${encodeURIComponent(user.login || username || "")}`;
+
   useEffect(() => {
     setShowUnlockFlash(true);
     unlockFlashTimeoutRef.current = setTimeout(() => setShowUnlockFlash(false), 420);
-    if (isFounder) {
+
+    if (founderActive) {
       setShowFounderBurst(true);
       founderBurstTimeoutRef.current = setTimeout(() => setShowFounderBurst(false), 950);
+      setShowFounderCinematic(true);
+      founderCinematicTimeoutRef.current = setTimeout(() => setShowFounderCinematic(false), 2000);
     } else {
       setShowFounderBurst(false);
+      setShowFounderCinematic(false);
     }
+
+    if (isTorvalds) {
+      setShowTorvaldsGlitch(true);
+      torvaldsGlitchTimeoutRef.current = setTimeout(() => setShowTorvaldsGlitch(false), 780);
+    } else {
+      setShowTorvaldsGlitch(false);
+    }
+
+    longSessionTimeoutRef.current = setTimeout(() => setShowLongSessionToast(true), 180000);
+
+    if (starTier) {
+      starToastShowTimeoutRef.current = setTimeout(() => setShowStarToast(true), 2400);
+      starToastHideTimeoutRef.current = setTimeout(
+        () => setShowStarToast(false),
+        starTier === "elite" ? 6400 : 4400,
+      );
+    } else {
+      setShowStarToast(false);
+    }
+
     return () => {
-      if (shareFlashTimeoutRef.current) {
-        clearTimeout(shareFlashTimeoutRef.current);
-      }
-      if (unlockFlashTimeoutRef.current) {
-        clearTimeout(unlockFlashTimeoutRef.current);
-      }
-      if (founderBurstTimeoutRef.current) {
-        clearTimeout(founderBurstTimeoutRef.current);
-      }
+      [
+        shareFlashTimeoutRef,
+        unlockFlashTimeoutRef,
+        founderBurstTimeoutRef,
+        founderCinematicTimeoutRef,
+        torvaldsGlitchTimeoutRef,
+        longSessionTimeoutRef,
+        starToastShowTimeoutRef,
+        starToastHideTimeoutRef,
+      ].forEach((ref) => {
+        if (ref.current) {
+          clearTimeout(ref.current);
+          ref.current = null;
+        }
+      });
     };
-  }, [isFounder]);
+  }, [founderActive, isTorvalds, starTier]);
+
+  async function copyProfileLink() {
+    try {
+      if (navigator?.clipboard?.writeText) {
+        await navigator.clipboard.writeText(profileSharePath);
+      }
+    } catch {
+      // Ignore clipboard failures.
+    }
+  }
 
   async function handleGenerateShareCard() {
     if (!shareCardRef.current || isGeneratingCard) return;
@@ -1502,6 +1692,20 @@ function Dashboard({ github, aiData, devScore, langs, username, onReset, onCompa
         scale: window.devicePixelRatio > 1 ? 2 : 1,
         useCORS: true,
       });
+
+      if (founderActive) {
+        const ctx = canvas.getContext("2d");
+        if (ctx) {
+          ctx.save();
+          ctx.translate(canvas.width * 0.5, canvas.height * 0.5);
+          ctx.rotate(-Math.PI / 4);
+          ctx.fillStyle = "rgba(255,215,0,0.08)";
+          ctx.textAlign = "center";
+          ctx.font = `${Math.floor(canvas.width * 0.11)}px Orbitron, monospace`;
+          ctx.fillText("FOUNDER", 0, 0);
+          ctx.restore();
+        }
+      }
 
       const profileUsername = (user.login || username || "profile").replace(/[^a-zA-Z0-9_-]/g, "") || "profile";
       const link = document.createElement("a");
@@ -1522,17 +1726,42 @@ function Dashboard({ github, aiData, devScore, langs, username, onReset, onCompa
   }
 
   return (
-    <div className="gd-root" style={{ position: "relative", zIndex: 2, paddingBottom: 60 }}>
+    <div className={`gd-root${ultraMode ? " gd-ultra-mode" : ""}${showTorvaldsGlitch ? " gd-torvalds-screen" : ""}`} style={{ position: "relative", zIndex: 2, paddingBottom: 60 }}>
       <BackgroundCanvas />
       <div className="gd-scanlines" />
       {showUnlockFlash && <div className="gd-unlock-flash" />}
       {showFounderBurst && <div className="gd-founder-burst" />}
 
-      <div style={{ maxWidth: 900, margin: "0 auto", padding: "24px 16px", position: "relative", zIndex: 2 }}>
+      {showFounderCinematic && founderActive && (
+        <div className="gd-founder-cinematic">
+          <div className="gd-founder-cinematic-text">YOU BUILT THIS.</div>
+        </div>
+      )}
+
+      {showStarToast && starTier && (
+        <div
+          className="gd-toast"
+          style={{
+            top: 16,
+            left: "50%",
+            transform: "translateX(-50%)",
+            border: starTier === "elite" ? "1px solid rgba(255,179,0,0.55)" : "1px solid rgba(57,255,20,0.5)",
+            color: starTier === "elite" ? "#ffb300" : "#39ff14",
+            background: starTier === "elite" ? "rgba(18,12,0,0.92)" : "rgba(4,14,6,0.92)",
+          }}
+        >
+          {starTier === "elite"
+            ? "⭐ ELITE TIER — You are in the top 1% of GitHub"
+            : "⭐ CENTURY CLUB — Top 12% of GitHub developers"}
+        </div>
+      )}
+
+      <div style={{ maxWidth: 900, margin: "0 auto", padding: "24px 16px", position: "relative", zIndex: 2, animation: founderActive ? "founder-dashboard-rise .9s ease .95s both" : undefined }}>
         <div ref={shareCardRef} style={{ padding: 2, borderRadius: 8 }}>
           {/* HEADER */}
-          <div className={`gd-card gd-header-card gd-enter-scan ${tierMeta.headerClass}${isFounder ? " gd-founder-header" : ""}`} style={{ padding: "20px 22px", marginBottom: 16, display: "flex", alignItems: "center", gap: 20, flexWrap: "wrap", ...cardEntranceStyle(0) }}>
+          <div className={`gd-card gd-header-card gd-enter-scan ${tierMeta.headerClass}${founderActive ? " gd-founder-header" : ""}`} style={{ padding: "20px 22px", marginBottom: 16, display: "flex", alignItems: "center", gap: 20, flexWrap: "wrap", ...cardEntranceStyle(0) }}>
             <div className="scan-overlay" />
+            {founderActive && <div className="gd-founder-header-shimmer" />}
             <div style={{ position: "relative", flexShrink: 0 }}>
               <div style={{ position: "absolute", inset: -4, borderRadius: "50%", border: "1.5px solid rgba(0,220,255,0.3)", animation: "ring-spin 8s linear infinite" }} />
               <div style={{ position: "absolute", inset: -8, borderRadius: "50%", border: "1px solid rgba(179,71,234,0.2)", animation: "ring-spin 12s linear infinite reverse" }} />
@@ -1547,9 +1776,10 @@ function Dashboard({ github, aiData, devScore, langs, username, onReset, onCompa
             <div style={{ flex: 1, minWidth: 0 }}>
               <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap", marginBottom: 4 }}>
                 <h2 className="orb" style={{ fontSize: "1.25rem", fontWeight: 700, color: "#ffffff", letterSpacing: "0.05em" }}>{user.name || user.login}</h2>
-                <span className="gd-badge gd-badge-purple">{devClass}</span>
+                <span className="gd-badge gd-badge-purple">{effectiveDevClass}</span>
                 <span className={`gd-badge ${tierMeta.badgeClass}`}>{tierMeta.icon} {tierMeta.label}</span>
-                {isFounder && <span className="gd-badge gd-badge-gold">FOUNDER // ROOT ACCESS</span>}
+                {founderActive && <span className="gd-badge gd-badge-gold" style={{ fontSize: "0.66rem", padding: "3px 10px" }}>⚙ ARCHITECT OF GITDNA</span>}
+                {isTorvalds && <span className="gd-badge gd-badge-gold">KERNEL DEITY</span>}
               </div>
               <div style={{ fontFamily: "Share Tech Mono,monospace", fontSize: "0.72rem", color: "rgba(0,220,255,0.5)", marginBottom: 8 }}>@{user.login}</div>
               {user.bio && <div style={{ fontSize: "0.88rem", color: "rgba(200,232,255,0.55)", fontWeight: 300, marginBottom: 8 }}>{user.bio}</div>}
@@ -1560,7 +1790,7 @@ function Dashboard({ github, aiData, devScore, langs, username, onReset, onCompa
               </div>
             </div>
             <div className="gd-header-ring" style={{ flexShrink: 0 }}>
-              <ScoreRing score={devScore} />
+              <ScoreRing score={devScore} specialMode={founderActive || isTorvalds ? "gold" : null} />
               <button
                 className="gd-btn"
                 onClick={() => {
@@ -1575,7 +1805,7 @@ function Dashboard({ github, aiData, devScore, langs, username, onReset, onCompa
             </div>
           </div>
 
-          {isFounder && (
+          {founderActive && (
             <FounderProtocol
               user={user}
               devScore={devScore}
@@ -1588,7 +1818,7 @@ function Dashboard({ github, aiData, devScore, langs, username, onReset, onCompa
           {/* DNA SEQUENCE */}
           <div className="gd-card gd-enter-scan" style={{ padding: "12px 18px", marginBottom: 16, ...cardEntranceStyle(1) }}>
             <div className="gd-section-label" style={{ marginBottom: 8 }}>DEV DNA SEQUENCE</div>
-            <DNASequence seq={dna} />
+            <DNASequence seq={dna} goldMode={founderActive} />
           </div>
 
           {/* VITALS */}
@@ -1694,9 +1924,13 @@ function Dashboard({ github, aiData, devScore, langs, username, onReset, onCompa
               <div className="gd-section-label">// AI FAST FACTS</div>
               <div style={{ display: "flex", gap: 12, flexWrap: "wrap" }}>
                 {facts.map((fact, i) => (
-                  <div key={i} className="gd-card-gold gd-hover-lift gd-enter-scan" style={{ flex: "1 1 180px", padding: "14px 14px", ...cardEntranceStyle(14 + i) }}>
-                    <div style={{ fontFamily: "Share Tech Mono,monospace", fontSize: "0.55rem", color: "rgba(255,179,0,0.45)", letterSpacing: "0.15em", marginBottom: 8 }}>INTEL_{String(i + 1).padStart(2, "0")}</div>
-                    <p style={{ fontSize: "0.84rem", color: "rgba(200,232,255,0.7)", lineHeight: 1.55, fontWeight: 400 }}>{fact}</p>
+                  <div
+                    key={i}
+                    className={`${roastMode && i === 0 ? "gd-card-gold" : "gd-card"} gd-hover-lift gd-enter-scan`}
+                    style={{ flex: "1 1 180px", padding: "14px 14px", ...cardEntranceStyle(14 + i) }}
+                  >
+                    <div style={{ fontFamily: "Share Tech Mono,monospace", fontSize: "0.55rem", color: roastMode && i === 0 ? "rgba(255,179,0,0.62)" : "rgba(0,220,255,0.45)", letterSpacing: "0.15em", marginBottom: 8 }}>INTEL_{String(i + 1).padStart(2, "0")}</div>
+                    <p style={{ fontSize: "0.84rem", color: "rgba(200,232,255,0.7)", lineHeight: 1.55, fontWeight: 400, whiteSpace: "pre-line" }}>{fact}</p>
                   </div>
                 ))}
               </div>
@@ -1724,8 +1958,28 @@ function Dashboard({ github, aiData, devScore, langs, username, onReset, onCompa
               <button className="gd-btn" onClick={onReset} style={{ padding: "8px 16px", fontSize: "0.68rem" }}>◀ NEW SCAN</button>
             </div>
           </div>
+          {founderActive && (
+            <div style={{ marginTop: 10, fontFamily: "Share Tech Mono,monospace", fontSize: "0.5rem", letterSpacing: "0.08em", color: "rgba(200,232,255,0.25)" }}>
+              // GitDNA was conceived, designed, and built by @Aanishnithin07 — 2025
+            </div>
+          )}
         </div>
       </div>
+
+      {showLongSessionToast && (
+        <div className="gd-toast" style={{ right: 14, bottom: 14, border: "1px solid rgba(0,220,255,0.45)", color: "#00dcff", background: "rgba(4,12,22,0.95)" }}>
+          <div>Still analyzing? Share this profile →</div>
+          <button className="gd-toast-action" onClick={copyProfileLink}>COPY LINK</button>
+          <button className="gd-toast-close" onClick={() => setShowLongSessionToast(false)}>DISMISS</button>
+        </div>
+      )}
+
+      {nightOwlToastVisible && (
+        <div className="gd-toast" style={{ left: "50%", transform: "translateX(-50%)", bottom: 14, border: "1px solid rgba(0,220,255,0.45)", color: "#00dcff", background: "rgba(4,12,22,0.95)" }}>
+          🌑 Late night code session detected. You and this developer would probably get along.
+          <button className="gd-toast-close" onClick={onNightOwlDismiss}>OK</button>
+        </div>
+      )}
 
       {showCompareModal && (
         <div className="gd-modal-overlay" role="dialog" aria-modal="true">
@@ -1793,9 +2047,9 @@ function Dashboard({ github, aiData, devScore, langs, username, onReset, onCompa
   );
 }
 
-function BattleIntro({ leftUsername, rightUsername }) {
+function BattleIntro({ leftUsername, rightUsername, ultraMode = false }) {
   return (
-    <div className="gd-root" style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", minHeight: "100vh", padding: 20, position: "relative", zIndex: 2 }}>
+    <div className={`gd-root${ultraMode ? " gd-ultra-mode" : ""}`} style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", minHeight: "100vh", padding: 20, position: "relative", zIndex: 2 }}>
       <BackgroundCanvas />
       <div className="gd-scanlines" />
 
@@ -1818,7 +2072,7 @@ function BattleIntro({ leftUsername, rightUsername }) {
   );
 }
 
-function CompareView({ battleData, onBack, onShareBattle }) {
+function CompareView({ battleData, onBack, onShareBattle, ultraMode = false }) {
   const { left, right, analysis } = battleData;
 
   const leftTraits = left?.aiData?.traits || {};
@@ -1869,7 +2123,7 @@ function CompareView({ battleData, onBack, onShareBattle }) {
   ];
 
   return (
-    <div className="gd-root" style={{ position: "relative", zIndex: 2, paddingBottom: 60 }}>
+    <div className={`gd-root${ultraMode ? " gd-ultra-mode" : ""}`} style={{ position: "relative", zIndex: 2, paddingBottom: 60 }}>
       <BackgroundCanvas />
       <div className="gd-scanlines" />
 
@@ -1999,8 +2253,28 @@ function CompareView({ battleData, onBack, onShareBattle }) {
   );
 }
 
+function GlobalEasterEggOverlays({ ultraMode, showKonamiFlash, showKonamiMessage }) {
+  return (
+    <>
+      {ultraMode && <div className="gd-global-badge gd-ultra-badge">ULTRA MODE</div>}
+      {showKonamiFlash && (
+        <div
+          className="gd-fixed-overlay gd-konami-flash"
+          style={{ animation: "flash .35s ease-out forwards", opacity: 0.88 }}
+        />
+      )}
+      {showKonamiMessage && (
+        <div className="gd-fixed-overlay gd-konami-message">
+          <div>ULTRA MODE UNLOCKED</div>
+        </div>
+      )}
+    </>
+  );
+}
+
 export default function GitDNA() {
   const [phase, setPhase] = useState("landing");
+  const [loadingSteps, setLoadingSteps] = useState(LOADING_STEPS);
   const [loadingStep, setLoadingStep] = useState(0);
   const [loadingMessage, setLoadingMessage] = useState(LOADING_STEPS[0]);
   const [loadingFeed, setLoadingFeed] = useState([]);
@@ -2012,9 +2286,23 @@ export default function GitDNA() {
   const [activeUsername, setActiveUsername] = useState("");
   const [battleData, setBattleData] = useState(null);
   const [compareBusy, setCompareBusy] = useState(false);
+  const [ultraMode, setUltraMode] = useState(() => {
+    if (typeof window === "undefined") return false;
+    return window.localStorage.getItem("gitdna_ultra_mode") === "1";
+  });
+  const [showKonamiFlash, setShowKonamiFlash] = useState(false);
+  const [showKonamiMessage, setShowKonamiMessage] = useState(false);
+  const [isFounder, setIsFounder] = useState(false);
+  const [starTier, setStarTier] = useState(null);
+  const [nightOwlShown, setNightOwlShown] = useState(false);
+  const [nightOwlToastVisible, setNightOwlToastVisible] = useState(false);
   const autoAnalyzeRef = useRef(false);
   const streamRef = useRef(null);
   const battleIntroTimerRef = useRef(null);
+  const konamiIndexRef = useRef(0);
+  const konamiFlashTimeoutRef = useRef(null);
+  const konamiMessageTimeoutRef = useRef(null);
+  const nightOwlShownRef = useRef(false);
   const API_URL = (import.meta.env.VITE_API_URL || "http://localhost:8000").replace(/\/$/, "");
 
   const beginBattleIntro = () => {
@@ -2068,6 +2356,106 @@ export default function GitDNA() {
     return battle?.analysis || "Battle analysis unavailable.";
   };
 
+  useEffect(() => {
+    nightOwlShownRef.current = nightOwlShown;
+  }, [nightOwlShown]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    if (window.__gitdna_console_signature__) return;
+    window.__gitdna_console_signature__ = true;
+
+    console.log(
+      "%cGITDNA // BUILT BY @Aanishnithin07",
+      "color:#00dcff;background:#061626;padding:6px 10px;border:1px solid #00dcff;font-family:'Share Tech Mono',monospace;font-size:11px;letter-spacing:1px;",
+    );
+    console.log(
+      "%cYour code has a fingerprint. We read it.",
+      "color:#ffd166;font-family:'Share Tech Mono',monospace;font-size:10px;letter-spacing:0.6px;",
+    );
+  }, []);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+
+    const sequence = ["arrowup", "arrowup", "arrowdown", "arrowdown", "arrowleft", "arrowright", "arrowleft", "arrowright", "b", "a"];
+    const onKeyDown = (event) => {
+      const key = (event.key || "").toLowerCase();
+      if (!key) return;
+
+      const expected = sequence[konamiIndexRef.current];
+      if (key === expected) {
+        konamiIndexRef.current += 1;
+        if (konamiIndexRef.current === sequence.length) {
+          konamiIndexRef.current = 0;
+          setUltraMode(true);
+
+          if (konamiFlashTimeoutRef.current) clearTimeout(konamiFlashTimeoutRef.current);
+          if (konamiMessageTimeoutRef.current) clearTimeout(konamiMessageTimeoutRef.current);
+
+          setShowKonamiFlash(true);
+          setShowKonamiMessage(true);
+          konamiFlashTimeoutRef.current = setTimeout(() => setShowKonamiFlash(false), 360);
+          konamiMessageTimeoutRef.current = setTimeout(() => setShowKonamiMessage(false), 1700);
+        }
+        return;
+      }
+
+      konamiIndexRef.current = key === sequence[0] ? 1 : 0;
+    };
+
+    window.addEventListener("keydown", onKeyDown);
+    return () => {
+      window.removeEventListener("keydown", onKeyDown);
+      if (konamiFlashTimeoutRef.current) {
+        clearTimeout(konamiFlashTimeoutRef.current);
+        konamiFlashTimeoutRef.current = null;
+      }
+      if (konamiMessageTimeoutRef.current) {
+        clearTimeout(konamiMessageTimeoutRef.current);
+        konamiMessageTimeoutRef.current = null;
+      }
+    };
+  }, []);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    window.localStorage.setItem("gitdna_ultra_mode", ultraMode ? "1" : "0");
+  }, [ultraMode]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    if (window.matchMedia && window.matchMedia("(pointer: coarse)").matches) return;
+
+    let lastPaint = 0;
+    const onMouseMove = (event) => {
+      const now = performance.now();
+      if (now - lastPaint < 18) return;
+      lastPaint = now;
+
+      const dot = document.createElement("div");
+      dot.className = "gd-cursor-trail-dot";
+      dot.style.left = `${event.clientX - 1.5}px`;
+      dot.style.top = `${event.clientY - 1.5}px`;
+      dot.style.opacity = "0.95";
+      document.body.appendChild(dot);
+
+      requestAnimationFrame(() => {
+        dot.style.opacity = "0";
+        dot.style.transform = "scale(0.25)";
+      });
+
+      setTimeout(() => {
+        dot.remove();
+      }, 620);
+    };
+
+    window.addEventListener("mousemove", onMouseMove, { passive: true });
+    return () => {
+      window.removeEventListener("mousemove", onMouseMove);
+    };
+  }, []);
+
   async function analyze(username) {
     const parsedUsername = parseGithubUsername(username);
     if (!parsedUsername) {
@@ -2076,12 +2464,20 @@ export default function GitDNA() {
       return;
     }
 
+    const selectedLoadingSteps = getLoadingSequenceForUsername(parsedUsername);
+    const overrideStreamMessages = isFounderLogin(parsedUsername) || parsedUsername.toLowerCase() === TORVALDS_HANDLE;
+    const initialMessage = selectedLoadingSteps[0] || LOADING_STEPS[0];
+
     setPhase("loading");
+    setLoadingSteps(selectedLoadingSteps);
     setLoadingStep(0);
-    setLoadingMessage(LOADING_STEPS[0]);
-    setLoadingFeed([]);
+    setLoadingMessage(initialMessage);
+    setLoadingFeed([initialMessage]);
     setError("");
     setBattleData(null);
+    setIsFounder(isFounderLogin(parsedUsername));
+    setStarTier(null);
+    setNightOwlToastVisible(false);
 
     const endpoint = `${API_URL}/api/analyze/${encodeURIComponent(parsedUsername)}`;
 
@@ -2092,11 +2488,25 @@ export default function GitDNA() {
       setDevScore(bundle.devScore);
       setLangs(bundle.langs);
       setActiveUsername(bundle.username);
+      const founderDetected = isFounderLogin(bundle.username);
+      setIsFounder(founderDetected);
+      setStarTier(getStarTier(bundle.github.totalStars));
+
+      const shouldShowNightOwl = isNightOwlProfile(bundle) && !nightOwlShownRef.current;
+      if (shouldShowNightOwl) {
+        setNightOwlToastVisible(true);
+        setNightOwlShown(true);
+      } else {
+        setNightOwlToastVisible(false);
+      }
+
       const profileUsername = bundle.username;
       window.history.pushState({}, "", `/?u=${encodeURIComponent(profileUsername)}`);
-      setLoadingStep(9);
-      setLoadingMessage(LOADING_STEPS[9]);
-      setLoadingFeed((prev) => prev.includes(LOADING_STEPS[9]) ? prev : [...prev, LOADING_STEPS[9]]);
+      const finalStepIndex = Math.max(0, selectedLoadingSteps.length - 1);
+      const finalMessage = selectedLoadingSteps[finalStepIndex] || selectedLoadingSteps[0] || LOADING_STEPS[0];
+      setLoadingStep(finalStepIndex);
+      setLoadingMessage(finalMessage);
+      setLoadingFeed((prev) => prev.includes(finalMessage) ? prev : [...prev, finalMessage]);
       setPhase("dashboard");
     };
 
@@ -2106,9 +2516,11 @@ export default function GitDNA() {
     };
 
     const fallbackFetch = async () => {
-      setLoadingStep(6);
-      setLoadingMessage(LOADING_STEPS[6]);
-      setLoadingFeed((prev) => prev.includes(LOADING_STEPS[6]) ? prev : [...prev, LOADING_STEPS[6]]);
+      const penultimateStep = Math.max(0, selectedLoadingSteps.length - 2);
+      const fallbackMessage = selectedLoadingSteps[penultimateStep] || selectedLoadingSteps[0] || LOADING_STEPS[0];
+      setLoadingStep(penultimateStep);
+      setLoadingMessage(fallbackMessage);
+      setLoadingFeed((prev) => prev.includes(fallbackMessage) ? prev : [...prev, fallbackMessage]);
       const data = await fetchProfilePayload(parsedUsername);
       applyResult(data);
     };
@@ -2133,11 +2545,17 @@ export default function GitDNA() {
           }
 
           if (typeof packet.step === "number") {
-            const safeStep = Math.max(0, Math.min(packet.step, LOADING_STEPS.length - 1));
-            setLoadingStep(safeStep);
+            const mappedStep = mapLoadingStep(packet.step, selectedLoadingSteps.length);
+            setLoadingStep(mappedStep);
+
+            if (overrideStreamMessages) {
+              const overrideMessage = selectedLoadingSteps[mappedStep] || selectedLoadingSteps[0] || LOADING_STEPS[0];
+              setLoadingMessage(overrideMessage);
+              setLoadingFeed((prev) => prev.includes(overrideMessage) ? prev : [...prev, overrideMessage]);
+            }
           }
 
-          if (typeof packet.message === "string" && packet.message.trim()) {
+          if (!overrideStreamMessages && typeof packet.message === "string" && packet.message.trim()) {
             const msg = packet.message.trim();
             setLoadingMessage(msg);
             setLoadingFeed((prev) => prev.includes(msg) ? prev : [...prev, msg]);
@@ -2178,6 +2596,7 @@ export default function GitDNA() {
 
     if (showLoading) {
       setPhase("loading");
+      setLoadingSteps(LOADING_STEPS);
       setLoadingStep(0);
       setLoadingMessage(LOADING_STEPS[0]);
       setLoadingFeed([LOADING_STEPS[0]]);
@@ -2212,6 +2631,9 @@ export default function GitDNA() {
       setDevScore(leftBundle.devScore);
       setLangs(leftBundle.langs);
       setActiveUsername(leftBundle.username);
+      setIsFounder(isFounderLogin(leftBundle.username));
+      setStarTier(getStarTier(leftBundle.github.totalStars));
+      setNightOwlToastVisible(false);
       setBattleData({ left: leftBundle, right: rightBundle, analysis });
 
       const slug = battleSlug(leftBundle.username, rightBundle.username);
@@ -2295,14 +2717,30 @@ export default function GitDNA() {
   if (phase === "landing") return (
     <>
       <style>{CSS}</style>
-      <LandingPage onAnalyze={analyze} />
+      <LandingPage onAnalyze={analyze} ultraMode={ultraMode} />
+      <GlobalEasterEggOverlays
+        ultraMode={ultraMode}
+        showKonamiFlash={showKonamiFlash}
+        showKonamiMessage={showKonamiMessage}
+      />
     </>
   );
 
   if (phase === "loading") return (
     <>
       <style>{CSS}</style>
-      <LoadingPage step={loadingStep} message={loadingMessage} feed={loadingFeed} />
+      <LoadingPage
+        step={loadingStep}
+        message={loadingMessage}
+        feed={loadingFeed}
+        steps={loadingSteps}
+        ultraMode={ultraMode}
+      />
+      <GlobalEasterEggOverlays
+        ultraMode={ultraMode}
+        showKonamiFlash={showKonamiFlash}
+        showKonamiMessage={showKonamiMessage}
+      />
     </>
   );
 
@@ -2312,6 +2750,12 @@ export default function GitDNA() {
       <BattleIntro
         leftUsername={battleData?.left?.username || activeUsername || "UNKNOWN"}
         rightUsername={battleData?.right?.username || "OPPONENT"}
+        ultraMode={ultraMode}
+      />
+      <GlobalEasterEggOverlays
+        ultraMode={ultraMode}
+        showKonamiFlash={showKonamiFlash}
+        showKonamiMessage={showKonamiMessage}
       />
     </>
   );
@@ -2319,7 +2763,7 @@ export default function GitDNA() {
   if (phase === "error") return (
     <>
       <style>{CSS}</style>
-      <div className="gd-root" style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", minHeight: "100vh", padding: 20, zIndex: 2, position: "relative" }}>
+      <div className={`gd-root${ultraMode ? " gd-ultra-mode" : ""}`} style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", minHeight: "100vh", padding: 20, zIndex: 2, position: "relative" }}>
         <BackgroundCanvas />
         <div className="gd-scanlines" />
         <div className="gd-card" style={{ padding: 28, maxWidth: 440, textAlign: "center", zIndex: 2, position: "relative" }}>
@@ -2328,6 +2772,11 @@ export default function GitDNA() {
           <button className="gd-btn" onClick={() => setPhase("landing")}>◀ RETRY</button>
         </div>
       </div>
+      <GlobalEasterEggOverlays
+        ultraMode={ultraMode}
+        showKonamiFlash={showKonamiFlash}
+        showKonamiMessage={showKonamiMessage}
+      />
     </>
   );
 
@@ -2339,6 +2788,7 @@ export default function GitDNA() {
           battleData={battleData}
           onBack={exitBattleView}
           onShareBattle={shareBattleLink}
+          ultraMode={ultraMode}
         />
       ) : (
         <Dashboard
@@ -2349,16 +2799,32 @@ export default function GitDNA() {
           username={activeUsername}
           compareBusy={compareBusy}
           onCompare={onCompareFromDashboard}
+          isFounderState={isFounder}
+          starTier={starTier}
+          nightOwlToastVisible={nightOwlToastVisible}
+          onNightOwlDismiss={() => setNightOwlToastVisible(false)}
+          ultraMode={ultraMode}
           onReset={() => {
             setPhase("landing");
+            setLoadingSteps(LOADING_STEPS);
             setBattleData(null);
             setGithub(null);
             setAiData(null);
+            setDevScore(0);
+            setLangs([]);
             setActiveUsername("");
+            setIsFounder(false);
+            setStarTier(null);
+            setNightOwlToastVisible(false);
             window.history.pushState({}, "", "/");
           }}
         />
       )}
+      <GlobalEasterEggOverlays
+        ultraMode={ultraMode}
+        showKonamiFlash={showKonamiFlash}
+        showKonamiMessage={showKonamiMessage}
+      />
     </>
   );
 }
