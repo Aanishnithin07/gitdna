@@ -27,6 +27,9 @@ app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
 allowed_origins = {
     "http://localhost:5173",
+    "http://127.0.0.1:5173",
+    "http://localhost:5174",
+    "http://127.0.0.1:5174",
     "https://your-vercel-url.vercel.app",
 }
 frontend_url = os.getenv("FRONTEND_URL", "").strip()
