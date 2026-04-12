@@ -32,9 +32,8 @@ const CSS = `
 *{box-sizing:border-box;margin:0;padding:0}
 html,body{max-width:100%;overflow-x:hidden}
 .gd-root{font-family:'Rajdhani',sans-serif;background:#060b12;min-height:100vh;color:#c8e8ff;overflow-x:hidden;position:relative}
-.gd-grid-bg{position:fixed;inset:0;background-image:linear-gradient(rgba(0,220,255,0.025) 1px,transparent 1px),linear-gradient(90deg,rgba(0,220,255,0.025) 1px,transparent 1px);background-size:60px 60px;pointer-events:none;z-index:0}
+.gd-bg-canvas{position:fixed;inset:0;pointer-events:none;z-index:0;width:100%;height:100%}
 .gd-scanlines{position:fixed;inset:0;background:repeating-linear-gradient(0deg,transparent,transparent 2px,rgba(0,0,0,0.12) 2px,rgba(0,0,0,0.12) 4px);pointer-events:none;z-index:1;opacity:.5}
-.gd-vignette{position:fixed;inset:0;background:radial-gradient(ellipse at center,transparent 40%,rgba(6,11,18,0.9) 100%);pointer-events:none;z-index:1}
 .orb{font-family:'Orbitron',monospace!important}
 .mono{font-family:'Share Tech Mono',monospace!important}
 
@@ -433,20 +432,300 @@ function DNASequence({ seq }) {
   );
 }
 
-function Particle({ idx }) {
-  const left = `${Math.random() * 100}%`;
-  const dur = `${8 + Math.random() * 12}s`;
-  const delay = `${Math.random() * 8}s`;
-  const dx = `${(Math.random() - 0.5) * 100}px`;
-  return (
-    <div style={{
-      position: "fixed", bottom: 0, left, width: 2, height: 2,
-      background: idx % 3 === 0 ? "#00dcff" : idx % 3 === 1 ? "#b347ea" : "#39ff14",
-      borderRadius: "50%", pointerEvents: "none", zIndex: 0,
-      animation: `particle-rise ${dur} ${delay} ease-in infinite`,
-      "--dx": dx, opacity: 0,
-    }} />
-  );
+function BackgroundCanvas({ attractRef = null, attractActive = false }) {
+  const canvasRef = useRef(null);
+  const animationRef = useRef(null);
+  const attractActiveRef = useRef(attractActive);
+  const attractPointRef = useRef(null);
+
+  useEffect(() => {
+    attractActiveRef.current = attractActive;
+  }, [attractActive]);
+
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return;
+
+    const state = { width: 1, height: 1, dpr: 1 };
+    const gridSize = 60;
+    const particleCount = 35;
+    const particles = [];
+    const gridHighlights = [];
+    const meteors = [];
+    let nextGridPulse = performance.now() + 3000;
+    let nextMeteor = performance.now() + 8000 + Math.random() * 4000;
+    let prevTs = performance.now();
+
+    const pickColor = () => {
+      const roll = Math.random();
+      if (roll < 0.6) return "#00dcff";
+      if (roll < 0.85) return "#b347ea";
+      return "#39ff14";
+    };
+
+    const resetParticle = (particle, spawnAtBottom = false) => {
+      particle.x = Math.random() * state.width;
+      particle.y = spawnAtBottom ? state.height + Math.random() * 48 : Math.random() * state.height;
+      particle.size = 1 + Math.random() * 2;
+      particle.opacity = 0.2 + Math.random() * 0.5;
+      particle.color = pickColor();
+      particle.speed = 0.28 + Math.random() * 0.55;
+      particle.swayAmp = 0.25 + Math.random() * 0.85;
+      particle.swaySpeed = 0.018 + Math.random() * 0.04;
+      particle.phase = Math.random() * Math.PI * 2;
+    };
+
+    const createParticle = () => {
+      const particle = {
+        x: 0,
+        y: 0,
+        size: 0,
+        opacity: 0,
+        color: "#00dcff",
+        speed: 0,
+        swayAmp: 0,
+        swaySpeed: 0,
+        phase: 0,
+      };
+      resetParticle(particle, false);
+      return particle;
+    };
+
+    const updateAttractPoint = () => {
+      if (!attractRef?.current) {
+        attractPointRef.current = null;
+        return;
+      }
+      const rect = attractRef.current.getBoundingClientRect();
+      attractPointRef.current = {
+        x: rect.left + rect.width / 2,
+        y: rect.top + rect.height / 2,
+      };
+    };
+
+    const resizeCanvas = () => {
+      const width = Math.max(1, Math.floor(window.innerWidth));
+      const height = Math.max(1, Math.floor(window.innerHeight));
+      const dpr = Math.max(1, Math.min(window.devicePixelRatio || 1, 2));
+      state.width = width;
+      state.height = height;
+      state.dpr = dpr;
+      canvas.width = width * dpr;
+      canvas.height = height * dpr;
+      canvas.style.width = `${width}px`;
+      canvas.style.height = `${height}px`;
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    };
+
+    const spawnGridPulse = (ts) => {
+      const count = 1 + Math.floor(Math.random() * 3);
+      const cols = Math.max(1, Math.floor(state.width / gridSize));
+      const rows = Math.max(1, Math.floor(state.height / gridSize));
+      for (let i = 0; i < count; i += 1) {
+        gridHighlights.push({
+          col: Math.floor(Math.random() * cols),
+          row: Math.floor(Math.random() * rows),
+          start: ts,
+          duration: 1000,
+        });
+      }
+    };
+
+    const drawGrid = (ts) => {
+      ctx.save();
+      ctx.strokeStyle = "rgba(0,220,255,0.025)";
+      ctx.lineWidth = 1;
+      for (let x = 0; x <= state.width; x += gridSize) {
+        ctx.beginPath();
+        ctx.moveTo(x + 0.5, 0);
+        ctx.lineTo(x + 0.5, state.height);
+        ctx.stroke();
+      }
+      for (let y = 0; y <= state.height; y += gridSize) {
+        ctx.beginPath();
+        ctx.moveTo(0, y + 0.5);
+        ctx.lineTo(state.width, y + 0.5);
+        ctx.stroke();
+      }
+      ctx.restore();
+
+      for (let i = gridHighlights.length - 1; i >= 0; i -= 1) {
+        const pulse = gridHighlights[i];
+        const life = (ts - pulse.start) / pulse.duration;
+        if (life >= 1) {
+          gridHighlights.splice(i, 1);
+          continue;
+        }
+        const alpha = Math.max(0, 1 - life);
+        const x = pulse.col * gridSize;
+        const y = pulse.row * gridSize;
+        ctx.save();
+        ctx.fillStyle = `rgba(0,220,255,${0.05 + alpha * 0.12})`;
+        ctx.fillRect(x, y, gridSize, gridSize);
+        ctx.strokeStyle = `rgba(0,220,255,${alpha * 0.55})`;
+        ctx.lineWidth = 1.2;
+        ctx.shadowColor = `rgba(0,220,255,${alpha * 0.85})`;
+        ctx.shadowBlur = 14;
+        ctx.strokeRect(x + 1, y + 1, gridSize - 2, gridSize - 2);
+        ctx.restore();
+      }
+    };
+
+    const updateAndDrawParticles = (dt) => {
+      const attractPoint = attractPointRef.current;
+      for (let i = 0; i < particles.length; i += 1) {
+        const p = particles[i];
+        p.phase += p.swaySpeed * dt;
+        p.y -= p.speed * dt;
+        p.x += Math.sin(p.phase) * p.swayAmp * 0.35 * dt;
+
+        if (attractActiveRef.current && attractPoint) {
+          const dx = attractPoint.x - p.x;
+          const dy = attractPoint.y - p.y;
+          const dist = Math.hypot(dx, dy);
+          if (dist > 1 && dist < 280) {
+            const pull = (1 - dist / 280) * 0.8;
+            p.x += (dx / dist) * pull * dt;
+            p.y += (dy / dist) * pull * dt * 0.7;
+          }
+        }
+
+        if (p.y < -12) {
+          resetParticle(p, true);
+        }
+
+        ctx.save();
+        ctx.beginPath();
+        ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2);
+        ctx.fillStyle = p.color;
+        ctx.globalAlpha = p.opacity;
+        ctx.fill();
+        ctx.restore();
+      }
+    };
+
+    const drawConnections = () => {
+      let lineCount = 0;
+      for (let i = 0; i < particles.length && lineCount < 20; i += 1) {
+        for (let j = i + 1; j < particles.length && lineCount < 20; j += 1) {
+          const a = particles[i];
+          const b = particles[j];
+          const dx = a.x - b.x;
+          const dy = a.y - b.y;
+          const distance = Math.hypot(dx, dy);
+          if (distance > 80) continue;
+          const alpha = (1 - distance / 80) * 0.24;
+          ctx.save();
+          ctx.strokeStyle = `rgba(0,220,255,${alpha})`;
+          ctx.lineWidth = 1;
+          ctx.beginPath();
+          ctx.moveTo(a.x, a.y);
+          ctx.lineTo(b.x, b.y);
+          ctx.stroke();
+          ctx.restore();
+          lineCount += 1;
+        }
+      }
+    };
+
+    const updateAndDrawMeteors = (ts) => {
+      for (let i = meteors.length - 1; i >= 0; i -= 1) {
+        const meteor = meteors[i];
+        const life = (ts - meteor.start) / meteor.duration;
+        if (life >= 1) {
+          meteors.splice(i, 1);
+          continue;
+        }
+        const headX = meteor.startX - meteor.travel * life;
+        const headY = meteor.startY + meteor.travel * life;
+        const tailX = headX + meteor.length;
+        const tailY = headY - meteor.length;
+        const gradient = ctx.createLinearGradient(headX, headY, tailX, tailY);
+        gradient.addColorStop(0, `rgba(255,255,255,${(1 - life) * 0.95})`);
+        gradient.addColorStop(1, "rgba(255,255,255,0)");
+
+        ctx.save();
+        ctx.strokeStyle = gradient;
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.moveTo(headX, headY);
+        ctx.lineTo(tailX, tailY);
+        ctx.stroke();
+        ctx.restore();
+      }
+    };
+
+    const drawVignette = () => {
+      const gradient = ctx.createRadialGradient(
+        state.width / 2,
+        state.height / 2,
+        Math.min(state.width, state.height) * 0.16,
+        state.width / 2,
+        state.height / 2,
+        Math.max(state.width, state.height) * 0.72
+      );
+      gradient.addColorStop(0, "rgba(6,11,18,0)");
+      gradient.addColorStop(1, "rgba(6,11,18,0.8)");
+      ctx.save();
+      ctx.fillStyle = gradient;
+      ctx.fillRect(0, 0, state.width, state.height);
+      ctx.restore();
+    };
+
+    resizeCanvas();
+    updateAttractPoint();
+    for (let i = 0; i < particleCount; i += 1) {
+      particles.push(createParticle());
+    }
+
+    const resizeObserver = new ResizeObserver(() => {
+      resizeCanvas();
+      updateAttractPoint();
+    });
+    resizeObserver.observe(document.documentElement);
+
+    const tick = (ts) => {
+      const dt = Math.min((ts - prevTs) / 16.67, 2);
+      prevTs = ts;
+
+      if (ts >= nextGridPulse) {
+        spawnGridPulse(ts);
+        nextGridPulse = ts + 3000;
+      }
+      if (ts >= nextMeteor) {
+        meteors.push({
+          start: ts,
+          duration: 400,
+          startX: state.width + 20 + Math.random() * 80,
+          startY: -20 + Math.random() * state.height * 0.25,
+          travel: Math.max(state.width, state.height) * 0.65,
+          length: 60 + Math.random() * 60,
+        });
+        nextMeteor = ts + 8000 + Math.random() * 4000;
+      }
+
+      updateAttractPoint();
+      ctx.clearRect(0, 0, state.width, state.height);
+      drawGrid(ts);
+      updateAndDrawParticles(dt);
+      drawConnections();
+      updateAndDrawMeteors(ts);
+      drawVignette();
+
+      animationRef.current = requestAnimationFrame(tick);
+    };
+
+    animationRef.current = requestAnimationFrame(tick);
+
+    return () => {
+      if (animationRef.current) cancelAnimationFrame(animationRef.current);
+      resizeObserver.disconnect();
+    };
+  }, [attractRef]);
+
+  return <canvas ref={canvasRef} className="gd-bg-canvas" aria-hidden="true" />;
 }
 
 function LandingPage({ onAnalyze }) {
@@ -454,6 +733,8 @@ function LandingPage({ onAnalyze }) {
   const [loading, setLoading] = useState(false);
   const [blink, setBlink] = useState(true);
   const [inputError, setInputError] = useState("");
+  const [isInputFocused, setIsInputFocused] = useState(false);
+  const inputRef = useRef(null);
   const recentProfiles = ["torvalds", "gaearon", "antirez"];
   useEffect(() => { const t = setInterval(() => setBlink(b => !b), 500); return () => clearInterval(t); }, []);
   const handle = () => {
@@ -469,8 +750,8 @@ function LandingPage({ onAnalyze }) {
   };
   return (
     <div className="gd-root" style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", minHeight: "100vh", padding: "40px 20px", position: "relative", zIndex: 2 }}>
-      <div className="gd-grid-bg" /><div className="gd-scanlines" /><div className="gd-vignette" />
-      {Array.from({ length: 20 }, (_, i) => <Particle key={i} idx={i} />)}
+      <BackgroundCanvas attractRef={inputRef} attractActive={isInputFocused} />
+      <div className="gd-scanlines" />
 
       <div className="anim-fade" style={{ textAlign: "center", marginBottom: 40 }}>
         <div style={{ fontFamily: "Share Tech Mono,monospace", fontSize: "0.65rem", letterSpacing: "0.3em", color: "rgba(0,220,255,0.4)", marginBottom: 16 }}>
@@ -496,10 +777,13 @@ function LandingPage({ onAnalyze }) {
                 @
               </div>
               <input
+                ref={inputRef}
                 className="gd-input"
                 style={{ borderRadius: "0 4px 4px 0", borderLeft: "none" }}
                 placeholder="username or github.com/username"
                 value={username}
+                onFocus={() => setIsInputFocused(true)}
+                onBlur={() => setIsInputFocused(false)}
                 onChange={e => {
                   setUsername(e.target.value);
                   if (inputError) setInputError("");
@@ -561,8 +845,8 @@ function LoadingPage({ step }) {
   const pct = Math.round(((step + 1) / LOADING_STEPS.length) * 100);
   return (
     <div className="gd-root" style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", minHeight: "100vh", padding: 20, position: "relative", zIndex: 2 }}>
-      <div className="gd-grid-bg" /><div className="gd-scanlines" /><div className="gd-vignette" />
-      {Array.from({ length: 12 }, (_, i) => <Particle key={i} idx={i} />)}
+      <BackgroundCanvas />
+      <div className="gd-scanlines" />
 
       <div style={{ width: "100%", maxWidth: 480, textAlign: "center" }}>
         <div style={{ position: "relative", width: "100%", maxWidth: 260, height: 140, margin: "0 auto 28px", display: "flex", alignItems: "center", justifyContent: "center" }}>
@@ -672,7 +956,8 @@ function Dashboard({ github, aiData, devScore, langs, username, onReset }) {
 
   return (
     <div className="gd-root" style={{ position: "relative", zIndex: 2, paddingBottom: 60 }}>
-      <div className="gd-grid-bg" /><div className="gd-scanlines" /><div className="gd-vignette" />
+      <BackgroundCanvas />
+      <div className="gd-scanlines" />
       {showUnlockFlash && <div className="gd-unlock-flash" />}
 
       <div style={{ maxWidth: 900, margin: "0 auto", padding: "24px 16px", position: "relative", zIndex: 2 }}>
@@ -1019,7 +1304,8 @@ Return this exact JSON structure with creative, specific, personalized content:
     <>
       <style>{CSS}</style>
       <div className="gd-root" style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", minHeight: "100vh", padding: 20, zIndex: 2, position: "relative" }}>
-        <div className="gd-grid-bg" /><div className="gd-scanlines" /><div className="gd-vignette" />
+        <BackgroundCanvas />
+        <div className="gd-scanlines" />
         <div className="gd-card" style={{ padding: 28, maxWidth: 440, textAlign: "center", zIndex: 2, position: "relative" }}>
           <div className="orb" style={{ color: "#ff4545", fontSize: "1rem", marginBottom: 12, letterSpacing: "0.1em" }}>⚠ SCAN FAILURE</div>
           <p style={{ color: "rgba(200,232,255,0.6)", marginBottom: 20, fontFamily: "Share Tech Mono,monospace", fontSize: "0.8rem" }}>{error}</p>
