@@ -78,8 +78,14 @@ html,body{max-width:100%;overflow-x:hidden}
 @keyframes helix-wave-a{from{stroke-dashoffset:0}to{stroke-dashoffset:-96}}
 @keyframes helix-wave-b{from{stroke-dashoffset:0}to{stroke-dashoffset:96}}
 @keyframes helix-spin{from{transform:rotate(0deg)}to{transform:rotate(360deg)}}
-@keyframes unlock-flash{0%{opacity:0}25%{opacity:.95}100%{opacity:0}}
+@keyframes flash{0%{opacity:0}20%{opacity:.6}100%{opacity:0}}
 @keyframes card-rise{from{opacity:0;transform:translateY(26px)}to{opacity:1;transform:translateY(0)}}
+@keyframes scan-sweep{0%{transform:translateY(-6px);opacity:0}12%{opacity:1}100%{transform:translateY(calc(100% + 6px));opacity:0}}
+@keyframes dna-lock{
+  0%{opacity:0;color:#39ff14;text-shadow:0 0 14px rgba(57,255,20,.95);transform:translateY(4px) scale(.78)}
+  65%{opacity:1;color:#39ff14;text-shadow:0 0 18px rgba(57,255,20,.85)}
+  100%{opacity:1;color:var(--dna-final);text-shadow:var(--dna-final-shadow);transform:translateY(0) scale(1)}
+}
 
 .gd-glitch{animation:glitch 5s infinite}
 .gd-card{border:1px solid rgba(0,220,255,0.18);background:rgba(4,14,26,0.88);backdrop-filter:blur(14px);border-radius:6px;animation:pulse-border 4s ease-in-out infinite;position:relative}
@@ -138,7 +144,7 @@ html,body{max-width:100%;overflow-x:hidden}
 .gd-hover-lift:hover{transform:translateY(-3px)}
 
 .scan-overlay{position:absolute;inset:0;pointer-events:none;overflow:hidden;border-radius:6px}
-.scan-overlay::after{content:'';position:absolute;left:0;right:0;height:2px;background:linear-gradient(90deg,transparent,rgba(0,220,255,0.4),transparent);animation:scan-line 3s linear infinite}
+.scan-overlay::after{content:'';position:absolute;left:0;right:0;top:0;height:1px;background:linear-gradient(90deg,transparent,rgba(0,220,255,0.4),transparent);opacity:.2}
 
 .gd-recent-pill{border:1px solid rgba(0,220,255,0.28);background:rgba(0,8,20,0.8);color:rgba(0,220,255,0.88);padding:6px 10px;border-radius:999px;font-family:'Share Tech Mono',monospace;font-size:.62rem;letter-spacing:.08em;cursor:pointer;transition:all .2s ease}
 .gd-recent-pill:hover{background:rgba(0,220,255,0.14);box-shadow:0 0 12px rgba(0,220,255,0.24)}
@@ -148,7 +154,10 @@ html,body{max-width:100%;overflow-x:hidden}
 .gd-helix-b{fill:none;stroke:#b347ea;stroke-width:3;stroke-linecap:round;stroke-dasharray:14 8;animation:helix-wave-b 1.1s linear infinite}
 
 .gd-vitals-row{display:flex;gap:10px;margin-bottom:16px;flex-wrap:wrap;max-width:100%}
-.gd-unlock-flash{position:fixed;inset:0;background:#fff;pointer-events:none;z-index:60;animation:unlock-flash .3s ease-out forwards}
+.gd-unlock-flash{position:fixed;inset:0;background:radial-gradient(circle at center,rgba(255,255,255,.95),rgba(140,248,255,.72));pointer-events:none;z-index:60;animation:flash .4s ease-out forwards}
+
+.gd-enter-scan{overflow:hidden}
+.gd-enter-scan::after{content:'';position:absolute;left:0;right:0;top:0;height:2px;background:linear-gradient(90deg,transparent,rgba(0,220,255,0.4),transparent);transform:translateY(-6px);opacity:0;pointer-events:none;z-index:4;animation:scan-sweep .6s linear var(--scan-delay,0ms) 1 forwards}
 
 @media (max-width:640px){
   .gd-vitals-row{flex-wrap:nowrap;overflow-x:auto;padding-bottom:8px;scroll-snap-type:x proximity;-webkit-overflow-scrolling:touch}
@@ -233,58 +242,89 @@ function parseGithubUsername(input) {
   return isValidGithubUsername(candidate) ? candidate : "";
 }
 
-function AnimatedCounter({ target, delay = 0, duration = 1600 }) {
+function AnimatedCounter({ target, delay = 0, duration = 1600, ticker = false }) {
   const [val, setVal] = useState(0);
   useEffect(() => {
-    if (!target) return;
+    const finalTarget = Number(target) || 0;
+    let rafId = null;
     const t = setTimeout(() => {
       let start = null;
+      const tickerWindow = 200;
+      const tickerStart = Math.max(duration - tickerWindow, 0);
+      const digitCount = Math.max(1, String(Math.floor(Math.abs(finalTarget))).length);
+      const maxRandom = Math.max(9, Math.pow(10, digitCount) - 1);
       const step = ts => {
         if (!start) start = ts;
-        const p = Math.min((ts - start) / duration, 1);
-        const e = 1 - Math.pow(1 - p, 4);
-        setVal(Math.floor(e * target));
-        if (p < 1) requestAnimationFrame(step);
+        const elapsed = ts - start;
+        if (ticker && elapsed >= tickerStart && elapsed < duration) {
+          setVal(Math.floor(Math.random() * (maxRandom + 1)));
+        } else {
+          const p = Math.min(elapsed / duration, 1);
+          const e = 1 - Math.pow(1 - p, 4);
+          setVal(Math.floor(e * finalTarget));
+        }
+        if (elapsed < duration) {
+          rafId = requestAnimationFrame(step);
+        } else {
+          setVal(finalTarget);
+        }
       };
-      requestAnimationFrame(step);
+      rafId = requestAnimationFrame(step);
     }, delay);
-    return () => clearTimeout(t);
-  }, [target]);
+    return () => {
+      clearTimeout(t);
+      if (rafId) cancelAnimationFrame(rafId);
+    };
+  }, [target, delay, duration, ticker]);
   return <>{val.toLocaleString()}</>;
 }
 
 function ScoreRing({ score }) {
   const r = 54, circ = 2 * Math.PI * r;
   const [off, setOff] = useState(circ);
+  const [progress, setProgress] = useState(0);
   useEffect(() => {
     const t = setTimeout(() => {
       let s = null;
-      const target = circ * (1 - score / 100);
+      const targetProgress = Math.max(0, Math.min(score / 100, 1));
       const step = ts => {
         if (!s) s = ts;
         const p = Math.min((ts - s) / 2000, 1);
         const e = 1 - Math.pow(1 - p, 3);
-        setOff(circ - (circ - target) * e);
+        const currentProgress = targetProgress * e;
+        setProgress(currentProgress);
+        setOff(circ * (1 - currentProgress));
         if (p < 1) requestAnimationFrame(step);
       };
       requestAnimationFrame(step);
     }, 400);
     return () => clearTimeout(t);
-  }, [score]);
-  const color = score >= 80 ? "#39ff14" : score >= 60 ? "#00dcff" : score >= 40 ? "#ffb300" : "#ff4545";
+  }, [score, circ]);
+  const scoreColor = score >= 80 ? "#39ff14" : score >= 60 ? "#00dcff" : score >= 40 ? "#ffb300" : "#ff4545";
+  const ringColor = "#00dcff";
+  const sparkAngle = progress * 2 * Math.PI;
+  const sparkX = 65 + r * Math.cos(sparkAngle);
+  const sparkY = 65 + r * Math.sin(sparkAngle);
   return (
     <div style={{ position: "relative", width: 130, height: 130, flexShrink: 0 }}>
       <svg width="130" height="130" style={{ transform: "rotate(-90deg)", position: "absolute", inset: 0 }}>
         <circle cx="65" cy="65" r={r} fill="none" stroke="rgba(0,220,255,0.07)" strokeWidth="7" />
         <circle cx="65" cy="65" r={r} fill="none" stroke="rgba(0,220,255,0.04)" strokeWidth="7"
           strokeDasharray="4 8" />
-        <circle cx="65" cy="65" r={r} fill="none" stroke={color} strokeWidth="7" strokeLinecap="round"
+        <circle cx="65" cy="65" r={r} fill="none" stroke={ringColor} strokeWidth="11" strokeLinecap="round"
           strokeDasharray={circ} strokeDashoffset={off}
-          style={{ filter: `drop-shadow(0 0 6px ${color}88)` }} />
+          style={{ filter: "blur(4px)", opacity: 0.55 }} />
+        <circle cx="65" cy="65" r={r} fill="none" stroke={ringColor} strokeWidth="7" strokeLinecap="round"
+          strokeDasharray={circ} strokeDashoffset={off}
+          style={{ filter: "drop-shadow(0 0 10px rgba(0,220,255,0.95))" }} />
+        {progress > 0.002 && (
+          <circle cx={sparkX} cy={sparkY} r="3.2" fill="#c6ffff"
+            style={{ filter: "drop-shadow(0 0 8px rgba(0,220,255,1))" }} />
+        )}
         <circle cx="65" cy="65" r="40" fill="none" stroke="rgba(0,220,255,0.04)" strokeWidth="1" />
       </svg>
       <div style={{ position: "absolute", inset: 0, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center" }}>
-        <div style={{ fontFamily: "Orbitron,monospace", fontSize: "1.75rem", fontWeight: 900, color, lineHeight: 1, textShadow: `0 0 12px ${color}88` }}>
+        <div style={{ fontFamily: "Orbitron,monospace", fontSize: "1.75rem", fontWeight: 900, color: scoreColor, lineHeight: 1, textShadow: `0 0 12px ${scoreColor}88` }}>
           <AnimatedCounter target={score} delay={500} duration={1800} />
         </div>
         <div style={{ fontFamily: "Share Tech Mono,monospace", fontSize: "0.55rem", color: "rgba(0,220,255,0.4)", letterSpacing: "0.2em", marginTop: 3 }}>DEV SCORE</div>
@@ -318,20 +358,21 @@ function SkillBar({ lang, pct, delay = 0 }) {
   );
 }
 
-function StatCard({ icon, label, value, delay, sub, enterIndex = 0 }) {
+function StatCard({ icon, label, value, delay, sub, enterIndex = 0, ticker = false }) {
   return (
-    <div className="gd-card gd-hover-lift"
+    <div className="gd-card gd-hover-lift gd-enter-scan"
       style={{
         padding: "16px 14px",
         textAlign: "center",
         flex: 1,
         minWidth: 0,
         opacity: 0,
-        animation: `card-rise .55s cubic-bezier(.2,.8,.2,1) ${enterIndex * 80}ms forwards`,
+        animation: `card-rise .55s cubic-bezier(.2,.8,.2,1) ${320 + enterIndex * 80}ms forwards`,
+        "--scan-delay": `${enterIndex * 150}ms`,
       }}>
       <div className="gd-section-label" style={{ justifyContent: "center", marginBottom: 8 }}>{label}</div>
       <div className="stat-number anim-count" style={{ fontSize: "1.5rem", color: "#00dcff", textShadow: "0 0 12px rgba(0,220,255,0.4)" }}>
-        {typeof value === "number" ? <AnimatedCounter target={value} delay={delay * 80} /> : value}
+        {typeof value === "number" ? <AnimatedCounter target={value} delay={delay * 80} ticker={ticker} /> : value}
       </div>
       {sub && <div style={{ fontFamily: "Share Tech Mono,monospace", fontSize: "0.58rem", color: "rgba(0,220,255,0.3)", letterSpacing: "0.1em", marginTop: 4 }}>{sub}</div>}
     </div>
@@ -360,14 +401,32 @@ function TraitsRadar({ traits }) {
 
 function DNASequence({ seq }) {
   const chars = (seq || "4F6E3A1D9C2B8E7F").split("");
+  const [visibleCount, setVisibleCount] = useState(0);
+
+  useEffect(() => {
+    setVisibleCount(0);
+    let next = 0;
+    const timer = setInterval(() => {
+      next += 1;
+      setVisibleCount(Math.min(next, chars.length));
+      if (next >= chars.length) clearInterval(timer);
+    }, 60);
+    return () => clearInterval(timer);
+  }, [seq, chars.length]);
+
   return (
     <div style={{ display: "flex", gap: 4, flexWrap: "wrap", justifyContent: "center" }}>
       {chars.map((c, i) => (
         <span key={i} style={{
           fontFamily: "Share Tech Mono,monospace", fontSize: "0.75rem",
+          opacity: i < visibleCount ? 1 : 0,
           color: i % 2 === 0 ? "#00dcff" : "#b347ea",
           textShadow: i % 2 === 0 ? "0 0 8px rgba(0,220,255,0.5)" : "0 0 8px rgba(179,71,234,0.5)",
-          animation: `data-flash ${1.2 + (i % 4) * 0.3}s ease-in-out ${i * 0.08}s infinite`,
+          transform: i < visibleCount ? "translateY(0) scale(1)" : "translateY(4px) scale(0.8)",
+          transition: "opacity .08s linear",
+          animation: i < visibleCount ? "dna-lock .25s ease both" : "none",
+          "--dna-final": i % 2 === 0 ? "#00dcff" : "#b347ea",
+          "--dna-final-shadow": i % 2 === 0 ? "0 0 8px rgba(0,220,255,0.5)" : "0 0 8px rgba(179,71,234,0.5)",
         }}>{c}</span>
       ))}
     </div>
@@ -566,11 +625,12 @@ function Dashboard({ github, aiData, devScore, langs, username, onReset }) {
   const cardEntranceStyle = (index) => ({
     opacity: 0,
     animation: `card-rise .55s cubic-bezier(.2,.8,.2,1) ${320 + index * 80}ms forwards`,
+    "--scan-delay": `${index * 150}ms`,
   });
 
   useEffect(() => {
     setShowUnlockFlash(true);
-    unlockFlashTimeoutRef.current = setTimeout(() => setShowUnlockFlash(false), 320);
+    unlockFlashTimeoutRef.current = setTimeout(() => setShowUnlockFlash(false), 420);
     return () => {
       if (shareFlashTimeoutRef.current) {
         clearTimeout(shareFlashTimeoutRef.current);
@@ -618,7 +678,7 @@ function Dashboard({ github, aiData, devScore, langs, username, onReset }) {
       <div style={{ maxWidth: 900, margin: "0 auto", padding: "24px 16px", position: "relative", zIndex: 2 }}>
         <div ref={shareCardRef} style={{ padding: 2, borderRadius: 8 }}>
           {/* HEADER */}
-          <div className="gd-card gd-header-card" style={{ padding: "20px 22px", marginBottom: 16, display: "flex", alignItems: "center", gap: 20, flexWrap: "wrap", ...cardEntranceStyle(0) }}>
+          <div className="gd-card gd-header-card gd-enter-scan" style={{ padding: "20px 22px", marginBottom: 16, display: "flex", alignItems: "center", gap: 20, flexWrap: "wrap", ...cardEntranceStyle(0) }}>
             <div className="scan-overlay" />
             <div style={{ position: "relative", flexShrink: 0 }}>
               <div style={{ position: "absolute", inset: -4, borderRadius: "50%", border: "1.5px solid rgba(0,220,255,0.3)", animation: "ring-spin 8s linear infinite" }} />
@@ -650,29 +710,29 @@ function Dashboard({ github, aiData, devScore, langs, username, onReset }) {
           </div>
 
           {/* DNA SEQUENCE */}
-          <div className="gd-card" style={{ padding: "12px 18px", marginBottom: 16, ...cardEntranceStyle(1) }}>
+          <div className="gd-card gd-enter-scan" style={{ padding: "12px 18px", marginBottom: 16, ...cardEntranceStyle(1) }}>
             <div className="gd-section-label" style={{ marginBottom: 8 }}>DEV DNA SEQUENCE</div>
             <DNASequence seq={dna} />
           </div>
 
           {/* VITALS */}
           <div className="gd-vitals-row">
-            <StatCard label="STARS EARNED" value={totalStars} delay={2} sub="across all repos" enterIndex={2} />
-            <StatCard label="FOLLOWERS" value={user.followers} delay={3} sub="in the network" enterIndex={3} />
-            <StatCard label="REPOSITORIES" value={user.public_repos} delay={4} sub="public codebases" enterIndex={4} />
+            <StatCard label="STARS EARNED" value={totalStars} delay={2} sub="across all repos" enterIndex={2} ticker={true} />
+            <StatCard label="FOLLOWERS" value={user.followers} delay={3} sub="in the network" enterIndex={3} ticker={true} />
+            <StatCard label="REPOSITORIES" value={user.public_repos} delay={4} sub="public codebases" enterIndex={4} ticker={true} />
             <StatCard label="COMMITS" value={recentCommits} delay={5} sub="recent activity" enterIndex={5} />
           </div>
         </div>
 
         {/* SKILLS + CHRONOTYPE */}
         <div style={{ display: "flex", gap: 12, marginBottom: 12, flexWrap: "wrap" }}>
-          <div className="gd-card" style={{ flex: "1 1 220px", padding: "18px 18px", ...cardEntranceStyle(6) }}>
+          <div className="gd-card gd-enter-scan" style={{ flex: "1 1 220px", padding: "18px 18px", ...cardEntranceStyle(6) }}>
             <div className="gd-section-label">SKILL TOPOLOGY</div>
             {langs.map((l, i) => <SkillBar key={l.lang} lang={l.lang} pct={l.pct} delay={i + 1} />)}
             {langs.length === 0 && <div style={{ color: "rgba(200,232,255,0.3)", fontFamily: "Share Tech Mono,monospace", fontSize: "0.7rem" }}>No language data</div>}
           </div>
 
-          <div className="gd-card-purple" style={{ flex: "1 1 220px", padding: "18px 18px", ...cardEntranceStyle(7) }}>
+          <div className="gd-card-purple gd-enter-scan" style={{ flex: "1 1 220px", padding: "18px 18px", ...cardEntranceStyle(7) }}>
             <div className="gd-section-label" style={{ color: "rgba(179,71,234,0.6)" }}>CHRONOTYPE</div>
             <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 12 }}>
               <div style={{ width: 40, height: 40, borderRadius: "50%", background: "rgba(179,71,234,0.1)", border: "1px solid rgba(179,71,234,0.3)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: "1.2rem", flexShrink: 0 }}>🌑</div>
@@ -685,7 +745,7 @@ function Dashboard({ github, aiData, devScore, langs, username, onReset }) {
             <p style={{ fontSize: "0.84rem", color: "rgba(200,232,255,0.6)", lineHeight: 1.6, fontWeight: 300 }}>{chronotype.description}</p>
           </div>
 
-          <div className="gd-card" style={{ flex: "1 1 180px", padding: "18px 18px", ...cardEntranceStyle(8) }}>
+          <div className="gd-card gd-enter-scan" style={{ flex: "1 1 180px", padding: "18px 18px", ...cardEntranceStyle(8) }}>
             <div className="gd-section-label">NEURAL TRAITS</div>
             <TraitsRadar traits={traits} />
           </div>
@@ -693,7 +753,7 @@ function Dashboard({ github, aiData, devScore, langs, username, onReset }) {
 
         {/* COLLAB STYLE */}
         <div style={{ display: "flex", gap: 12, marginBottom: 12, flexWrap: "wrap" }}>
-          <div className="gd-card-green" style={{ flex: "1 1 240px", padding: "18px 18px", ...cardEntranceStyle(9) }}>
+          <div className="gd-card-green gd-enter-scan" style={{ flex: "1 1 240px", padding: "18px 18px", ...cardEntranceStyle(9) }}>
             <div className="gd-section-label" style={{ color: "rgba(57,255,20,0.5)" }}>COLLABORATION MATRIX</div>
             <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 12 }}>
               <div style={{ width: 40, height: 40, borderRadius: "50%", background: "rgba(57,255,20,0.08)", border: "1px solid rgba(57,255,20,0.25)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: "1.2rem", flexShrink: 0 }}>⚡</div>
@@ -707,7 +767,7 @@ function Dashboard({ github, aiData, devScore, langs, username, onReset }) {
           </div>
 
           {traits && (
-            <div className="gd-card" style={{ flex: "1 1 200px", padding: "18px 18px", ...cardEntranceStyle(10) }}>
+            <div className="gd-card gd-enter-scan" style={{ flex: "1 1 200px", padding: "18px 18px", ...cardEntranceStyle(10) }}>
               <div className="gd-section-label">TRAIT METRICS</div>
               {Object.entries(traits).map(([k, v]) => (
                 <div key={k} style={{ marginBottom: 8 }}>
@@ -727,11 +787,11 @@ function Dashboard({ github, aiData, devScore, langs, username, onReset }) {
         {/* FAST FACTS */}
         {facts.length > 0 && (
           <div style={cardEntranceStyle(11)}>
-            <div className="gd-card" style={{ padding: "18px 18px" }}>
+            <div className="gd-card gd-enter-scan" style={{ padding: "18px 18px" }}>
               <div className="gd-section-label">// AI FAST FACTS</div>
               <div style={{ display: "flex", gap: 12, flexWrap: "wrap" }}>
                 {facts.map((fact, i) => (
-                  <div key={i} className="gd-card-gold gd-hover-lift" style={{ flex: "1 1 180px", padding: "14px 14px", ...cardEntranceStyle(12 + i) }}>
+                  <div key={i} className="gd-card-gold gd-hover-lift gd-enter-scan" style={{ flex: "1 1 180px", padding: "14px 14px", ...cardEntranceStyle(12 + i) }}>
                     <div style={{ fontFamily: "Share Tech Mono,monospace", fontSize: "0.55rem", color: "rgba(255,179,0,0.45)", letterSpacing: "0.15em", marginBottom: 8 }}>INTEL_{String(i + 1).padStart(2, "0")}</div>
                     <p style={{ fontSize: "0.84rem", color: "rgba(200,232,255,0.7)", lineHeight: 1.55, fontWeight: 400 }}>{fact}</p>
                   </div>
