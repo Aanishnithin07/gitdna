@@ -148,6 +148,7 @@ html,body{max-width:100%;overflow-x:hidden}
 }
 @keyframes loading-title-flicker{0%,100%{opacity:1}50%{opacity:.82}}
 @keyframes roast-line-rise{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}
+@keyframes roast-meter-loop{0%{left:-36%}100%{left:100%}}
 @keyframes torvalds-screen-glitch{
   0%{filter:none;transform:none}
   20%{filter:contrast(1.35) saturate(1.2) hue-rotate(-16deg);transform:skewX(-1.2deg) translateX(-2px)}
@@ -297,10 +298,12 @@ html,body{max-width:100%;overflow-x:hidden}
 .gd-toast-action{margin-top:7px;background:transparent;border:1px solid currentColor;border-radius:4px;color:inherit;font-size:.58rem;padding:4px 8px;cursor:pointer}
 
 .gd-roast-card{border:1px solid rgba(255,88,88,0.38);background:radial-gradient(circle at 15% 0%,rgba(98,0,0,0.36),rgba(22,6,10,0.94) 38%,rgba(8,10,18,0.96) 100%);box-shadow:0 0 20px rgba(255,62,62,0.22),inset 0 0 18px rgba(255,60,60,0.08)}
-.gd-roast-meter{height:8px;border-radius:999px;background:rgba(255,77,77,0.14);border:1px solid rgba(255,90,90,0.22);overflow:hidden}
+.gd-roast-meter{height:8px;border-radius:999px;background:rgba(255,77,77,0.14);border:1px solid rgba(255,90,90,0.22);overflow:hidden;position:relative}
 .gd-roast-meter-fill{height:100%;border-radius:999px;background:linear-gradient(90deg,#7d0f0f,#ff4343,#ff8a5b);box-shadow:0 0 12px rgba(255,67,67,.42);transition:width .8s cubic-bezier(.2,.8,.2,1)}
 .gd-roast-line{display:flex;gap:8px;align-items:flex-start;padding:7px 0;color:rgba(255,208,208,0.88);font-size:.84rem;line-height:1.55;animation:roast-line-rise .35s ease both}
 .gd-roast-redemption{margin-top:10px;padding:10px 12px;border-radius:6px;border:1px solid rgba(57,255,20,0.26);background:rgba(6,30,8,0.56);color:#95ff8b;font-size:.83rem;line-height:1.6;animation:roast-line-rise .35s ease both}
+.gd-roast-meter-loading::after{content:'';position:absolute;top:-1px;bottom:-1px;width:36%;border-radius:999px;background:linear-gradient(90deg,rgba(255,67,67,0),rgba(255,122,122,.95),rgba(255,67,67,0));filter:blur(.2px);animation:roast-meter-loop 1.05s linear infinite}
+.gd-roast-pending{padding:10px 0 2px}
 
 .gd-cursor-trail-dot{position:fixed;z-index:9999;pointer-events:none;width:3px;height:3px;border-radius:50%;background:#00dcff;box-shadow:0 0 8px rgba(0,220,255,.7);transition:opacity .6s linear}
 
@@ -1751,6 +1754,7 @@ function Dashboard({
     ? FOUNDER_FAST_FACTS
     : (roastMode ? [EMPTY_REPO_ROAST, ...aiFacts.filter((fact) => fact !== EMPTY_REPO_ROAST)].slice(0, 3) : aiFacts);
   const dna = aiData?.dnaSequence || "0000000000000000";
+  const roastSectionRef = useRef(null);
   const shareCardRef = useRef(null);
   const shareExportRef = useRef(null);
   const shareFlashTimeoutRef = useRef(null);
@@ -1793,6 +1797,13 @@ function Dashboard({
   const shareLangs = Array.isArray(langs) ? langs.slice(0, 4) : [];
   const shareHighlights = Array.isArray(facts) ? facts.slice(0, 2) : [];
   const shareInitial = ((user.login || user.name || "?").charAt(0) || "?").toUpperCase();
+  const shouldShowRoastSection = isRoasting || Boolean(roastReport) || Boolean(roastError);
+
+  const scrollToRoastSection = (behavior = "smooth") => {
+    const roastNode = roastSectionRef.current;
+    if (!roastNode) return;
+    roastNode.scrollIntoView({ behavior, block: "start" });
+  };
 
   useEffect(() => {
     setShowUnlockFlash(true);
@@ -1894,6 +1905,16 @@ function Dashboard({
     };
   }, [roastReport]);
 
+  useEffect(() => {
+    if (!shouldShowRoastSection) return;
+
+    const scrollTimer = setTimeout(() => {
+      scrollToRoastSection("smooth");
+    }, roastReport ? 80 : 30);
+
+    return () => clearTimeout(scrollTimer);
+  }, [shouldShowRoastSection, roastReport]);
+
   async function copyProfileLink() {
     try {
       if (navigator?.clipboard?.writeText) {
@@ -1909,12 +1930,17 @@ function Dashboard({
 
     setIsRoasting(true);
     setRoastError("");
+    setRoastReport(null);
     setRoastShareCopied(false);
+    setShowRoastWarning(false);
+
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => scrollToRoastSection("smooth"));
+    });
 
     try {
       const roastData = await onRoast();
       setRoastReport(roastData);
-      setShowRoastWarning(false);
     } catch (err) {
       setRoastError(err?.message || "Roast generation failed.");
     } finally {
@@ -2082,12 +2108,14 @@ function Dashboard({
               <button
                 className="gd-btn gd-btn-roast"
                 onClick={() => {
+                  if (isRoasting) return;
                   setShowRoastWarning(true);
                   setRoastError("");
                 }}
+                disabled={isRoasting}
                 style={{ marginTop: 8, padding: "7px 14px", fontSize: "0.66rem", width: "100%" }}
               >
-                🔥 ROAST ME
+                {isRoasting ? "🔥 ROASTING..." : "🔥 ROAST ME"}
               </button>
             </div>
           </div>
@@ -2122,46 +2150,76 @@ function Dashboard({
           <ContributionHeatmap contributions={contributions} />
         </div>
 
-        {roastReport && (
-          <div className="gd-card gd-roast-card gd-enter-scan" style={{ padding: "18px 18px", marginBottom: 12, ...cardEntranceStyle(7) }}>
-            <div className="gd-section-label" style={{ color: "rgba(255,120,120,0.72)" }}>ROAST REPORT</div>
-
-            <div style={{ marginBottom: 12 }}>
-              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, marginBottom: 6 }}>
-                <span style={{ fontFamily: "Share Tech Mono,monospace", fontSize: "0.64rem", letterSpacing: "0.12em", color: "rgba(255,170,170,0.78)" }}>
-                  ROASTABILITY SCORE: {Number(roastReport.roastScore || 0)}/100
-                </span>
-                <span className="gd-badge gd-badge-gold">NO MERCY MODE</span>
-              </div>
-              <div className="gd-roast-meter">
-                <div className="gd-roast-meter-fill" style={{ width: `${Math.max(0, Math.min(roastMeterValue, 100))}%` }} />
-              </div>
+        {shouldShowRoastSection && (
+          <div ref={roastSectionRef} className="gd-card gd-roast-card gd-enter-scan" style={{ padding: "18px 18px", marginBottom: 12, ...cardEntranceStyle(7) }}>
+            <div className="gd-section-label" style={{ color: "rgba(255,120,120,0.72)" }}>
+              {isRoasting && !roastReport ? "ROAST ENGINE" : "ROAST REPORT"}
             </div>
 
-            <div>
-              {(Array.isArray(roastReport.roastLines) ? roastReport.roastLines : [])
-                .slice(0, Math.min(roastVisibleSteps, roastReport.roastLines?.length || 0))
-                .map((line, index) => (
-                  <div key={`roast-line-${index}`} className="gd-roast-line">
-                    <span style={{ color: "#ff5c5c", fontSize: "0.85rem", lineHeight: 1.6 }}>🔥</span>
-                    <span>{line}</span>
-                  </div>
-                ))}
-
-              {roastVisibleSteps > (roastReport.roastLines?.length || 0) && (
-                <div className="gd-roast-redemption">
-                  <span className="orb" style={{ fontSize: "0.7rem", letterSpacing: "0.08em", color: "#95ff8b" }}>BUT SERIOUSLY...</span>
-                  <div style={{ marginTop: 6 }}>{roastReport.redemption}</div>
+            {isRoasting && !roastReport && (
+              <div className="gd-roast-pending">
+                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, marginBottom: 8 }}>
+                  <span style={{ fontFamily: "Share Tech Mono,monospace", fontSize: "0.64rem", letterSpacing: "0.12em", color: "rgba(255,170,170,0.78)" }}>
+                    GENERATING ROAST FOR @{user.login}
+                  </span>
+                  <span className="gd-badge gd-badge-gold">NO MERCY MODE</span>
                 </div>
-              )}
-            </div>
+                <div className="gd-roast-meter gd-roast-meter-loading" style={{ marginBottom: 10 }}>
+                  <div className="gd-roast-meter-fill" style={{ width: "36%", opacity: 0.65 }} />
+                </div>
+                <div className="gd-roast-line">
+                  <span style={{ color: "#ff5c5c", fontSize: "0.85rem", lineHeight: 1.6 }}>🔥</span>
+                  <span>Analyzing commits, repos, and coding habits...</span>
+                </div>
+              </div>
+            )}
 
-            <div style={{ marginTop: 14, display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, flexWrap: "wrap" }}>
-              <button className="gd-btn gd-btn-roast" onClick={handleShareRoast} style={{ padding: "8px 14px", fontSize: "0.66rem" }}>
-                SHARE ROAST
-              </button>
-              {roastShareCopied && <span className="gd-badge gd-badge-green">ROAST LINK COPIED</span>}
-            </div>
+            {!isRoasting && roastError && !roastReport && (
+              <div style={{ border: "1px solid rgba(255,120,120,0.35)", background: "rgba(48,10,14,0.68)", borderRadius: 8, padding: "12px 12px", color: "rgba(255,188,188,0.9)", fontSize: "0.82rem", lineHeight: 1.55 }}>
+                Roast generation failed: {roastError}
+              </div>
+            )}
+
+            {roastReport && (
+              <>
+                <div style={{ marginBottom: 12 }}>
+                  <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, marginBottom: 6 }}>
+                    <span style={{ fontFamily: "Share Tech Mono,monospace", fontSize: "0.64rem", letterSpacing: "0.12em", color: "rgba(255,170,170,0.78)" }}>
+                      ROASTABILITY SCORE: {Number(roastReport.roastScore || 0)}/100
+                    </span>
+                    <span className="gd-badge gd-badge-gold">NO MERCY MODE</span>
+                  </div>
+                  <div className="gd-roast-meter">
+                    <div className="gd-roast-meter-fill" style={{ width: `${Math.max(0, Math.min(roastMeterValue, 100))}%` }} />
+                  </div>
+                </div>
+
+                <div>
+                  {(Array.isArray(roastReport.roastLines) ? roastReport.roastLines : [])
+                    .slice(0, Math.min(roastVisibleSteps, roastReport.roastLines?.length || 0))
+                    .map((line, index) => (
+                      <div key={`roast-line-${index}`} className="gd-roast-line">
+                        <span style={{ color: "#ff5c5c", fontSize: "0.85rem", lineHeight: 1.6 }}>🔥</span>
+                        <span>{line}</span>
+                      </div>
+                    ))}
+
+                  {roastVisibleSteps > (roastReport.roastLines?.length || 0) && (
+                    <div className="gd-roast-redemption">
+                      <span className="orb" style={{ fontSize: "0.7rem", letterSpacing: "0.08em", color: "#95ff8b" }}>BUT SERIOUSLY...</span>
+                      <div style={{ marginTop: 6 }}>{roastReport.redemption}</div>
+                    </div>
+                  )}
+                </div>
+
+                <div style={{ marginTop: 14, display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, flexWrap: "wrap" }}>
+                  <button className="gd-btn gd-btn-roast" onClick={handleShareRoast} style={{ padding: "8px 14px", fontSize: "0.66rem" }}>
+                    SHARE ROAST
+                  </button>
+                  {roastShareCopied && <span className="gd-badge gd-badge-green">ROAST LINK COPIED</span>}
+                </div>
+              </>
+            )}
           </div>
         )}
 
