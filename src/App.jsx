@@ -13,15 +13,15 @@ const LANG_COLORS = {
 const getLangColor = (l) => LANG_COLORS[l] || "#00f5ff";
 
 const LOADING_STEPS = [
-  "CONNECTING TO GITHUB SERVERS",
+  "CONNECTING TO GITHUB",
   "EXTRACTING REPOSITORY GENOME",
   "MAPPING LANGUAGE TOPOLOGY",
   "ANALYZING COMMIT BEHAVIOR",
-  "DECODING COLLABORATION DNA",
-  "CALIBRATING TEMPORAL PATTERNS",
+  "DECODING COLLABORATION PATTERNS",
   "RUNNING BEHAVIORAL ENGINE",
-  "SYNTHESIZING DEV PROFILE",
+  "SYNTHESIZING PROFILE",
   "RENDERING PSYCHOLOGICAL MATRIX",
+  "FINALIZING PROFILE",
   "PROFILE READY — INITIALIZING",
 ];
 
@@ -90,6 +90,15 @@ html,body{max-width:100%;overflow-x:hidden}
   0%,100%{opacity:.65;filter:drop-shadow(0 0 8px rgba(255,179,0,.5))}
   50%{opacity:1;filter:drop-shadow(0 0 16px rgba(255,179,0,.9))}
 }
+@keyframes duel-left-in{from{opacity:0;transform:translateX(-60px) scale(.9)}to{opacity:1;transform:translateX(0) scale(1)}}
+@keyframes duel-right-in{from{opacity:0;transform:translateX(60px) scale(.9)}to{opacity:1;transform:translateX(0) scale(1)}}
+@keyframes duel-vs-pop{
+  0%{opacity:0;transform:scale(.45) rotate(-8deg)}
+  45%{opacity:1}
+  70%{transform:scale(1.12) rotate(2deg)}
+  100%{opacity:1;transform:scale(1) rotate(0deg)}
+}
+@keyframes duel-pulse{0%,100%{box-shadow:0 0 10px rgba(255,179,0,.25)}50%{box-shadow:0 0 24px rgba(255,179,0,.5)}}
 @keyframes card-rise{from{opacity:0;transform:translateY(26px)}to{opacity:1;transform:translateY(0)}}
 @keyframes scan-sweep{0%{transform:translateY(-6px);opacity:0}12%{opacity:1}100%{transform:translateY(calc(100% + 6px));opacity:0}}
 @keyframes dna-lock{
@@ -190,6 +199,14 @@ html,body{max-width:100%;overflow-x:hidden}
 .gd-lang-pill-shared{border:1px solid rgba(255,179,0,0.4);color:#ffb300;background:rgba(255,179,0,0.1)}
 .gd-lang-pill-left{border:1px solid rgba(0,220,255,0.36);color:#00dcff;background:rgba(0,220,255,0.09)}
 .gd-lang-pill-right{border:1px solid rgba(179,71,234,0.36);color:#c46ef8;background:rgba(179,71,234,0.1)}
+
+.gd-duel-stage{position:relative;z-index:2;width:100%;max-width:920px;display:grid;grid-template-columns:1fr auto 1fr;gap:14px;align-items:center}
+.gd-duel-card{border-radius:8px;padding:18px 14px;text-align:center;backdrop-filter:blur(10px)}
+.gd-duel-card-left{border:1px solid rgba(0,220,255,0.42);background:rgba(4,18,30,0.9);animation:duel-left-in .75s cubic-bezier(.2,.8,.2,1) forwards}
+.gd-duel-card-right{border:1px solid rgba(179,71,234,0.45);background:rgba(16,7,26,0.92);animation:duel-right-in .75s cubic-bezier(.2,.8,.2,1) forwards}
+.gd-duel-vs{width:96px;height:96px;border-radius:50%;display:flex;align-items:center;justify-content:center;border:1px solid rgba(255,179,0,.55);background:radial-gradient(circle at 35% 35%,rgba(255,179,0,.3),rgba(35,18,0,.95));color:#ffd166;font-size:1.5rem;font-weight:900;letter-spacing:.08em;animation:duel-vs-pop .8s ease-out forwards,duel-pulse 1.2s ease-in-out .9s infinite}
+.gd-duel-label{font-family:'Share Tech Mono',monospace;font-size:.58rem;letter-spacing:.16em;margin-bottom:8px}
+.gd-duel-sub{margin-top:16px;text-align:center;font-family:'Share Tech Mono',monospace;font-size:.64rem;letter-spacing:.16em;color:rgba(255,179,0,.66)}
 
 .gd-founder-card{position:relative;border:1px solid rgba(255,179,0,0.34);background:radial-gradient(circle at 10% 0%,rgba(255,179,0,0.2),rgba(16,11,2,0.95) 42%,rgba(7,8,16,0.94) 100%);backdrop-filter:blur(12px);border-radius:6px;overflow:hidden;box-shadow:0 0 18px rgba(255,179,0,0.14),0 0 30px rgba(179,71,234,0.1)}
 .gd-founder-card::before{content:'';position:absolute;inset:0;background:linear-gradient(120deg,transparent 15%,rgba(255,179,0,.14) 36%,rgba(179,71,234,.16) 50%,rgba(0,220,255,.12) 64%,transparent 86%);background-size:200% 100%;animation:founder-pan 7s linear infinite;pointer-events:none}
@@ -1368,8 +1385,10 @@ function LandingPage({ onAnalyze }) {
   );
 }
 
-function LoadingPage({ step }) {
+function LoadingPage({ step, message, feed }) {
   const pct = Math.round(((step + 1) / LOADING_STEPS.length) * 100);
+  const currentMessage = message || LOADING_STEPS[step] || LOADING_STEPS[0];
+  const displayFeed = Array.isArray(feed) && feed.length > 0 ? feed : LOADING_STEPS.slice(0, Math.max(step + 1, 1));
   return (
     <div className="gd-root" style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", minHeight: "100vh", padding: 20, position: "relative", zIndex: 2 }}>
       <BackgroundCanvas />
@@ -1390,7 +1409,7 @@ function LoadingPage({ step }) {
           SYSTEM PROCESS {String(step + 1).padStart(2, "0")}/{LOADING_STEPS.length}
         </div>
         <div style={{ fontFamily: "Orbitron,monospace", fontSize: "clamp(0.7rem,2vw,0.9rem)", color: "#00dcff", letterSpacing: "0.12em", fontWeight: 600, marginBottom: 28, textShadow: "0 0 10px rgba(0,220,255,0.4)", minHeight: 24 }}>
-          {LOADING_STEPS[step]}
+          {currentMessage}
           <span style={{ opacity: 0.5 }}>...</span>
         </div>
 
@@ -1405,12 +1424,14 @@ function LoadingPage({ step }) {
         </div>
 
         <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-          {LOADING_STEPS.slice(0, step + 1).map((msg, i) => (
-            <div key={i} style={{ display: "flex", alignItems: "center", gap: 10, opacity: i === step ? 1 : 0.35 }}>
-              <div style={{ width: 6, height: 6, borderRadius: "50%", background: i === step ? "#00dcff" : "#39ff14", boxShadow: i === step ? "0 0 6px rgba(0,220,255,0.8)" : "none", flexShrink: 0 }} />
+          {displayFeed.map((msg, i) => {
+            const latestIndex = displayFeed.length - 1;
+            return (
+            <div key={`${msg}-${i}`} style={{ display: "flex", alignItems: "center", gap: 10, opacity: i === latestIndex ? 1 : 0.35 }}>
+              <div style={{ width: 6, height: 6, borderRadius: "50%", background: i === latestIndex ? "#00dcff" : "#39ff14", boxShadow: i === latestIndex ? "0 0 6px rgba(0,220,255,0.8)" : "none", flexShrink: 0 }} />
               <span style={{ fontFamily: "Share Tech Mono,monospace", fontSize: "0.6rem", color: "rgba(0,220,255,0.5)", letterSpacing: "0.08em" }}>{msg}</span>
             </div>
-          ))}
+          )})}
         </div>
       </div>
     </div>
@@ -1772,6 +1793,31 @@ function Dashboard({ github, aiData, devScore, langs, username, onReset, onCompa
   );
 }
 
+function BattleIntro({ leftUsername, rightUsername }) {
+  return (
+    <div className="gd-root" style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", minHeight: "100vh", padding: 20, position: "relative", zIndex: 2 }}>
+      <BackgroundCanvas />
+      <div className="gd-scanlines" />
+
+      <div className="gd-duel-stage">
+        <div className="gd-duel-card gd-duel-card-left">
+          <div className="gd-duel-label" style={{ color: "rgba(0,220,255,0.66)" }}>CHALLENGER A</div>
+          <div className="orb" style={{ color: "#00dcff", fontSize: "1.1rem", letterSpacing: "0.06em" }}>{leftUsername}</div>
+        </div>
+
+        <div className="gd-duel-vs orb">VS</div>
+
+        <div className="gd-duel-card gd-duel-card-right">
+          <div className="gd-duel-label" style={{ color: "rgba(179,71,234,0.72)" }}>CHALLENGER B</div>
+          <div className="orb" style={{ color: "#c46ef8", fontSize: "1.1rem", letterSpacing: "0.06em" }}>{rightUsername}</div>
+        </div>
+      </div>
+
+      <div className="gd-duel-sub">LOADING BATTLE ARENA...</div>
+    </div>
+  );
+}
+
 function CompareView({ battleData, onBack, onShareBattle }) {
   const { left, right, analysis } = battleData;
 
@@ -1956,6 +2002,8 @@ function CompareView({ battleData, onBack, onShareBattle }) {
 export default function GitDNA() {
   const [phase, setPhase] = useState("landing");
   const [loadingStep, setLoadingStep] = useState(0);
+  const [loadingMessage, setLoadingMessage] = useState(LOADING_STEPS[0]);
+  const [loadingFeed, setLoadingFeed] = useState([]);
   const [error, setError] = useState("");
   const [github, setGithub] = useState(null);
   const [aiData, setAiData] = useState(null);
@@ -1966,7 +2014,20 @@ export default function GitDNA() {
   const [compareBusy, setCompareBusy] = useState(false);
   const autoAnalyzeRef = useRef(false);
   const streamRef = useRef(null);
+  const battleIntroTimerRef = useRef(null);
   const API_URL = (import.meta.env.VITE_API_URL || "http://localhost:8000").replace(/\/$/, "");
+
+  const beginBattleIntro = () => {
+    if (battleIntroTimerRef.current) {
+      clearTimeout(battleIntroTimerRef.current);
+      battleIntroTimerRef.current = null;
+    }
+    setPhase("battle-intro");
+    battleIntroTimerRef.current = setTimeout(() => {
+      setPhase("dashboard");
+      battleIntroTimerRef.current = null;
+    }, 3000);
+  };
 
   const fetchProfilePayload = async (username) => {
     const endpoint = `${API_URL}/api/analyze/${encodeURIComponent(username)}`;
@@ -2017,6 +2078,8 @@ export default function GitDNA() {
 
     setPhase("loading");
     setLoadingStep(0);
+    setLoadingMessage(LOADING_STEPS[0]);
+    setLoadingFeed([]);
     setError("");
     setBattleData(null);
 
@@ -2032,6 +2095,8 @@ export default function GitDNA() {
       const profileUsername = bundle.username;
       window.history.pushState({}, "", `/?u=${encodeURIComponent(profileUsername)}`);
       setLoadingStep(9);
+      setLoadingMessage(LOADING_STEPS[9]);
+      setLoadingFeed((prev) => prev.includes(LOADING_STEPS[9]) ? prev : [...prev, LOADING_STEPS[9]]);
       setPhase("dashboard");
     };
 
@@ -2041,6 +2106,9 @@ export default function GitDNA() {
     };
 
     const fallbackFetch = async () => {
+      setLoadingStep(6);
+      setLoadingMessage(LOADING_STEPS[6]);
+      setLoadingFeed((prev) => prev.includes(LOADING_STEPS[6]) ? prev : [...prev, LOADING_STEPS[6]]);
       const data = await fetchProfilePayload(parsedUsername);
       applyResult(data);
     };
@@ -2067,6 +2135,12 @@ export default function GitDNA() {
           if (typeof packet.step === "number") {
             const safeStep = Math.max(0, Math.min(packet.step, LOADING_STEPS.length - 1));
             setLoadingStep(safeStep);
+          }
+
+          if (typeof packet.message === "string" && packet.message.trim()) {
+            const msg = packet.message.trim();
+            setLoadingMessage(msg);
+            setLoadingFeed((prev) => prev.includes(msg) ? prev : [...prev, msg]);
           }
 
           if (packet.done) {
@@ -2105,6 +2179,8 @@ export default function GitDNA() {
     if (showLoading) {
       setPhase("loading");
       setLoadingStep(0);
+      setLoadingMessage(LOADING_STEPS[0]);
+      setLoadingFeed([LOADING_STEPS[0]]);
       setError("");
     }
 
@@ -2117,6 +2193,8 @@ export default function GitDNA() {
 
       if (showLoading) {
         setLoadingStep(7);
+        setLoadingMessage(LOADING_STEPS[7]);
+        setLoadingFeed((prev) => prev.includes(LOADING_STEPS[7]) ? prev : [...prev, LOADING_STEPS[7]]);
       }
 
       const leftBundle = normalizeAnalysisPayload(leftPayload, leftUsername);
@@ -2141,8 +2219,10 @@ export default function GitDNA() {
 
       if (showLoading) {
         setLoadingStep(9);
+        setLoadingMessage(LOADING_STEPS[9]);
+        setLoadingFeed((prev) => prev.includes(LOADING_STEPS[9]) ? prev : [...prev, LOADING_STEPS[9]]);
       }
-      setPhase("dashboard");
+      beginBattleIntro();
     } finally {
       setCompareBusy(false);
     }
@@ -2184,6 +2264,10 @@ export default function GitDNA() {
       streamRef.current.close();
       streamRef.current = null;
     }
+    if (battleIntroTimerRef.current) {
+      clearTimeout(battleIntroTimerRef.current);
+      battleIntroTimerRef.current = null;
+    }
   }, []);
 
   useEffect(() => {
@@ -2218,7 +2302,17 @@ export default function GitDNA() {
   if (phase === "loading") return (
     <>
       <style>{CSS}</style>
-      <LoadingPage step={loadingStep} />
+      <LoadingPage step={loadingStep} message={loadingMessage} feed={loadingFeed} />
+    </>
+  );
+
+  if (phase === "battle-intro") return (
+    <>
+      <style>{CSS}</style>
+      <BattleIntro
+        leftUsername={battleData?.left?.username || activeUsername || "UNKNOWN"}
+        rightUsername={battleData?.right?.username || "OPPONENT"}
+      />
     </>
   );
 

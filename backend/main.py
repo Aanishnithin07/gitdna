@@ -128,8 +128,11 @@ async def analyze_profile(request: Request, username: str):
             yield f"data: {json.dumps({'step': i, 'message': message})}\n\n"
             await asyncio.sleep(0.3)
 
+        yield f"data: {json.dumps({'step': 8, 'message': 'FINALIZING PROFILE'})}\n\n"
+        await asyncio.sleep(0.2)
+
         result = await full_analysis(username)
-        yield f"data: {json.dumps({'step': 9, 'done': True, 'data': result})}\n\n"
+        yield f"data: {json.dumps({'step': 9, 'message': 'PROFILE READY — INITIALIZING', 'done': True, 'data': result})}\n\n"
 
     return StreamingResponse(
         generate(),
