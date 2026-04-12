@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from "react";
 import { RadarChart, Radar, PolarGrid, PolarAngleAxis, ResponsiveContainer } from "recharts";
+import html2canvas from "html2canvas";
 
 const LANG_COLORS = {
   JavaScript:"#f1e05a",TypeScript:"#3178c6",Python:"#3572A5",Rust:"#dea584",
@@ -24,9 +25,12 @@ const LOADING_STEPS = [
   "PROFILE READY — INITIALIZING",
 ];
 
+const RATE_LIMIT_MESSAGE = "RATE LIMIT HIT — Add a GitHub token in .env or wait 60 minutes";
+
 const CSS = `
 @import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@400;600;700;900&family=Share+Tech+Mono&family=Rajdhani:wght@300;400;500;600;700&display=swap');
 *{box-sizing:border-box;margin:0;padding:0}
+html,body{max-width:100%;overflow-x:hidden}
 .gd-root{font-family:'Rajdhani',sans-serif;background:#060b12;min-height:100vh;color:#c8e8ff;overflow-x:hidden;position:relative}
 .gd-grid-bg{position:fixed;inset:0;background-image:linear-gradient(rgba(0,220,255,0.025) 1px,transparent 1px),linear-gradient(90deg,rgba(0,220,255,0.025) 1px,transparent 1px);background-size:60px 60px;pointer-events:none;z-index:0}
 .gd-scanlines{position:fixed;inset:0;background:repeating-linear-gradient(0deg,transparent,transparent 2px,rgba(0,0,0,0.12) 2px,rgba(0,0,0,0.12) 4px);pointer-events:none;z-index:1;opacity:.5}
@@ -71,6 +75,11 @@ const CSS = `
   from{transform:rotate(0deg)}
   to{transform:rotate(360deg)}
 }
+@keyframes helix-wave-a{from{stroke-dashoffset:0}to{stroke-dashoffset:-96}}
+@keyframes helix-wave-b{from{stroke-dashoffset:0}to{stroke-dashoffset:96}}
+@keyframes helix-spin{from{transform:rotate(0deg)}to{transform:rotate(360deg)}}
+@keyframes unlock-flash{0%{opacity:0}25%{opacity:.95}100%{opacity:0}}
+@keyframes card-rise{from{opacity:0;transform:translateY(26px)}to{opacity:1;transform:translateY(0)}}
 
 .gd-glitch{animation:glitch 5s infinite}
 .gd-card{border:1px solid rgba(0,220,255,0.18);background:rgba(4,14,26,0.88);backdrop-filter:blur(14px);border-radius:6px;animation:pulse-border 4s ease-in-out infinite;position:relative}
@@ -130,6 +139,26 @@ const CSS = `
 
 .scan-overlay{position:absolute;inset:0;pointer-events:none;overflow:hidden;border-radius:6px}
 .scan-overlay::after{content:'';position:absolute;left:0;right:0;height:2px;background:linear-gradient(90deg,transparent,rgba(0,220,255,0.4),transparent);animation:scan-line 3s linear infinite}
+
+.gd-recent-pill{border:1px solid rgba(0,220,255,0.28);background:rgba(0,8,20,0.8);color:rgba(0,220,255,0.88);padding:6px 10px;border-radius:999px;font-family:'Share Tech Mono',monospace;font-size:.62rem;letter-spacing:.08em;cursor:pointer;transition:all .2s ease}
+.gd-recent-pill:hover{background:rgba(0,220,255,0.14);box-shadow:0 0 12px rgba(0,220,255,0.24)}
+
+.gd-helix{transform-origin:50% 50%;animation:helix-spin 4.5s linear infinite;filter:drop-shadow(0 0 18px rgba(0,220,255,0.2))}
+.gd-helix-a{fill:none;stroke:#00dcff;stroke-width:3;stroke-linecap:round;stroke-dasharray:14 8;animation:helix-wave-a 1.1s linear infinite}
+.gd-helix-b{fill:none;stroke:#b347ea;stroke-width:3;stroke-linecap:round;stroke-dasharray:14 8;animation:helix-wave-b 1.1s linear infinite}
+
+.gd-vitals-row{display:flex;gap:10px;margin-bottom:16px;flex-wrap:wrap;max-width:100%}
+.gd-unlock-flash{position:fixed;inset:0;background:#fff;pointer-events:none;z-index:60;animation:unlock-flash .3s ease-out forwards}
+
+@media (max-width:640px){
+  .gd-vitals-row{flex-wrap:nowrap;overflow-x:auto;padding-bottom:8px;scroll-snap-type:x proximity;-webkit-overflow-scrolling:touch}
+  .gd-vitals-row > *{flex:0 0 auto;min-width:170px;scroll-snap-align:start}
+}
+
+@media (max-width:500px){
+  .gd-header-card{flex-direction:column;align-items:flex-start!important;gap:14px!important}
+  .gd-header-ring{align-self:center}
+}
 `;
 
 function calcDevScore(user, repos) {
@@ -258,10 +287,17 @@ function SkillBar({ lang, pct, delay = 0 }) {
   );
 }
 
-function StatCard({ icon, label, value, delay, sub }) {
+function StatCard({ icon, label, value, delay, sub, enterIndex = 0 }) {
   return (
-    <div className={`gd-card gd-hover-lift anim-up delay-${delay}`}
-      style={{ padding: "16px 14px", textAlign: "center", flex: 1, minWidth: 0 }}>
+    <div className="gd-card gd-hover-lift"
+      style={{
+        padding: "16px 14px",
+        textAlign: "center",
+        flex: 1,
+        minWidth: 0,
+        opacity: 0,
+        animation: `card-rise .55s cubic-bezier(.2,.8,.2,1) ${enterIndex * 80}ms forwards`,
+      }}>
       <div className="gd-section-label" style={{ justifyContent: "center", marginBottom: 8 }}>{label}</div>
       <div className="stat-number anim-count" style={{ fontSize: "1.5rem", color: "#00dcff", textShadow: "0 0 12px rgba(0,220,255,0.4)" }}>
         {typeof value === "number" ? <AnimatedCounter target={value} delay={delay * 80} /> : value}
@@ -327,6 +363,7 @@ function LandingPage({ onAnalyze }) {
   const [username, setUsername] = useState("");
   const [loading, setLoading] = useState(false);
   const [blink, setBlink] = useState(true);
+  const recentProfiles = ["torvalds", "gaearon", "antirez"];
   useEffect(() => { const t = setInterval(() => setBlink(b => !b), 500); return () => clearInterval(t); }, []);
   const handle = () => { if (username.trim()) { setLoading(true); onAnalyze(username.trim()); } };
   return (
@@ -371,6 +408,26 @@ function LandingPage({ onAnalyze }) {
           <button className="gd-btn" onClick={handle} disabled={loading || !username.trim()} style={{ width: "100%", fontSize: "0.8rem" }}>
             {loading ? "INITIALIZING..." : "▶ EXECUTE ANALYSIS"}
           </button>
+          <div style={{ marginTop: 10, fontFamily: "Share Tech Mono,monospace", fontSize: "0.62rem", color: "rgba(0,220,255,0.45)", letterSpacing: "0.04em" }}>
+            Add VITE_GITHUB_TOKEN to .env for higher rate limits
+          </div>
+          <div style={{ marginTop: 12 }}>
+            <div style={{ fontFamily: "Share Tech Mono,monospace", fontSize: "0.58rem", color: "rgba(0,220,255,0.36)", letterSpacing: "0.14em", marginBottom: 8 }}>
+              RECENTLY ANALYZED
+            </div>
+            <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+              {recentProfiles.map((profile) => (
+                <button
+                  key={profile}
+                  type="button"
+                  className="gd-recent-pill"
+                  onClick={() => setUsername(profile)}
+                >
+                  @{profile}
+                </button>
+              ))}
+            </div>
+          </div>
         </div>
       </div>
 
@@ -396,15 +453,13 @@ function LoadingPage({ step }) {
       {Array.from({ length: 12 }, (_, i) => <Particle key={i} idx={i} />)}
 
       <div style={{ width: "100%", maxWidth: 480, textAlign: "center" }}>
-        <div style={{ position: "relative", width: 90, height: 90, margin: "0 auto 32px" }}>
-          <svg width="90" height="90" style={{ animation: "spin-slow 3s linear infinite", position: "absolute", inset: 0 }}>
-            <circle cx="45" cy="45" r="38" fill="none" stroke="rgba(0,220,255,0.12)" strokeWidth="2" strokeDasharray="6 6" />
+        <div style={{ position: "relative", width: "100%", maxWidth: 260, height: 140, margin: "0 auto 28px", display: "flex", alignItems: "center", justifyContent: "center" }}>
+          <svg className="gd-helix" viewBox="0 0 240 120" width="240" height="120" aria-hidden="true">
+            <path className="gd-helix-a" d="M10 60 C 30 12, 50 12, 70 60 C 90 108, 110 108, 130 60 C 150 12, 170 12, 190 60 C 210 108, 230 108, 230 60" />
+            <path className="gd-helix-b" d="M10 60 C 30 108, 50 108, 70 60 C 90 12, 110 12, 130 60 C 150 108, 170 108, 190 60 C 210 12, 230 12, 230 60" />
           </svg>
-          <svg width="90" height="90" style={{ animation: "spin-slow 2s linear infinite reverse", position: "absolute", inset: 0 }}>
-            <circle cx="45" cy="45" r="28" fill="none" stroke="rgba(179,71,234,0.2)" strokeWidth="1.5" strokeDasharray="3 9" />
-          </svg>
-          <div style={{ position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center" }}>
-            <div className="orb" style={{ fontSize: "1.3rem", fontWeight: 900, color: "#00dcff", textShadow: "0 0 12px rgba(0,220,255,0.6)" }}>GIT<span style={{ color: "#b347ea" }}>DNA</span></div>
+          <div style={{ position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center", pointerEvents: "none" }}>
+            <div className="orb" style={{ fontSize: "1.1rem", fontWeight: 900, color: "#00dcff", textShadow: "0 0 12px rgba(0,220,255,0.6)" }}>GIT<span style={{ color: "#b347ea" }}>DNA</span></div>
           </div>
         </div>
 
@@ -448,67 +503,123 @@ function Dashboard({ github, aiData, devScore, langs, username, onReset }) {
   const traits = aiData?.traits;
   const facts = aiData?.fastFacts || [];
   const dna = aiData?.dnaSequence || "0000000000000000";
+  const shareCardRef = useRef(null);
+  const shareFlashTimeoutRef = useRef(null);
+  const unlockFlashTimeoutRef = useRef(null);
+  const [isGeneratingCard, setIsGeneratingCard] = useState(false);
+  const [showCardSaved, setShowCardSaved] = useState(false);
+  const [showUnlockFlash, setShowUnlockFlash] = useState(true);
+
+  const cardEntranceStyle = (index) => ({
+    opacity: 0,
+    animation: `card-rise .55s cubic-bezier(.2,.8,.2,1) ${320 + index * 80}ms forwards`,
+  });
+
+  useEffect(() => {
+    setShowUnlockFlash(true);
+    unlockFlashTimeoutRef.current = setTimeout(() => setShowUnlockFlash(false), 320);
+    return () => {
+      if (shareFlashTimeoutRef.current) {
+        clearTimeout(shareFlashTimeoutRef.current);
+      }
+      if (unlockFlashTimeoutRef.current) {
+        clearTimeout(unlockFlashTimeoutRef.current);
+      }
+    };
+  }, []);
+
+  async function handleGenerateShareCard() {
+    if (!shareCardRef.current || isGeneratingCard) return;
+
+    try {
+      setIsGeneratingCard(true);
+      const canvas = await html2canvas(shareCardRef.current, {
+        backgroundColor: "#060b12",
+        scale: window.devicePixelRatio > 1 ? 2 : 1,
+        useCORS: true,
+      });
+
+      const profileUsername = (user.login || username || "profile").replace(/[^a-zA-Z0-9_-]/g, "") || "profile";
+      const link = document.createElement("a");
+      link.download = `gitdna-${profileUsername}.png`;
+      link.href = canvas.toDataURL("image/png");
+      link.click();
+
+      setShowCardSaved(true);
+      if (shareFlashTimeoutRef.current) {
+        clearTimeout(shareFlashTimeoutRef.current);
+      }
+      shareFlashTimeoutRef.current = setTimeout(() => setShowCardSaved(false), 1500);
+    } catch (err) {
+      console.error("Share card generation failed", err);
+    } finally {
+      setIsGeneratingCard(false);
+    }
+  }
 
   return (
     <div className="gd-root" style={{ position: "relative", zIndex: 2, paddingBottom: 60 }}>
       <div className="gd-grid-bg" /><div className="gd-scanlines" /><div className="gd-vignette" />
+      {showUnlockFlash && <div className="gd-unlock-flash" />}
 
       <div style={{ maxWidth: 900, margin: "0 auto", padding: "24px 16px", position: "relative", zIndex: 2 }}>
-        {/* HEADER */}
-        <div className="gd-card anim-fade" style={{ padding: "20px 22px", marginBottom: 16, display: "flex", alignItems: "center", gap: 20, flexWrap: "wrap" }}>
-          <div className="scan-overlay" />
-          <div style={{ position: "relative", flexShrink: 0 }}>
-            <div style={{ position: "absolute", inset: -4, borderRadius: "50%", border: "1.5px solid rgba(0,220,255,0.3)", animation: "ring-spin 8s linear infinite" }} />
-            <div style={{ position: "absolute", inset: -8, borderRadius: "50%", border: "1px solid rgba(179,71,234,0.2)", animation: "ring-spin 12s linear infinite reverse" }} />
-            {user.avatar_url ? (
-              <img src={user.avatar_url} alt="" style={{ width: 72, height: 72, borderRadius: "50%", border: "2px solid rgba(0,220,255,0.35)", display: "block" }} />
-            ) : (
-              <div style={{ width: 72, height: 72, borderRadius: "50%", background: "rgba(0,220,255,0.1)", border: "2px solid rgba(0,220,255,0.3)", display: "flex", alignItems: "center", justifyContent: "center", fontFamily: "Orbitron,monospace", fontSize: "1.4rem", color: "#00dcff" }}>
-                {(user.login || "?")[0].toUpperCase()}
+        <div ref={shareCardRef} style={{ padding: 2, borderRadius: 8 }}>
+          {/* HEADER */}
+          <div className="gd-card gd-header-card" style={{ padding: "20px 22px", marginBottom: 16, display: "flex", alignItems: "center", gap: 20, flexWrap: "wrap", ...cardEntranceStyle(0) }}>
+            <div className="scan-overlay" />
+            <div style={{ position: "relative", flexShrink: 0 }}>
+              <div style={{ position: "absolute", inset: -4, borderRadius: "50%", border: "1.5px solid rgba(0,220,255,0.3)", animation: "ring-spin 8s linear infinite" }} />
+              <div style={{ position: "absolute", inset: -8, borderRadius: "50%", border: "1px solid rgba(179,71,234,0.2)", animation: "ring-spin 12s linear infinite reverse" }} />
+              {user.avatar_url ? (
+                <img src={user.avatar_url} alt="" style={{ width: 72, height: 72, borderRadius: "50%", border: "2px solid rgba(0,220,255,0.35)", display: "block" }} />
+              ) : (
+                <div style={{ width: 72, height: 72, borderRadius: "50%", background: "rgba(0,220,255,0.1)", border: "2px solid rgba(0,220,255,0.3)", display: "flex", alignItems: "center", justifyContent: "center", fontFamily: "Orbitron,monospace", fontSize: "1.4rem", color: "#00dcff" }}>
+                  {(user.login || "?")[0].toUpperCase()}
+                </div>
+              )}
+            </div>
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap", marginBottom: 4 }}>
+                <h2 className="orb" style={{ fontSize: "1.25rem", fontWeight: 700, color: "#ffffff", letterSpacing: "0.05em" }}>{user.name || user.login}</h2>
+                <span className="gd-badge gd-badge-purple">{devClass}</span>
               </div>
-            )}
-          </div>
-          <div style={{ flex: 1, minWidth: 0 }}>
-            <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap", marginBottom: 4 }}>
-              <h2 className="orb" style={{ fontSize: "1.25rem", fontWeight: 700, color: "#ffffff", letterSpacing: "0.05em" }}>{user.name || user.login}</h2>
-              <span className="gd-badge gd-badge-purple">{devClass}</span>
+              <div style={{ fontFamily: "Share Tech Mono,monospace", fontSize: "0.72rem", color: "rgba(0,220,255,0.5)", marginBottom: 8 }}>@{user.login}</div>
+              {user.bio && <div style={{ fontSize: "0.88rem", color: "rgba(200,232,255,0.55)", fontWeight: 300, marginBottom: 8 }}>{user.bio}</div>}
+              <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
+                {user.location && <span className="gd-badge gd-badge-cyan">📍 {user.location}</span>}
+                <span className="gd-badge gd-badge-gold">⌛ {acctYears}yr veteran</span>
+                {user.blog && <span className="gd-badge gd-badge-green">🔗 blog</span>}
+              </div>
             </div>
-            <div style={{ fontFamily: "Share Tech Mono,monospace", fontSize: "0.72rem", color: "rgba(0,220,255,0.5)", marginBottom: 8 }}>@{user.login}</div>
-            {user.bio && <div style={{ fontSize: "0.88rem", color: "rgba(200,232,255,0.55)", fontWeight: 300, marginBottom: 8 }}>{user.bio}</div>}
-            <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
-              {user.location && <span className="gd-badge gd-badge-cyan">📍 {user.location}</span>}
-              <span className="gd-badge gd-badge-gold">⌛ {acctYears}yr veteran</span>
-              {user.blog && <span className="gd-badge gd-badge-green">🔗 blog</span>}
+            <div className="gd-header-ring" style={{ flexShrink: 0 }}>
+              <ScoreRing score={devScore} />
             </div>
           </div>
-          <div style={{ flexShrink: 0 }}>
-            <ScoreRing score={devScore} />
+
+          {/* DNA SEQUENCE */}
+          <div className="gd-card" style={{ padding: "12px 18px", marginBottom: 16, ...cardEntranceStyle(1) }}>
+            <div className="gd-section-label" style={{ marginBottom: 8 }}>DEV DNA SEQUENCE</div>
+            <DNASequence seq={dna} />
           </div>
-        </div>
 
-        {/* DNA SEQUENCE */}
-        <div className="gd-card anim-up delay-1" style={{ padding: "12px 18px", marginBottom: 16 }}>
-          <div className="gd-section-label" style={{ marginBottom: 8 }}>DEV DNA SEQUENCE</div>
-          <DNASequence seq={dna} />
-        </div>
-
-        {/* VITALS */}
-        <div style={{ display: "flex", gap: 10, marginBottom: 16, flexWrap: "wrap" }}>
-          <StatCard label="STARS EARNED" value={totalStars} delay={2} sub="across all repos" />
-          <StatCard label="FOLLOWERS" value={user.followers} delay={3} sub="in the network" />
-          <StatCard label="REPOSITORIES" value={user.public_repos} delay={4} sub="public codebases" />
-          <StatCard label="COMMITS" value={recentCommits} delay={5} sub="recent activity" />
+          {/* VITALS */}
+          <div className="gd-vitals-row">
+            <StatCard label="STARS EARNED" value={totalStars} delay={2} sub="across all repos" enterIndex={2} />
+            <StatCard label="FOLLOWERS" value={user.followers} delay={3} sub="in the network" enterIndex={3} />
+            <StatCard label="REPOSITORIES" value={user.public_repos} delay={4} sub="public codebases" enterIndex={4} />
+            <StatCard label="COMMITS" value={recentCommits} delay={5} sub="recent activity" enterIndex={5} />
+          </div>
         </div>
 
         {/* SKILLS + CHRONOTYPE */}
         <div style={{ display: "flex", gap: 12, marginBottom: 12, flexWrap: "wrap" }}>
-          <div className="gd-card anim-up delay-3" style={{ flex: "1 1 220px", padding: "18px 18px" }}>
+          <div className="gd-card" style={{ flex: "1 1 220px", padding: "18px 18px", ...cardEntranceStyle(6) }}>
             <div className="gd-section-label">SKILL TOPOLOGY</div>
             {langs.map((l, i) => <SkillBar key={l.lang} lang={l.lang} pct={l.pct} delay={i + 1} />)}
             {langs.length === 0 && <div style={{ color: "rgba(200,232,255,0.3)", fontFamily: "Share Tech Mono,monospace", fontSize: "0.7rem" }}>No language data</div>}
           </div>
 
-          <div className="gd-card-purple anim-up delay-4" style={{ flex: "1 1 220px", padding: "18px 18px" }}>
+          <div className="gd-card-purple" style={{ flex: "1 1 220px", padding: "18px 18px", ...cardEntranceStyle(7) }}>
             <div className="gd-section-label" style={{ color: "rgba(179,71,234,0.6)" }}>CHRONOTYPE</div>
             <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 12 }}>
               <div style={{ width: 40, height: 40, borderRadius: "50%", background: "rgba(179,71,234,0.1)", border: "1px solid rgba(179,71,234,0.3)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: "1.2rem", flexShrink: 0 }}>🌑</div>
@@ -521,7 +632,7 @@ function Dashboard({ github, aiData, devScore, langs, username, onReset }) {
             <p style={{ fontSize: "0.84rem", color: "rgba(200,232,255,0.6)", lineHeight: 1.6, fontWeight: 300 }}>{chronotype.description}</p>
           </div>
 
-          <div className="gd-card anim-up delay-5" style={{ flex: "1 1 180px", padding: "18px 18px" }}>
+          <div className="gd-card" style={{ flex: "1 1 180px", padding: "18px 18px", ...cardEntranceStyle(8) }}>
             <div className="gd-section-label">NEURAL TRAITS</div>
             <TraitsRadar traits={traits} />
           </div>
@@ -529,7 +640,7 @@ function Dashboard({ github, aiData, devScore, langs, username, onReset }) {
 
         {/* COLLAB STYLE */}
         <div style={{ display: "flex", gap: 12, marginBottom: 12, flexWrap: "wrap" }}>
-          <div className="gd-card-green anim-up delay-5" style={{ flex: "1 1 240px", padding: "18px 18px" }}>
+          <div className="gd-card-green" style={{ flex: "1 1 240px", padding: "18px 18px", ...cardEntranceStyle(9) }}>
             <div className="gd-section-label" style={{ color: "rgba(57,255,20,0.5)" }}>COLLABORATION MATRIX</div>
             <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 12 }}>
               <div style={{ width: 40, height: 40, borderRadius: "50%", background: "rgba(57,255,20,0.08)", border: "1px solid rgba(57,255,20,0.25)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: "1.2rem", flexShrink: 0 }}>⚡</div>
@@ -543,7 +654,7 @@ function Dashboard({ github, aiData, devScore, langs, username, onReset }) {
           </div>
 
           {traits && (
-            <div className="gd-card anim-up delay-6" style={{ flex: "1 1 200px", padding: "18px 18px" }}>
+            <div className="gd-card" style={{ flex: "1 1 200px", padding: "18px 18px", ...cardEntranceStyle(10) }}>
               <div className="gd-section-label">TRAIT METRICS</div>
               {Object.entries(traits).map(([k, v]) => (
                 <div key={k} style={{ marginBottom: 8 }}>
@@ -562,12 +673,12 @@ function Dashboard({ github, aiData, devScore, langs, username, onReset }) {
 
         {/* FAST FACTS */}
         {facts.length > 0 && (
-          <div className="anim-up delay-7">
+          <div style={cardEntranceStyle(11)}>
             <div className="gd-card" style={{ padding: "18px 18px" }}>
               <div className="gd-section-label">// AI FAST FACTS</div>
               <div style={{ display: "flex", gap: 12, flexWrap: "wrap" }}>
                 {facts.map((fact, i) => (
-                  <div key={i} className="gd-card-gold gd-hover-lift" style={{ flex: "1 1 180px", padding: "14px 14px" }}>
+                  <div key={i} className="gd-card-gold gd-hover-lift" style={{ flex: "1 1 180px", padding: "14px 14px", ...cardEntranceStyle(12 + i) }}>
                     <div style={{ fontFamily: "Share Tech Mono,monospace", fontSize: "0.55rem", color: "rgba(255,179,0,0.45)", letterSpacing: "0.15em", marginBottom: 8 }}>INTEL_{String(i + 1).padStart(2, "0")}</div>
                     <p style={{ fontSize: "0.84rem", color: "rgba(200,232,255,0.7)", lineHeight: 1.55, fontWeight: 400 }}>{fact}</p>
                   </div>
@@ -578,11 +689,17 @@ function Dashboard({ github, aiData, devScore, langs, username, onReset }) {
         )}
 
         {/* FOOTER */}
-        <div className="anim-fade delay-8" style={{ marginTop: 24, textAlign: "center" }}>
+        <div style={{ marginTop: 24, textAlign: "center", ...cardEntranceStyle(16) }}>
           <div className="gd-neon-line" />
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 10 }}>
             <span style={{ fontFamily: "Share Tech Mono,monospace", fontSize: "0.6rem", color: "rgba(0,220,255,0.3)" }}>GITDNA ENGINE v2.0 // BEHAVIORAL PROFILE GENERATED</span>
-            <button className="gd-btn" onClick={onReset} style={{ padding: "8px 16px", fontSize: "0.68rem" }}>◀ NEW SCAN</button>
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "flex-end", flexWrap: "wrap", gap: 8, marginLeft: "auto" }}>
+              {showCardSaved && <span className="gd-badge gd-badge-green">CARD SAVED</span>}
+              <button className="gd-btn" onClick={handleGenerateShareCard} disabled={isGeneratingCard} style={{ padding: "8px 16px", fontSize: "0.68rem" }}>
+                {isGeneratingCard ? "GENERATING..." : "⤓ GENERATE SHARE CARD"}
+              </button>
+              <button className="gd-btn" onClick={onReset} style={{ padding: "8px 16px", fontSize: "0.68rem" }}>◀ NEW SCAN</button>
+            </div>
           </div>
         </div>
       </div>
@@ -598,6 +715,11 @@ export default function GitDNA() {
   const [aiData, setAiData] = useState(null);
   const [devScore, setDevScore] = useState(0);
   const [langs, setLangs] = useState([]);
+  const [activeUsername, setActiveUsername] = useState("");
+  const autoAnalyzeRef = useRef(false);
+  const githubHeaders = import.meta.env.VITE_GITHUB_TOKEN
+    ? { Authorization: `Bearer ${import.meta.env.VITE_GITHUB_TOKEN}` }
+    : {};
 
   async function analyze(username) {
     setPhase("loading");
@@ -605,16 +727,40 @@ export default function GitDNA() {
     setError("");
 
     const advanceTo = (step) => setLoadingStep(step);
+    const isRateLimited = (status) => status === 403 || status === 429;
 
     try {
       advanceTo(0);
-      const userRes = await fetch(`https://api.github.com/users/${username}`);
-      if (!userRes.ok) throw new Error(userRes.status === 404 ? `User "${username}" not found on GitHub.` : "GitHub API error. Try again.");
+      const userRes = await fetch(`https://api.github.com/users/${username}`, {
+        headers: githubHeaders,
+      });
+      if (!userRes.ok) {
+        if (isRateLimited(userRes.status)) throw new Error(RATE_LIMIT_MESSAGE);
+        throw new Error(userRes.status === 404 ? `User "${username}" not found on GitHub.` : "GitHub API error. Try again.");
+      }
       const user = await userRes.json();
+      const profileUsername = user.login || username;
 
       advanceTo(1);
-      const reposRes = await fetch(`https://api.github.com/users/${username}/repos?per_page=100&sort=pushed`);
-      const repos = reposRes.ok ? await reposRes.json() : [];
+      const repos = [];
+      let page = 1;
+      while (true) {
+        const reposRes = await fetch(
+          `https://api.github.com/users/${username}/repos?per_page=100&sort=pushed&page=${page}`,
+          {
+            headers: githubHeaders,
+          }
+        );
+        if (!reposRes.ok) {
+          if (isRateLimited(reposRes.status)) throw new Error(RATE_LIMIT_MESSAGE);
+          break;
+        }
+        const pageRepos = await reposRes.json();
+        if (!Array.isArray(pageRepos) || pageRepos.length === 0) break;
+        repos.push(...pageRepos);
+        if (pageRepos.length < 100) break;
+        page += 1;
+      }
 
       advanceTo(2);
       const topLangs = extractTopLangs(Array.isArray(repos) ? repos : []);
@@ -622,13 +768,17 @@ export default function GitDNA() {
       const score = calcDevScore(user, Array.isArray(repos) ? repos : []);
 
       advanceTo(3);
-      const eventsRes = await fetch(`https://api.github.com/users/${username}/events/public?per_page=30`);
+      const eventsRes = await fetch(`https://api.github.com/users/${username}/events/public?per_page=30`, {
+        headers: githubHeaders,
+      });
+      if (!eventsRes.ok && isRateLimited(eventsRes.status)) throw new Error(RATE_LIMIT_MESSAGE);
       const events = eventsRes.ok ? await eventsRes.json() : [];
       const { messages, hours } = extractCommitData(Array.isArray(events) ? events : []);
 
       setGithub({ user, totalStars, recentCommits: messages.length });
       setDevScore(score);
       setLangs(topLangs);
+      setActiveUsername(profileUsername);
 
       advanceTo(4);
       const langNames = topLangs.map(l => l.lang).join(", ") || "Unknown";
@@ -712,6 +862,7 @@ Return this exact JSON structure with creative, specific, personalized content:
       await new Promise(r => setTimeout(r, 600));
       advanceTo(9);
       await new Promise(r => setTimeout(r, 500));
+      window.history.pushState({}, "", `/?u=${encodeURIComponent(profileUsername)}`);
       setPhase("dashboard");
 
     } catch (err) {
@@ -719,6 +870,15 @@ Return this exact JSON structure with creative, specific, personalized content:
       setPhase("error");
     }
   }
+
+  useEffect(() => {
+    if (autoAnalyzeRef.current) return;
+    autoAnalyzeRef.current = true;
+    const urlUsername = new URLSearchParams(window.location.search).get("u");
+    if (urlUsername && urlUsername.trim()) {
+      analyze(urlUsername.trim());
+    }
+  }, []);
 
   if (phase === "landing") return (
     <>
@@ -751,7 +911,19 @@ Return this exact JSON structure with creative, specific, personalized content:
   return (
     <>
       <style>{CSS}</style>
-      <Dashboard github={github} aiData={aiData} devScore={devScore} langs={langs} onReset={() => { setPhase("landing"); setGithub(null); setAiData(null); }} />
+      <Dashboard
+        github={github}
+        aiData={aiData}
+        devScore={devScore}
+        langs={langs}
+        username={activeUsername}
+        onReset={() => {
+          setPhase("landing");
+          setGithub(null);
+          setAiData(null);
+          setActiveUsername("");
+        }}
+      />
     </>
   );
 }
