@@ -241,6 +241,69 @@ function parseGithubUsername(input) {
   return isValidGithubUsername(candidate) ? candidate : "";
 }
 
+async function fetchContributionData(username) {
+  try {
+    const svgRes = await fetch(`https://github.com/users/${username}/contributions`);
+    if (svgRes.ok) {
+      const svgText = await svgRes.text();
+      const doc = new DOMParser().parseFromString(svgText, "image/svg+xml");
+      const rects = [...doc.querySelectorAll("rect[data-date][data-count]")];
+      const parsed = rects.map((rect) => ({
+        date: rect.getAttribute("data-date") || "",
+        count: Number(rect.getAttribute("data-count") || 0),
+      })).filter((item) => item.date);
+      if (parsed.length > 0) return parsed;
+    }
+  } catch {
+    // Ignore CORS/network errors and fall back to JSON service.
+  }
+
+  try {
+    const fallbackRes = await fetch(`https://github-contributions-api.jogruber.de/v4/${username}`);
+    if (!fallbackRes.ok) return [];
+    const fallbackJson = await fallbackRes.json();
+    if (!Array.isArray(fallbackJson?.contributions)) return [];
+    return fallbackJson.contributions.map((entry) => ({
+      date: entry.date,
+      count: Number(entry.count || 0),
+    })).filter((item) => item.date);
+  } catch {
+    return [];
+  }
+}
+
+function buildContributionSeries(rawContributions) {
+  const byDate = new Map();
+  for (const item of rawContributions || []) {
+    byDate.set(item.date, Number(item.count || 0));
+  }
+
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const start = new Date(today);
+  start.setDate(start.getDate() - 363);
+
+  const series = [];
+  for (let i = 0; i < 364; i += 1) {
+    const day = new Date(start);
+    day.setDate(start.getDate() + i);
+    const key = day.toISOString().slice(0, 10);
+    series.push({
+      date: key,
+      count: byDate.get(key) || 0,
+    });
+  }
+  return series;
+}
+
+function formatContributionDate(date) {
+  return new Date(`${date}T00:00:00`).toLocaleDateString(undefined, {
+    month: "long",
+    day: "2-digit",
+    year: "numeric",
+  });
+}
+
 function AnimatedCounter({ target, delay = 0, duration = 1600, ticker = false }) {
   const [val, setVal] = useState(0);
   useEffect(() => {
@@ -395,6 +458,127 @@ function TraitsRadar({ traits }) {
         <Radar dataKey="value" stroke="#00dcff" fill="#00dcff" fillOpacity={0.12} strokeWidth={1.5} dot={{ fill: "#00dcff", r: 3 }} />
       </RadarChart>
     </ResponsiveContainer>
+  );
+}
+
+function ContributionHeatmap({ contributions }) {
+  const tooltipWrapRef = useRef(null);
+  const [tooltip, setTooltip] = useState(null);
+
+  const safeContributions = Array.isArray(contributions) ? contributions.slice(-364) : [];
+
+  if (safeContributions.length === 0) {
+    return (
+      <div style={{ color: "rgba(200,232,255,0.42)", fontFamily: "Share Tech Mono,monospace", fontSize: "0.72rem" }}>
+        Contribution history unavailable for this profile.
+      </div>
+    );
+  }
+
+  const weeks = [];
+  for (let w = 0; w < 52; w += 1) {
+    weeks.push(safeContributions.slice(w * 7, w * 7 + 7));
+  }
+
+  const getCellColor = (count) => {
+    if (count <= 0) return "rgba(0,220,255,0.06)";
+    if (count <= 3) return "rgba(0,220,255,0.2)";
+    if (count <= 9) return "rgba(0,220,255,0.45)";
+    if (count <= 19) return "rgba(0,220,255,0.7)";
+    return "#00dcff";
+  };
+
+  const placeTooltip = (event, day) => {
+    const wrapRect = tooltipWrapRef.current?.getBoundingClientRect();
+    if (!wrapRect) return;
+    setTooltip({
+      text: `${day.count} commits on ${formatContributionDate(day.date)}`,
+      x: Math.max(8, Math.min(event.clientX - wrapRect.left + 14, wrapRect.width - 210)),
+      y: Math.max(8, event.clientY - wrapRect.top - 34),
+    });
+  };
+
+  let totalContributions = 0;
+  let longestStreak = 0;
+  let streakRun = 0;
+  for (const day of safeContributions) {
+    totalContributions += day.count;
+    if (day.count >= 1) {
+      streakRun += 1;
+    } else {
+      longestStreak = Math.max(longestStreak, streakRun);
+      streakRun = 0;
+    }
+  }
+  longestStreak = Math.max(longestStreak, streakRun);
+
+  let currentStreak = 0;
+  for (let i = safeContributions.length - 1; i >= 0; i -= 1) {
+    if (safeContributions[i].count >= 1) currentStreak += 1;
+    else break;
+  }
+
+  return (
+    <div>
+      <div ref={tooltipWrapRef} style={{ position: "relative", overflowX: "auto", paddingBottom: 6 }}>
+        <div style={{ display: "flex", gap: 2, minWidth: 674 }}>
+          {weeks.map((week, weekIndex) => (
+            <div key={`week-${weekIndex}`} style={{ display: "flex", flexDirection: "column", gap: 2 }}>
+              {week.map((day, dayIndex) => {
+                const flatIndex = weekIndex * 7 + dayIndex;
+                const isRecent = flatIndex >= safeContributions.length - 28;
+                return (
+                  <div
+                    key={day.date}
+                    onMouseEnter={(event) => placeTooltip(event, day)}
+                    onMouseMove={(event) => placeTooltip(event, day)}
+                    onMouseLeave={() => setTooltip(null)}
+                    style={{
+                      width: 11,
+                      height: 11,
+                      borderRadius: 2,
+                      background: getCellColor(day.count),
+                      boxShadow: isRecent && day.count > 0 ? "0 0 8px rgba(0,220,255,0.35)" : "none",
+                      border: "1px solid rgba(0,220,255,0.08)",
+                      transition: "transform .12s ease, box-shadow .2s ease",
+                    }}
+                  />
+                );
+              })}
+            </div>
+          ))}
+        </div>
+
+        {tooltip && (
+          <div
+            style={{
+              position: "absolute",
+              left: tooltip.x,
+              top: tooltip.y,
+              pointerEvents: "none",
+              background: "rgba(6,11,18,0.96)",
+              border: "1px solid rgba(0,220,255,0.28)",
+              color: "#c8e8ff",
+              fontFamily: "Share Tech Mono,monospace",
+              fontSize: "0.62rem",
+              padding: "6px 8px",
+              borderRadius: 4,
+              whiteSpace: "nowrap",
+              zIndex: 8,
+              boxShadow: "0 0 12px rgba(0,220,255,0.2)",
+            }}
+          >
+            {tooltip.text}
+          </div>
+        )}
+      </div>
+
+      <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginTop: 12 }}>
+        <span className="gd-badge gd-badge-cyan">TOTAL {totalContributions} IN LAST YEAR</span>
+        <span className="gd-badge gd-badge-purple">LONGEST STREAK {longestStreak} DAYS</span>
+        <span className="gd-badge gd-badge-green">CURRENT STREAK {currentStreak} DAYS</span>
+      </div>
+    </div>
   );
 }
 
@@ -891,7 +1075,7 @@ function LoadingPage({ step }) {
 }
 
 function Dashboard({ github, aiData, devScore, langs, username, onReset }) {
-  const { user, totalStars, recentCommits } = github;
+  const { user, totalStars, recentCommits, contributions } = github;
   const acctYears = ((Date.now() - new Date(user.created_at)) / (1000 * 60 * 60 * 24 * 365)).toFixed(1);
   const devClass = aiData?.devClass || "Unknown Archetype";
   const chronotype = aiData?.chronotype || { title: "Unknown", description: "Analysis unavailable." };
@@ -1009,15 +1193,20 @@ function Dashboard({ github, aiData, devScore, langs, username, onReset }) {
           </div>
         </div>
 
+        <div className="gd-card gd-enter-scan" style={{ padding: "18px 18px", marginBottom: 12, ...cardEntranceStyle(6) }}>
+          <div className="gd-section-label">CONTRIBUTION GENOME — LAST 52 WEEKS</div>
+          <ContributionHeatmap contributions={contributions} />
+        </div>
+
         {/* SKILLS + CHRONOTYPE */}
         <div style={{ display: "flex", gap: 12, marginBottom: 12, flexWrap: "wrap" }}>
-          <div className="gd-card gd-enter-scan" style={{ flex: "1 1 220px", padding: "18px 18px", ...cardEntranceStyle(6) }}>
+          <div className="gd-card gd-enter-scan" style={{ flex: "1 1 220px", padding: "18px 18px", ...cardEntranceStyle(7) }}>
             <div className="gd-section-label">SKILL TOPOLOGY</div>
             {langs.map((l, i) => <SkillBar key={l.lang} lang={l.lang} pct={l.pct} delay={i + 1} />)}
             {langs.length === 0 && <div style={{ color: "rgba(200,232,255,0.3)", fontFamily: "Share Tech Mono,monospace", fontSize: "0.7rem" }}>No language data</div>}
           </div>
 
-          <div className="gd-card-purple gd-enter-scan" style={{ flex: "1 1 220px", padding: "18px 18px", ...cardEntranceStyle(7) }}>
+          <div className="gd-card-purple gd-enter-scan" style={{ flex: "1 1 220px", padding: "18px 18px", ...cardEntranceStyle(8) }}>
             <div className="gd-section-label" style={{ color: "rgba(179,71,234,0.6)" }}>CHRONOTYPE</div>
             <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 12 }}>
               <div style={{ width: 40, height: 40, borderRadius: "50%", background: "rgba(179,71,234,0.1)", border: "1px solid rgba(179,71,234,0.3)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: "1.2rem", flexShrink: 0 }}>🌑</div>
@@ -1030,7 +1219,7 @@ function Dashboard({ github, aiData, devScore, langs, username, onReset }) {
             <p style={{ fontSize: "0.84rem", color: "rgba(200,232,255,0.6)", lineHeight: 1.6, fontWeight: 300 }}>{chronotype.description}</p>
           </div>
 
-          <div className="gd-card gd-enter-scan" style={{ flex: "1 1 180px", padding: "18px 18px", ...cardEntranceStyle(8) }}>
+          <div className="gd-card gd-enter-scan" style={{ flex: "1 1 180px", padding: "18px 18px", ...cardEntranceStyle(9) }}>
             <div className="gd-section-label">NEURAL TRAITS</div>
             <TraitsRadar traits={traits} />
           </div>
@@ -1038,7 +1227,7 @@ function Dashboard({ github, aiData, devScore, langs, username, onReset }) {
 
         {/* COLLAB STYLE */}
         <div style={{ display: "flex", gap: 12, marginBottom: 12, flexWrap: "wrap" }}>
-          <div className="gd-card-green gd-enter-scan" style={{ flex: "1 1 240px", padding: "18px 18px", ...cardEntranceStyle(9) }}>
+          <div className="gd-card-green gd-enter-scan" style={{ flex: "1 1 240px", padding: "18px 18px", ...cardEntranceStyle(10) }}>
             <div className="gd-section-label" style={{ color: "rgba(57,255,20,0.5)" }}>COLLABORATION MATRIX</div>
             <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 12 }}>
               <div style={{ width: 40, height: 40, borderRadius: "50%", background: "rgba(57,255,20,0.08)", border: "1px solid rgba(57,255,20,0.25)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: "1.2rem", flexShrink: 0 }}>⚡</div>
@@ -1052,7 +1241,7 @@ function Dashboard({ github, aiData, devScore, langs, username, onReset }) {
           </div>
 
           {traits && (
-            <div className="gd-card gd-enter-scan" style={{ flex: "1 1 200px", padding: "18px 18px", ...cardEntranceStyle(10) }}>
+            <div className="gd-card gd-enter-scan" style={{ flex: "1 1 200px", padding: "18px 18px", ...cardEntranceStyle(11) }}>
               <div className="gd-section-label">TRAIT METRICS</div>
               {Object.entries(traits).map(([k, v]) => (
                 <div key={k} style={{ marginBottom: 8 }}>
@@ -1071,12 +1260,12 @@ function Dashboard({ github, aiData, devScore, langs, username, onReset }) {
 
         {/* FAST FACTS */}
         {facts.length > 0 && (
-          <div style={cardEntranceStyle(11)}>
+          <div style={cardEntranceStyle(12)}>
             <div className="gd-card gd-enter-scan" style={{ padding: "18px 18px" }}>
               <div className="gd-section-label">// AI FAST FACTS</div>
               <div style={{ display: "flex", gap: 12, flexWrap: "wrap" }}>
                 {facts.map((fact, i) => (
-                  <div key={i} className="gd-card-gold gd-hover-lift gd-enter-scan" style={{ flex: "1 1 180px", padding: "14px 14px", ...cardEntranceStyle(12 + i) }}>
+                  <div key={i} className="gd-card-gold gd-hover-lift gd-enter-scan" style={{ flex: "1 1 180px", padding: "14px 14px", ...cardEntranceStyle(13 + i) }}>
                     <div style={{ fontFamily: "Share Tech Mono,monospace", fontSize: "0.55rem", color: "rgba(255,179,0,0.45)", letterSpacing: "0.15em", marginBottom: 8 }}>INTEL_{String(i + 1).padStart(2, "0")}</div>
                     <p style={{ fontSize: "0.84rem", color: "rgba(200,232,255,0.7)", lineHeight: 1.55, fontWeight: 400 }}>{fact}</p>
                   </div>
@@ -1087,7 +1276,7 @@ function Dashboard({ github, aiData, devScore, langs, username, onReset }) {
         )}
 
         {/* FOOTER */}
-        <div style={{ marginTop: 24, textAlign: "center", ...cardEntranceStyle(16) }}>
+        <div style={{ marginTop: 24, textAlign: "center", ...cardEntranceStyle(17) }}>
           <div className="gd-neon-line" />
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 10 }}>
             <span style={{ fontFamily: "Share Tech Mono,monospace", fontSize: "0.6rem", color: "rgba(0,220,255,0.3)" }}>GITDNA ENGINE v2.0 // BEHAVIORAL PROFILE GENERATED</span>
@@ -1180,12 +1369,15 @@ export default function GitDNA() {
       const events = eventsRes.ok ? await eventsRes.json() : [];
       const { messages, hours } = extractCommitData(Array.isArray(events) ? events : []);
 
-      setGithub({ user, totalStars, recentCommits: messages.length });
+      advanceTo(4);
+      const rawContributions = await fetchContributionData(parsedUsername);
+      const contributions = buildContributionSeries(rawContributions);
+
+      setGithub({ user, totalStars, recentCommits: messages.length, contributions });
       setDevScore(score);
       setLangs(topLangs);
       setActiveUsername(profileUsername);
 
-      advanceTo(4);
       const langNames = topLangs.map(l => l.lang).join(", ") || "Unknown";
       const avgHour = hours.length ? Math.round(hours.reduce((a, b) => a + b, 0) / hours.length) : 14;
       const ageYears = ((Date.now() - new Date(user.created_at)) / (1000 * 60 * 60 * 24 * 365)).toFixed(1);
