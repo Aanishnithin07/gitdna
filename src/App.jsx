@@ -140,6 +140,7 @@ html,body{max-width:100%;overflow-x:hidden}
   100%{opacity:0;transform:translateY(-10px) scale(1.02)}
 }
 @keyframes founder-shimmer{0%{transform:translateX(-120%)}100%{transform:translateX(140%)}}
+@keyframes roast-line-rise{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}
 @keyframes torvalds-screen-glitch{
   0%{filter:none;transform:none}
   20%{filter:contrast(1.35) saturate(1.2) hue-rotate(-16deg);transform:skewX(-1.2deg) translateX(-2px)}
@@ -171,6 +172,8 @@ html,body{max-width:100%;overflow-x:hidden}
 .gd-btn:disabled{opacity:.4;cursor:not-allowed}
 .gd-btn::before{content:'';position:absolute;top:-50%;left:-50%;width:200%;height:200%;background:linear-gradient(45deg,transparent 40%,rgba(255,255,255,0.04) 50%,transparent 60%);transform:translateX(-100%);transition:transform .5s}
 .gd-btn:hover::before{transform:translateX(100%)}
+.gd-btn-roast{background:linear-gradient(135deg,rgba(255,70,70,0.24),rgba(120,20,20,0.25));border-color:rgba(255,90,90,0.6);color:#ff8a8a}
+.gd-btn-roast:hover:not(:disabled){background:linear-gradient(135deg,rgba(255,82,82,0.34),rgba(120,20,20,0.35));box-shadow:0 0 24px rgba(255,82,82,0.35)}
 
 .gd-badge{font-family:'Share Tech Mono',monospace;font-size:0.6rem;letter-spacing:.1em;padding:2px 7px;border-radius:2px;text-transform:uppercase;display:inline-block}
 .gd-badge-cyan{background:rgba(0,220,255,0.1);color:#00dcff;border:1px solid rgba(0,220,255,0.25)}
@@ -275,6 +278,12 @@ html,body{max-width:100%;overflow-x:hidden}
 .gd-toast button{pointer-events:auto}
 .gd-toast-close{margin-left:8px;background:transparent;border:1px solid currentColor;border-radius:4px;color:inherit;font-size:.55rem;padding:2px 6px;cursor:pointer}
 .gd-toast-action{margin-top:7px;background:transparent;border:1px solid currentColor;border-radius:4px;color:inherit;font-size:.58rem;padding:4px 8px;cursor:pointer}
+
+.gd-roast-card{border:1px solid rgba(255,88,88,0.38);background:radial-gradient(circle at 15% 0%,rgba(98,0,0,0.36),rgba(22,6,10,0.94) 38%,rgba(8,10,18,0.96) 100%);box-shadow:0 0 20px rgba(255,62,62,0.22),inset 0 0 18px rgba(255,60,60,0.08)}
+.gd-roast-meter{height:8px;border-radius:999px;background:rgba(255,77,77,0.14);border:1px solid rgba(255,90,90,0.22);overflow:hidden}
+.gd-roast-meter-fill{height:100%;border-radius:999px;background:linear-gradient(90deg,#7d0f0f,#ff4343,#ff8a5b);box-shadow:0 0 12px rgba(255,67,67,.42);transition:width .8s cubic-bezier(.2,.8,.2,1)}
+.gd-roast-line{display:flex;gap:8px;align-items:flex-start;padding:7px 0;color:rgba(255,208,208,0.88);font-size:.84rem;line-height:1.55;animation:roast-line-rise .35s ease both}
+.gd-roast-redemption{margin-top:10px;padding:10px 12px;border-radius:6px;border:1px solid rgba(57,255,20,0.26);background:rgba(6,30,8,0.56);color:#95ff8b;font-size:.83rem;line-height:1.6;animation:roast-line-rise .35s ease both}
 
 .gd-cursor-trail-dot{position:fixed;z-index:9999;pointer-events:none;width:3px;height:3px;border-radius:50%;background:#00dcff;box-shadow:0 0 8px rgba(0,220,255,.7);transition:opacity .6s linear}
 
@@ -1700,6 +1709,7 @@ function Dashboard({
   nightOwlToastVisible,
   onNightOwlDismiss,
   ultraMode,
+  onRoast,
 }) {
   const { user, totalStars, recentCommits, contributions, repos } = github;
   const acctYears = ((Date.now() - new Date(user.created_at)) / (1000 * 60 * 60 * 24 * 365)).toFixed(1);
@@ -1728,6 +1738,9 @@ function Dashboard({
   const longSessionTimeoutRef = useRef(null);
   const starToastShowTimeoutRef = useRef(null);
   const starToastHideTimeoutRef = useRef(null);
+  const roastRevealTimerRef = useRef(null);
+  const roastMeterTimerRef = useRef(null);
+  const roastShareTimerRef = useRef(null);
   const [isGeneratingCard, setIsGeneratingCard] = useState(false);
   const [showCardSaved, setShowCardSaved] = useState(false);
   const [showUnlockFlash, setShowUnlockFlash] = useState(true);
@@ -1739,6 +1752,13 @@ function Dashboard({
   const [compareError, setCompareError] = useState("");
   const [showLongSessionToast, setShowLongSessionToast] = useState(false);
   const [showStarToast, setShowStarToast] = useState(false);
+  const [showRoastWarning, setShowRoastWarning] = useState(false);
+  const [isRoasting, setIsRoasting] = useState(false);
+  const [roastError, setRoastError] = useState("");
+  const [roastReport, setRoastReport] = useState(null);
+  const [roastVisibleSteps, setRoastVisibleSteps] = useState(0);
+  const [roastMeterValue, setRoastMeterValue] = useState(0);
+  const [roastShareCopied, setRoastShareCopied] = useState(false);
 
   const cardEntranceStyle = (index) => ({
     opacity: 0,
@@ -1791,6 +1811,9 @@ function Dashboard({
         longSessionTimeoutRef,
         starToastShowTimeoutRef,
         starToastHideTimeoutRef,
+        roastRevealTimerRef,
+        roastMeterTimerRef,
+        roastShareTimerRef,
       ].forEach((ref) => {
         if (ref.current) {
           clearTimeout(ref.current);
@@ -1800,11 +1823,93 @@ function Dashboard({
     };
   }, [founderActive, isTorvalds, starTier]);
 
+  useEffect(() => {
+    if (!roastReport) {
+      setRoastVisibleSteps(0);
+      setRoastMeterValue(0);
+      return;
+    }
+
+    if (roastRevealTimerRef.current) {
+      clearInterval(roastRevealTimerRef.current);
+      roastRevealTimerRef.current = null;
+    }
+    if (roastMeterTimerRef.current) {
+      clearTimeout(roastMeterTimerRef.current);
+      roastMeterTimerRef.current = null;
+    }
+
+    setRoastVisibleSteps(0);
+    setRoastMeterValue(0);
+    roastMeterTimerRef.current = setTimeout(() => {
+      setRoastMeterValue(Number(roastReport.roastScore || 0));
+    }, 120);
+
+    let step = 0;
+    const totalSteps = (Array.isArray(roastReport.roastLines) ? roastReport.roastLines.length : 0) + 1;
+    roastRevealTimerRef.current = setInterval(() => {
+      step += 1;
+      setRoastVisibleSteps(Math.min(step, totalSteps));
+      if (step >= totalSteps && roastRevealTimerRef.current) {
+        clearInterval(roastRevealTimerRef.current);
+        roastRevealTimerRef.current = null;
+      }
+    }, 1200);
+
+    return () => {
+      if (roastRevealTimerRef.current) {
+        clearInterval(roastRevealTimerRef.current);
+        roastRevealTimerRef.current = null;
+      }
+      if (roastMeterTimerRef.current) {
+        clearTimeout(roastMeterTimerRef.current);
+        roastMeterTimerRef.current = null;
+      }
+    };
+  }, [roastReport]);
+
   async function copyProfileLink() {
     try {
       if (navigator?.clipboard?.writeText) {
         await navigator.clipboard.writeText(profileSharePath);
       }
+    } catch {
+      // Ignore clipboard failures.
+    }
+  }
+
+  async function handleConfirmRoast() {
+    if (isRoasting || typeof onRoast !== "function") return;
+
+    setIsRoasting(true);
+    setRoastError("");
+    setRoastShareCopied(false);
+
+    try {
+      const roastData = await onRoast();
+      setRoastReport(roastData);
+      setShowRoastWarning(false);
+    } catch (err) {
+      setRoastError(err?.message || "Roast generation failed.");
+    } finally {
+      setIsRoasting(false);
+    }
+  }
+
+  async function handleShareRoast() {
+    if (!roastReport) return;
+    const roastScore = Number(roastReport.roastScore || 0);
+    const shareText = `GitDNA just roasted @${user.login}. Score: ${roastScore}/100. gitdna.vercel.app`;
+
+    try {
+      if (navigator?.clipboard?.writeText) {
+        await navigator.clipboard.writeText(shareText);
+      }
+      setRoastShareCopied(true);
+      if (roastShareTimerRef.current) {
+        clearTimeout(roastShareTimerRef.current);
+      }
+      roastShareTimerRef.current = setTimeout(() => setRoastShareCopied(false), 1800);
     } catch {
       // Ignore clipboard failures.
     }
@@ -1930,6 +2035,16 @@ function Dashboard({
               >
                 ⚔ COMPARE
               </button>
+              <button
+                className="gd-btn gd-btn-roast"
+                onClick={() => {
+                  setShowRoastWarning(true);
+                  setRoastError("");
+                }}
+                style={{ marginTop: 8, padding: "7px 14px", fontSize: "0.66rem", width: "100%" }}
+              >
+                🔥 ROAST ME
+              </button>
             </div>
           </div>
 
@@ -1962,6 +2077,49 @@ function Dashboard({
           <div className="gd-section-label">CONTRIBUTION GENOME — LAST 52 WEEKS</div>
           <ContributionHeatmap contributions={contributions} />
         </div>
+
+        {roastReport && (
+          <div className="gd-card gd-roast-card gd-enter-scan" style={{ padding: "18px 18px", marginBottom: 12, ...cardEntranceStyle(7) }}>
+            <div className="gd-section-label" style={{ color: "rgba(255,120,120,0.72)" }}>ROAST REPORT</div>
+
+            <div style={{ marginBottom: 12 }}>
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, marginBottom: 6 }}>
+                <span style={{ fontFamily: "Share Tech Mono,monospace", fontSize: "0.64rem", letterSpacing: "0.12em", color: "rgba(255,170,170,0.78)" }}>
+                  ROASTABILITY SCORE: {Number(roastReport.roastScore || 0)}/100
+                </span>
+                <span className="gd-badge gd-badge-gold">NO MERCY MODE</span>
+              </div>
+              <div className="gd-roast-meter">
+                <div className="gd-roast-meter-fill" style={{ width: `${Math.max(0, Math.min(roastMeterValue, 100))}%` }} />
+              </div>
+            </div>
+
+            <div>
+              {(Array.isArray(roastReport.roastLines) ? roastReport.roastLines : [])
+                .slice(0, Math.min(roastVisibleSteps, roastReport.roastLines?.length || 0))
+                .map((line, index) => (
+                  <div key={`roast-line-${index}`} className="gd-roast-line">
+                    <span style={{ color: "#ff5c5c", fontSize: "0.85rem", lineHeight: 1.6 }}>🔥</span>
+                    <span>{line}</span>
+                  </div>
+                ))}
+
+              {roastVisibleSteps > (roastReport.roastLines?.length || 0) && (
+                <div className="gd-roast-redemption">
+                  <span className="orb" style={{ fontSize: "0.7rem", letterSpacing: "0.08em", color: "#95ff8b" }}>BUT SERIOUSLY...</span>
+                  <div style={{ marginTop: 6 }}>{roastReport.redemption}</div>
+                </div>
+              )}
+            </div>
+
+            <div style={{ marginTop: 14, display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, flexWrap: "wrap" }}>
+              <button className="gd-btn gd-btn-roast" onClick={handleShareRoast} style={{ padding: "8px 14px", fontSize: "0.66rem" }}>
+                SHARE ROAST
+              </button>
+              {roastShareCopied && <span className="gd-badge gd-badge-green">ROAST LINK COPIED</span>}
+            </div>
+          </div>
+        )}
 
         {/* SKILLS + CHRONOTYPE */}
         <div style={{ display: "flex", gap: 12, marginBottom: 12, flexWrap: "wrap" }}>
@@ -2106,6 +2264,46 @@ function Dashboard({
         <div className="gd-toast" style={{ left: "50%", transform: "translateX(-50%)", bottom: 14, border: "1px solid rgba(0,220,255,0.45)", color: "#00dcff", background: "rgba(4,12,22,0.95)" }}>
           🌑 Late night code session detected. You and this developer would probably get along.
           <button className="gd-toast-close" onClick={onNightOwlDismiss}>OK</button>
+        </div>
+      )}
+
+      {showRoastWarning && (
+        <div className="gd-modal-overlay" role="dialog" aria-modal="true">
+          <div className="gd-modal-card" style={{ borderColor: "rgba(255,90,90,0.4)", boxShadow: "0 0 24px rgba(255,82,82,0.26)", background: "rgba(20,7,10,0.95)" }}>
+            <div className="gd-modal-title" style={{ color: "rgba(255,130,130,0.8)" }}>⚠ ROAST PROTOCOL WARNING</div>
+            <div style={{ marginBottom: 12, fontSize: "0.84rem", color: "rgba(255,208,208,0.84)", lineHeight: 1.6 }}>
+              WARNING: GitDNA's roast algorithm has no mercy.<br />
+              Developers have cried. Repository count has been mocked.<br />
+              Commit messages have been questioned.<br />
+              Proceed?
+            </div>
+            {roastError && (
+              <div style={{ marginBottom: 10, fontFamily: "Share Tech Mono,monospace", fontSize: "0.62rem", color: "#ff8b8b", letterSpacing: "0.05em" }}>
+                {roastError}
+              </div>
+            )}
+            <div style={{ display: "flex", gap: 8, justifyContent: "flex-end", flexWrap: "wrap" }}>
+              <button
+                className="gd-btn"
+                onClick={() => {
+                  setShowRoastWarning(false);
+                  setRoastError("");
+                }}
+                style={{ padding: "8px 13px", fontSize: "0.64rem" }}
+                disabled={isRoasting}
+              >
+                nevermind
+              </button>
+              <button
+                className="gd-btn gd-btn-roast"
+                onClick={handleConfirmRoast}
+                style={{ padding: "8px 13px", fontSize: "0.64rem" }}
+                disabled={isRoasting}
+              >
+                {isRoasting ? "ROASTING..." : "I CAN HANDLE IT"}
+              </button>
+            </div>
+          </div>
         </div>
       )}
 
@@ -2484,6 +2682,33 @@ export default function GitDNA() {
     return battle?.analysis || "Battle analysis unavailable.";
   };
 
+  const fetchRoastReport = async (profilePayload) => {
+    const endpoint = `${API_URL}/api/roast`;
+    const res = await fetch(endpoint, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Accept: "application/json" },
+      body: JSON.stringify({ profile: profilePayload }),
+    });
+
+    if (!res.ok) {
+      let detail = `Roast API error (${res.status})`;
+      try {
+        const errJson = await res.json();
+        detail = errJson?.detail || detail;
+      } catch {
+        // Keep default detail.
+      }
+      throw new Error(detail);
+    }
+
+    const roast = await res.json();
+    return {
+      roastLines: Array.isArray(roast?.roastLines) ? roast.roastLines : [],
+      redemption: typeof roast?.redemption === "string" ? roast.redemption : "Respect where it's due — you keep showing up and shipping code.",
+      roastScore: Number(roast?.roastScore || 0),
+    };
+  };
+
   useEffect(() => {
     nightOwlShownRef.current = nightOwlShown;
   }, [nightOwlShown]);
@@ -2796,6 +3021,21 @@ export default function GitDNA() {
     await executeBattle(currentUsername, opponentInput, { showLoading: false });
   }
 
+  async function onRoastFromDashboard() {
+    const currentUsername = activeUsername || github?.user?.login;
+    if (!currentUsername || !github) {
+      throw new Error("Load a profile before requesting a roast.");
+    }
+
+    return fetchRoastReport({
+      username: currentUsername,
+      github,
+      ai: aiData,
+      devScore,
+      langs,
+    });
+  }
+
   function exitBattleView() {
     setBattleData(null);
     const fallbackUsername = activeUsername || github?.user?.login;
@@ -2942,6 +3182,7 @@ export default function GitDNA() {
           nightOwlToastVisible={nightOwlToastVisible}
           onNightOwlDismiss={() => setNightOwlToastVisible(false)}
           ultraMode={ultraMode}
+          onRoast={onRoastFromDashboard}
           onReset={() => {
             setPhase("landing");
             setLoadingSteps(LOADING_STEPS);

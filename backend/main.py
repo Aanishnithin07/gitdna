@@ -53,6 +53,10 @@ class BattlePayload(BaseModel):
     right: dict[str, Any]
 
 
+class RoastPayload(BaseModel):
+    profile: dict[str, Any]
+
+
 def _cache_key(username: str) -> str:
     return username.strip().lower()
 
@@ -153,3 +157,12 @@ async def battle_analysis(request: Request, payload: BattlePayload) -> dict[str,
 
     analysis = await ai_engine.generate_battle_analysis(payload.left, payload.right)
     return {"analysis": analysis}
+
+
+@app.post("/api/roast")
+@limiter.limit("10/minute")
+async def roast_profile(request: Request, payload: RoastPayload) -> dict[str, Any]:
+    if not payload.profile:
+        raise HTTPException(status_code=400, detail="Profile payload is required for roasting.")
+
+    return await ai_engine.generate_roast_report(payload.profile)

@@ -27,6 +27,31 @@ BATTLE_SYSTEM_PROMPT = (
     "Be opinionated but grounded in the provided numbers."
 )
 
+ROAST_SYSTEM_PROMPT = (
+    "You are a brutally honest, darkly funny tech comedian roasting "
+    "a developer's GitHub profile. You are mean but not cruel — "
+    "like a comedy roast at a dev conference. "
+    "Reference their ACTUAL numbers. "
+    "Mock their commit messages if they're lazy ('fix stuff', 'wip', 'asdfgh'). "
+    "Mock their repo count if too low or too high. "
+    "Mock their language choices with stereotypes "
+    "(PHP developers, jQuery users, etc). "
+    "Mock their commit timing if they code at 3am. "
+    "Be specific, be funny, be relentless. "
+    "End with ONE genuine compliment — the redemption. "
+    "Return ONLY a JSON: "
+    "{ "
+    "'roastLines': [string, string, string, string, string], "
+    "'redemption': string, "
+    "'roastScore': integer 0-100 (how roastable they are) "
+    "}"
+)
+
+HARDCODED_LAZY_COMMIT_LINE = (
+    "Your commit messages read like someone typing with their elbows. "
+    "'fix', 'wip', 'update'? Git blame will find you."
+)
+
 
 def _clamp_int(value: float, low: int = 0, high: int = 100) -> int:
     return int(max(low, min(high, round(value))))
@@ -200,6 +225,37 @@ def _extract_github_section(payload: dict[str, Any]) -> dict[str, Any]:
     return payload
 
 
+def _extract_commit_messages(profile_payload: dict[str, Any]) -> list[str]:
+    github = _extract_github_section(profile_payload)
+    raw_messages = github.get("recent_commit_messages") or []
+    if not isinstance(raw_messages, list):
+        return []
+    return [str(message).strip() for message in raw_messages if str(message).strip()]
+
+
+def _lazy_commit_ratio(messages: list[str]) -> float:
+    if not messages:
+        return 0.0
+
+    lazy_keywords = ("fix", "wip", "update", "test", "asdf")
+    lazy_count = 0
+    for message in messages:
+        lowered = message.lower()
+        if any(re.search(rf"\b{keyword}\b", lowered) for keyword in lazy_keywords):
+            lazy_count += 1
+    return lazy_count / max(1, len(messages))
+
+
+def _add_lazy_commit_line_if_needed(roast_lines: list[str], lazy_ratio: float) -> list[str]:
+    if lazy_ratio <= 0.3:
+        return roast_lines
+
+    if any(HARDCODED_LAZY_COMMIT_LINE.lower() in line.lower() for line in roast_lines):
+        return roast_lines
+
+    return [*roast_lines, HARDCODED_LAZY_COMMIT_LINE]
+
+
 def _trait(payload: dict[str, Any], key: str, default: float = 50.0) -> float:
     if not isinstance(payload, dict):
         return default
@@ -250,6 +306,160 @@ def _battle_fallback(left_payload: dict[str, Any], right_payload: dict[str, Any]
     )
 
 
+def _extract_roast_metrics(profile_payload: dict[str, Any]) -> dict[str, Any]:
+    github_data = _extract_github_section(profile_payload)
+    metrics = _extract_metrics(github_data)
+    commit_messages = _extract_commit_messages(profile_payload)
+    lazy_ratio = _lazy_commit_ratio(commit_messages)
+
+    ai_section = profile_payload.get("ai")
+    if not isinstance(ai_section, dict):
+        ai_section = profile_payload.get("aiData")
+    ai_section = ai_section if isinstance(ai_section, dict) else {}
+
+    return {
+        **metrics,
+        "dev_class": str(ai_section.get("devClass") or "Unknown archetype"),
+        "commit_messages": commit_messages,
+        "lazy_ratio": lazy_ratio,
+    }
+
+
+def _language_stereotype_line(language: str) -> str:
+    lang = (language or "Unknown").lower()
+    if "php" in lang:
+        return "PHP in 2026? Bold. That's not technical debt, that's archaeological preservation."
+    if "javascript" in lang:
+        return "JavaScript everywhere. You don't write code, you negotiate with runtime mood swings."
+    if "typescript" in lang:
+        return "TypeScript says safety first, yet your TODOs suggest chaos-first development."
+    if "python" in lang:
+        return "Python as top language means you value clarity, then immediately wrote one-liners no human can debug."
+    if "java" in lang:
+        return "Java on top: enterprise discipline outside, panic stack traces inside."
+    if "c++" in lang:
+        return "C++ main language means your bugs don't crash immediately, they just wait for dramatic timing."
+    if "rust" in lang:
+        return "Rust main language. Borrow checker approved your code, your deadlines did not."
+    return f"{language} leading your stack is a personality reveal and a cry for linting at the same time."
+
+
+def _fallback_roast(profile_payload: dict[str, Any]) -> dict[str, Any]:
+    metrics = _extract_roast_metrics(profile_payload)
+    username = metrics["username"]
+    stars = metrics["total_stars"]
+    repos = metrics["public_repos"]
+    followers = metrics["followers"]
+    avg_hour = metrics["avg_commit_hour"]
+    commits_30d = metrics["recent_commits_30d"]
+    lazy_ratio = metrics["lazy_ratio"]
+    top_lang = metrics["top_languages"][0]["language"] if metrics["top_languages"] else "Unknown"
+
+    if repos <= 5:
+        repo_line = f"{repos} repos? That's not a portfolio, that's a teaser trailer with no release date, @{username}."
+    elif repos >= 120:
+        repo_line = f"{repos} repos is impressive, but it also looks like you forked productivity instead of finishing features."
+    else:
+        repo_line = f"{repos} repos means you're committed, but your README completion rate is still classified information."
+
+    stars_line = (
+        f"{stars} total stars and {followers} followers: enough validation to be confident, not enough to escape PR review comments."
+    )
+
+    if avg_hour is None:
+        timing_line = "Your commit timing is so mysterious even your circadian rhythm filed a support ticket."
+    elif avg_hour < 6 or avg_hour >= 22:
+        timing_line = f"Average commit hour around {avg_hour:.2f} UTC? You ship at vampire o'clock and call it 'deep work'."
+    else:
+        timing_line = f"Average commit hour around {avg_hour:.2f} UTC says you code in daylight, but the bugs still show up after midnight."
+
+    commit_quality_line = (
+        f"{commits_30d} recent commits sounds productive, but the message quality ratio is doing interpretive dance at {lazy_ratio:.0%}."
+    )
+
+    roast_lines = [
+        repo_line,
+        stars_line,
+        _language_stereotype_line(top_lang),
+        timing_line,
+        commit_quality_line,
+    ]
+    roast_lines = _add_lazy_commit_line_if_needed(roast_lines, lazy_ratio)
+
+    roast_score = _clamp_int(
+        22
+        + lazy_ratio * 58
+        + (12 if repos <= 5 else 0)
+        + (9 if repos >= 120 else 0)
+        + (10 if avg_hour is not None and (avg_hour < 6 or avg_hour >= 22) else 0)
+        + (8 if stars <= 10 else 0),
+        0,
+        100,
+    )
+
+    return {
+        "roastLines": roast_lines,
+        "redemption": (
+            f"BUT SERIOUSLY... {username} keeps shipping, and consistency beats flashy hype every single sprint."
+        ),
+        "roastScore": roast_score,
+    }
+
+
+def _build_roast_user_prompt(metrics: dict[str, Any], profile_payload: dict[str, Any]) -> str:
+    top_langs = ", ".join(
+        f"{item['language']} ({item['percentage']}%)" for item in metrics["top_languages"][:3]
+    ) or "Unknown"
+    messages_blob = "\n".join(metrics["commit_messages"][:15]) or "No commit messages available"
+    avg_hour = metrics["avg_commit_hour"]
+    avg_hour_display = f"{avg_hour:.2f} UTC" if avg_hour is not None else "unknown"
+
+    return (
+        "Roast this developer using their real profile values and return ONLY JSON.\n"
+        f"username: {metrics['username']}\n"
+        f"dev_class: {metrics['dev_class']}\n"
+        f"total_stars: {metrics['total_stars']}\n"
+        f"followers: {metrics['followers']}\n"
+        f"public_repos: {metrics['public_repos']}\n"
+        f"average_commit_hour_utc: {avg_hour_display}\n"
+        f"recent_commits_30d: {metrics['recent_commits_30d']}\n"
+        f"top_languages: {top_langs}\n"
+        f"lazy_commit_ratio: {metrics['lazy_ratio']:.3f}\n"
+        "recent_commit_messages:\n"
+        f"{messages_blob}\n\n"
+        "full_profile_payload_json:\n"
+        f"{json.dumps(profile_payload)}"
+    )
+
+
+def _normalize_roast_result(parsed: dict[str, Any], fallback: dict[str, Any], lazy_ratio: float) -> dict[str, Any]:
+    result = json.loads(json.dumps(fallback))
+    if not isinstance(parsed, dict):
+        result["roastLines"] = _add_lazy_commit_line_if_needed(result["roastLines"], lazy_ratio)
+        return result
+
+    roast_lines = parsed.get("roastLines")
+    if isinstance(roast_lines, list):
+        clean_lines = [str(item).strip() for item in roast_lines if isinstance(item, str) and item.strip()]
+        if clean_lines:
+            result["roastLines"] = clean_lines
+
+    redemption = parsed.get("redemption")
+    if isinstance(redemption, str) and redemption.strip():
+        result["redemption"] = redemption.strip()
+
+    roast_score = _to_float(parsed.get("roastScore"), None)
+    if roast_score is not None:
+        result["roastScore"] = _clamp_int(roast_score)
+
+    if len(result["roastLines"]) < 5:
+        missing = [line for line in fallback["roastLines"] if line not in result["roastLines"]]
+        result["roastLines"].extend(missing[: 5 - len(result["roastLines"])])
+
+    result["roastLines"] = _add_lazy_commit_line_if_needed(result["roastLines"], lazy_ratio)
+    return result
+
+
 async def analyze_battle(left_payload: dict[str, Any], right_payload: dict[str, Any]) -> str:
     fallback = _battle_fallback(left_payload, right_payload)
     api_key = (os.getenv("GROQ_API_KEY") or "").strip()
@@ -281,6 +491,41 @@ async def analyze_battle(left_payload: dict[str, Any], right_payload: dict[str, 
         content = response.choices[0].message.content if response.choices else ""
         text = str(content or "").replace("```", "").strip()
         return text or fallback
+    except Exception:
+        return fallback
+
+
+async def analyze_roast(profile_payload: dict[str, Any]) -> dict[str, Any]:
+    fallback = _fallback_roast(profile_payload)
+    metrics = _extract_roast_metrics(profile_payload)
+
+    api_key = (os.getenv("GROQ_API_KEY") or "").strip()
+    if not api_key:
+        return fallback
+
+    try:
+        response = await client.chat.completions.create(
+            model=MODEL_NAME,
+            temperature=0.8,
+            max_tokens=650,
+            messages=[
+                {"role": "system", "content": ROAST_SYSTEM_PROMPT},
+                {"role": "user", "content": _build_roast_user_prompt(metrics, profile_payload)},
+            ],
+        )
+
+        raw_content = ""
+        if response.choices:
+            content = response.choices[0].message.content
+            if isinstance(content, list):
+                raw_content = "".join(part.get("text", "") for part in content if isinstance(part, dict))
+            else:
+                raw_content = str(content or "")
+
+        parsed = _safe_json_parse(raw_content)
+        if parsed is None:
+            return fallback
+        return _normalize_roast_result(parsed, fallback, metrics["lazy_ratio"])
     except Exception:
         return fallback
 
@@ -563,3 +808,6 @@ class GroqAIEngine:
 
     async def generate_battle_analysis(self, left_payload: dict[str, Any], right_payload: dict[str, Any]) -> str:
         return await analyze_battle(left_payload, right_payload)
+
+    async def generate_roast_report(self, profile_payload: dict[str, Any]) -> dict[str, Any]:
+        return await analyze_roast(profile_payload)
