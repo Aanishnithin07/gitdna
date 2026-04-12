@@ -158,6 +158,13 @@ html,body{max-width:100%;overflow-x:hidden}
 .gd-enter-scan{overflow:hidden}
 .gd-enter-scan::after{content:'';position:absolute;left:0;right:0;top:0;height:2px;background:linear-gradient(90deg,transparent,rgba(0,220,255,0.4),transparent);transform:translateY(-6px);opacity:0;pointer-events:none;z-index:4;animation:scan-sweep .6s linear var(--scan-delay,0ms) 1 forwards}
 
+.gd-repo-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:12px}
+.gd-repo-card{padding:14px 14px;background:rgba(6,14,24,0.88);backdrop-filter:blur(10px);transition:transform .2s ease,border-color .2s ease,box-shadow .2s ease}
+.gd-repo-card:hover{transform:translateY(-4px);border-color:rgba(0,220,255,0.45)!important;box-shadow:0 8px 20px rgba(0,220,255,0.12)}
+.gd-repo-title{font-family:'Orbitron',monospace;font-size:.74rem;letter-spacing:.04em;color:#dff7ff;text-decoration:none;line-height:1.25;display:inline-block}
+.gd-repo-title:hover{color:#00dcff;text-shadow:0 0 10px rgba(0,220,255,0.45)}
+.gd-active-dot{width:6px;height:6px;border-radius:50%;background:#39ff14;box-shadow:0 0 8px rgba(57,255,20,.7);display:inline-block;animation:blink .9s linear infinite}
+
 @media (max-width:640px){
   .gd-vitals-row{flex-wrap:nowrap;overflow-x:auto;padding-bottom:8px;scroll-snap-type:x proximity;-webkit-overflow-scrolling:touch}
   .gd-vitals-row > *{flex:0 0 auto;min-width:170px;scroll-snap-align:start}
@@ -302,6 +309,21 @@ function formatContributionDate(date) {
     day: "2-digit",
     year: "numeric",
   });
+}
+
+function truncateText(text, max = 80) {
+  if (!text) return "No description provided.";
+  if (text.length <= max) return text;
+  return `${text.slice(0, max - 1)}...`;
+}
+
+function getDaysAgo(dateString) {
+  if (!dateString) return null;
+  const pushed = new Date(dateString);
+  if (Number.isNaN(pushed.getTime())) return null;
+  const now = new Date();
+  const diffMs = now.getTime() - pushed.getTime();
+  return Math.max(0, Math.floor(diffMs / (1000 * 60 * 60 * 24)));
 }
 
 function AnimatedCounter({ target, delay = 0, duration = 1600, ticker = false }) {
@@ -578,6 +600,79 @@ function ContributionHeatmap({ contributions }) {
         <span className="gd-badge gd-badge-purple">LONGEST STREAK {longestStreak} DAYS</span>
         <span className="gd-badge gd-badge-green">CURRENT STREAK {currentStreak} DAYS</span>
       </div>
+    </div>
+  );
+}
+
+function TopRepositories({ repos, username }) {
+  const topRepos = [...(Array.isArray(repos) ? repos : [])]
+    .sort((a, b) => (b.stargazers_count || 0) - (a.stargazers_count || 0))
+    .slice(0, 6);
+
+  if (topRepos.length === 0) {
+    return (
+      <div style={{ color: "rgba(200,232,255,0.42)", fontFamily: "Share Tech Mono,monospace", fontSize: "0.72rem" }}>
+        No repository metadata available for @{username || "this user"}.
+      </div>
+    );
+  }
+
+  return (
+    <div className="gd-repo-grid">
+      {topRepos.map((repo, idx) => {
+        const language = repo.language || "Unknown";
+        const langColor = getLangColor(language);
+        const stars = repo.stargazers_count || 0;
+        const forks = repo.forks_count || 0;
+        const daysAgo = getDaysAgo(repo.pushed_at);
+        const isHiddenGem = stars === 0 && forks >= 5;
+        const isAcclaimed = stars >= 100;
+        const isActive = daysAgo !== null && daysAgo <= 7;
+
+        return (
+          <div
+            key={repo.id || repo.full_name || repo.name}
+            className="gd-card gd-repo-card gd-enter-scan"
+            style={{
+              borderTop: `2px solid ${langColor}`,
+              "--scan-delay": `${idx * 150}ms`,
+            }}
+          >
+            <div style={{ display: "flex", justifyContent: "space-between", gap: 8, marginBottom: 8, alignItems: "flex-start" }}>
+              <a className="gd-repo-title" href={repo.html_url} target="_blank" rel="noreferrer">
+                {repo.name}
+              </a>
+              <div style={{ display: "flex", gap: 4, flexWrap: "wrap", justifyContent: "flex-end" }}>
+                {isHiddenGem && <span className="gd-badge gd-badge-gold">HIDDEN GEM</span>}
+                {isAcclaimed && <span className="gd-badge gd-badge-green">ACCLAIMED</span>}
+                {isActive && (
+                  <span className="gd-badge gd-badge-green" style={{ display: "inline-flex", alignItems: "center", gap: 5 }}>
+                    <span className="gd-active-dot" />ACTIVE
+                  </span>
+                )}
+              </div>
+            </div>
+
+            <p style={{ fontSize: "0.78rem", color: "rgba(200,232,255,0.62)", lineHeight: 1.45, minHeight: 46, marginBottom: 10 }}>
+              {truncateText(repo.description, 80)}
+            </p>
+
+            <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8 }}>
+              <span style={{ width: 8, height: 8, borderRadius: "50%", background: langColor, boxShadow: `0 0 8px ${langColor}99`, flexShrink: 0 }} />
+              <span style={{ fontFamily: "Share Tech Mono,monospace", fontSize: "0.68rem", color: "rgba(0,220,255,0.66)" }}>{language}</span>
+            </div>
+
+            <div style={{ display: "flex", justifyContent: "space-between", gap: 8, marginBottom: 8, fontFamily: "Share Tech Mono,monospace", fontSize: "0.68rem", color: "rgba(200,232,255,0.72)" }}>
+              <span>⭐ {stars}</span>
+              <span>🍴 {forks}</span>
+            </div>
+
+            <div style={{ fontFamily: "Share Tech Mono,monospace", fontSize: "0.62rem", color: "rgba(0,220,255,0.5)" }}>
+              Last pushed: {daysAgo === null ? "Unknown" : `${daysAgo} day${daysAgo === 1 ? "" : "s"} ago`}
+            </div>
+          </div>
+        );
+      })}
     </div>
   );
 }
@@ -1075,7 +1170,7 @@ function LoadingPage({ step }) {
 }
 
 function Dashboard({ github, aiData, devScore, langs, username, onReset }) {
-  const { user, totalStars, recentCommits, contributions } = github;
+  const { user, totalStars, recentCommits, contributions, repos } = github;
   const acctYears = ((Date.now() - new Date(user.created_at)) / (1000 * 60 * 60 * 24 * 365)).toFixed(1);
   const devClass = aiData?.devClass || "Unknown Archetype";
   const chronotype = aiData?.chronotype || { title: "Unknown", description: "Analysis unavailable." };
@@ -1275,8 +1370,15 @@ function Dashboard({ github, aiData, devScore, langs, username, onReset }) {
           </div>
         )}
 
+        <div style={cardEntranceStyle(16)}>
+          <div className="gd-card gd-enter-scan" style={{ padding: "18px 18px" }}>
+            <div className="gd-section-label">REPO GENOME</div>
+            <TopRepositories repos={repos} username={user.login} />
+          </div>
+        </div>
+
         {/* FOOTER */}
-        <div style={{ marginTop: 24, textAlign: "center", ...cardEntranceStyle(17) }}>
+        <div style={{ marginTop: 24, textAlign: "center", ...cardEntranceStyle(18) }}>
           <div className="gd-neon-line" />
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 10 }}>
             <span style={{ fontFamily: "Share Tech Mono,monospace", fontSize: "0.6rem", color: "rgba(0,220,255,0.3)" }}>GITDNA ENGINE v2.0 // BEHAVIORAL PROFILE GENERATED</span>
@@ -1373,7 +1475,7 @@ export default function GitDNA() {
       const rawContributions = await fetchContributionData(parsedUsername);
       const contributions = buildContributionSeries(rawContributions);
 
-      setGithub({ user, totalStars, recentCommits: messages.length, contributions });
+      setGithub({ user, totalStars, recentCommits: messages.length, contributions, repos });
       setDevScore(score);
       setLangs(topLangs);
       setActiveUsername(profileUsername);
