@@ -1,3 +1,5 @@
+import asyncio
+import json
 import os
 import time
 from datetime import datetime, timezone
@@ -6,6 +8,7 @@ from typing import Any
 from dotenv import load_dotenv
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import StreamingResponse
 from slowapi import Limiter, _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
 from slowapi.util import get_remote_address
@@ -69,17 +72,7 @@ def _cache_set(username: str, data: dict[str, Any]) -> None:
     }
 
 
-@app.on_event("shutdown")
-async def on_shutdown() -> None:
-    await analyzer.close()
-
-
-@app.get("/api/analyze/{username}")
-@limiter.limit("10/minute")
-async def analyze_profile(request: Request, username: str) -> dict[str, Any]:
-    if not username.strip():
-        raise HTTPException(status_code=400, detail="Username is required.")
-
+async def full_analysis(username: str) -> dict[str, Any]:
     cached = _cache_get(username)
     if cached:
         return cached
@@ -96,3 +89,48 @@ async def analyze_profile(request: Request, username: str) -> dict[str, Any]:
 
     _cache_set(username, response)
     return response
+
+
+@app.on_event("shutdown")
+async def on_shutdown() -> None:
+    await analyzer.close()
+
+
+@app.get("/api/analyze/{username}")
+@limiter.limit("10/minute")
+async def analyze_profile(request: Request, username: str):
+    if not username.strip():
+        raise HTTPException(status_code=400, detail="Username is required.")
+
+    wants_stream = "text/event-stream" in request.headers.get("accept", "").lower()
+    if not wants_stream:
+        return await full_analysis(username)
+
+    async def generate():
+        steps = [
+            "CONNECTING TO GITHUB",
+            "EXTRACTING REPOSITORY GENOME",
+            "MAPPING LANGUAGE TOPOLOGY",
+            "ANALYZING COMMIT BEHAVIOR",
+            "DECODING COLLABORATION PATTERNS",
+            "RUNNING BEHAVIORAL ENGINE",
+            "SYNTHESIZING PROFILE",
+            "RENDERING PSYCHOLOGICAL MATRIX",
+        ]
+
+        for i, message in enumerate(steps):
+            yield f"data: {json.dumps({'step': i, 'message': message})}\n\n"
+            await asyncio.sleep(0.3)
+
+        result = await full_analysis(username)
+        yield f"data: {json.dumps({'step': 9, 'done': True, 'data': result})}\n\n"
+
+    return StreamingResponse(
+        generate(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+            "X-Accel-Buffering": "no",
+        },
+    )

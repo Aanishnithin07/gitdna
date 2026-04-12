@@ -170,6 +170,13 @@ html,body{max-width:100%;overflow-x:hidden}
 
 .gd-founder-header{border-color:rgba(255,179,0,0.38);box-shadow:0 0 18px rgba(255,179,0,0.2),0 0 26px rgba(179,71,234,0.14),inset 0 0 12px rgba(255,179,0,0.05)}
 
+.gd-tier-header-legendary{border-color:rgba(255,179,0,0.55)!important;box-shadow:0 0 20px rgba(255,179,0,0.24),inset 0 0 12px rgba(255,179,0,0.08)}
+.gd-tier-header-elite{border-color:rgba(179,71,234,0.55)!important;box-shadow:0 0 18px rgba(179,71,234,0.26),inset 0 0 12px rgba(179,71,234,0.08)}
+.gd-tier-header-veteran{border-color:rgba(0,220,255,0.55)!important;box-shadow:0 0 18px rgba(0,220,255,0.24),inset 0 0 12px rgba(0,220,255,0.08)}
+.gd-tier-header-rising{border-color:rgba(57,255,20,0.5)!important;box-shadow:0 0 16px rgba(57,255,20,0.2),inset 0 0 10px rgba(57,255,20,0.08)}
+
+.gd-cognitive-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:12px}
+
 .gd-founder-card{position:relative;border:1px solid rgba(255,179,0,0.34);background:radial-gradient(circle at 10% 0%,rgba(255,179,0,0.2),rgba(16,11,2,0.95) 42%,rgba(7,8,16,0.94) 100%);backdrop-filter:blur(12px);border-radius:6px;overflow:hidden;box-shadow:0 0 18px rgba(255,179,0,0.14),0 0 30px rgba(179,71,234,0.1)}
 .gd-founder-card::before{content:'';position:absolute;inset:0;background:linear-gradient(120deg,transparent 15%,rgba(255,179,0,.14) 36%,rgba(179,71,234,.16) 50%,rgba(0,220,255,.12) 64%,transparent 86%);background-size:200% 100%;animation:founder-pan 7s linear infinite;pointer-events:none}
 .gd-founder-card::after{content:'';position:absolute;inset:0;border:1px solid rgba(255,179,0,0.2);border-radius:6px;pointer-events:none}
@@ -279,6 +286,20 @@ function parseGithubUsername(input) {
 
 function isFounderLogin(login) {
   return (login || "").toLowerCase() === FOUNDER_HANDLE;
+}
+
+function getTierMeta(tier) {
+  const key = (tier || "RISING").toUpperCase();
+  if (key === "LEGENDARY") {
+    return { icon: "♛", label: "LEGENDARY", badgeClass: "gd-badge-gold", headerClass: "gd-tier-header-legendary" };
+  }
+  if (key === "ELITE") {
+    return { icon: "◈", label: "ELITE", badgeClass: "gd-badge-purple", headerClass: "gd-tier-header-elite" };
+  }
+  if (key === "VETERAN") {
+    return { icon: "⬡", label: "VETERAN", badgeClass: "gd-badge-cyan", headerClass: "gd-tier-header-veteran" };
+  }
+  return { icon: "↑", label: "RISING", badgeClass: "gd-badge-green", headerClass: "gd-tier-header-rising" };
 }
 
 async function fetchContributionData(username) {
@@ -1186,7 +1207,7 @@ function LandingPage({ onAnalyze }) {
             {loading ? "INITIALIZING..." : "▶ EXECUTE ANALYSIS"}
           </button>
           <div style={{ marginTop: 10, fontFamily: "Share Tech Mono,monospace", fontSize: "0.62rem", color: "rgba(0,220,255,0.45)", letterSpacing: "0.04em" }}>
-            Add VITE_GITHUB_TOKEN to .env for higher rate limits
+            Set VITE_API_URL in .env to your FastAPI backend URL
           </div>
           <div style={{ marginTop: 12 }}>
             <div style={{ fontFamily: "Share Tech Mono,monospace", fontSize: "0.58rem", color: "rgba(0,220,255,0.36)", letterSpacing: "0.14em", marginBottom: 8 }}>
@@ -1278,8 +1299,12 @@ function Dashboard({ github, aiData, devScore, langs, username, onReset }) {
   const { user, totalStars, recentCommits, contributions, repos } = github;
   const acctYears = ((Date.now() - new Date(user.created_at)) / (1000 * 60 * 60 * 24 * 365)).toFixed(1);
   const devClass = aiData?.devClass || "Unknown Archetype";
+  const archetype = aiData?.archetype || { tier: "RISING" };
+  const tierMeta = getTierMeta(archetype.tier);
   const chronotype = aiData?.chronotype || { title: "Unknown", description: "Analysis unavailable." };
   const collab = aiData?.collaborationStyle || { title: "Unknown", description: "Analysis unavailable." };
+  const strengthReport = aiData?.strengthReport || "Strength profile unavailable.";
+  const warningSign = aiData?.warningSign || "Blindspot profile unavailable.";
   const traits = aiData?.traits;
   const facts = aiData?.fastFacts || [];
   const dna = aiData?.dnaSequence || "0000000000000000";
@@ -1360,7 +1385,7 @@ function Dashboard({ github, aiData, devScore, langs, username, onReset }) {
       <div style={{ maxWidth: 900, margin: "0 auto", padding: "24px 16px", position: "relative", zIndex: 2 }}>
         <div ref={shareCardRef} style={{ padding: 2, borderRadius: 8 }}>
           {/* HEADER */}
-          <div className={`gd-card gd-header-card gd-enter-scan${isFounder ? " gd-founder-header" : ""}`} style={{ padding: "20px 22px", marginBottom: 16, display: "flex", alignItems: "center", gap: 20, flexWrap: "wrap", ...cardEntranceStyle(0) }}>
+          <div className={`gd-card gd-header-card gd-enter-scan ${tierMeta.headerClass}${isFounder ? " gd-founder-header" : ""}`} style={{ padding: "20px 22px", marginBottom: 16, display: "flex", alignItems: "center", gap: 20, flexWrap: "wrap", ...cardEntranceStyle(0) }}>
             <div className="scan-overlay" />
             <div style={{ position: "relative", flexShrink: 0 }}>
               <div style={{ position: "absolute", inset: -4, borderRadius: "50%", border: "1.5px solid rgba(0,220,255,0.3)", animation: "ring-spin 8s linear infinite" }} />
@@ -1377,6 +1402,7 @@ function Dashboard({ github, aiData, devScore, langs, username, onReset }) {
               <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap", marginBottom: 4 }}>
                 <h2 className="orb" style={{ fontSize: "1.25rem", fontWeight: 700, color: "#ffffff", letterSpacing: "0.05em" }}>{user.name || user.login}</h2>
                 <span className="gd-badge gd-badge-purple">{devClass}</span>
+                <span className={`gd-badge ${tierMeta.badgeClass}`}>{tierMeta.icon} {tierMeta.label}</span>
                 {isFounder && <span className="gd-badge gd-badge-gold">FOUNDER // ROOT ACCESS</span>}
               </div>
               <div style={{ fontFamily: "Share Tech Mono,monospace", fontSize: "0.72rem", color: "rgba(0,220,255,0.5)", marginBottom: 8 }}>@{user.login}</div>
@@ -1483,13 +1509,35 @@ function Dashboard({ github, aiData, devScore, langs, username, onReset }) {
         </div>
 
         {/* FAST FACTS */}
+        <div style={cardEntranceStyle(12)}>
+          <div className="gd-card gd-enter-scan" style={{ padding: "18px 18px", marginBottom: 12 }}>
+            <div className="gd-section-label">COGNITIVE PROFILE SUMMARY</div>
+            <div className="gd-cognitive-grid">
+              <div className="gd-card-green gd-enter-scan" style={{ padding: "16px 16px" }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 10 }}>
+                  <span style={{ fontSize: "1rem", color: "#39ff14" }}>✦</span>
+                  <span className="gd-badge gd-badge-green">CORE STRENGTH</span>
+                </div>
+                <p style={{ fontSize: "0.86rem", color: "rgba(200,232,255,0.72)", lineHeight: 1.6 }}>{strengthReport}</p>
+              </div>
+              <div className="gd-card-gold gd-enter-scan" style={{ padding: "16px 16px" }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 10 }}>
+                  <span style={{ fontSize: "1rem", color: "#ffb300" }}>⚠</span>
+                  <span className="gd-badge gd-badge-gold">BLINDSPOT</span>
+                </div>
+                <p style={{ fontSize: "0.86rem", color: "rgba(200,232,255,0.72)", lineHeight: 1.6 }}>{warningSign}</p>
+              </div>
+            </div>
+          </div>
+        </div>
+
         {facts.length > 0 && (
-          <div style={cardEntranceStyle(12)}>
+          <div style={cardEntranceStyle(13)}>
             <div className="gd-card gd-enter-scan" style={{ padding: "18px 18px" }}>
               <div className="gd-section-label">// AI FAST FACTS</div>
               <div style={{ display: "flex", gap: 12, flexWrap: "wrap" }}>
                 {facts.map((fact, i) => (
-                  <div key={i} className="gd-card-gold gd-hover-lift gd-enter-scan" style={{ flex: "1 1 180px", padding: "14px 14px", ...cardEntranceStyle(13 + i) }}>
+                  <div key={i} className="gd-card-gold gd-hover-lift gd-enter-scan" style={{ flex: "1 1 180px", padding: "14px 14px", ...cardEntranceStyle(14 + i) }}>
                     <div style={{ fontFamily: "Share Tech Mono,monospace", fontSize: "0.55rem", color: "rgba(255,179,0,0.45)", letterSpacing: "0.15em", marginBottom: 8 }}>INTEL_{String(i + 1).padStart(2, "0")}</div>
                     <p style={{ fontSize: "0.84rem", color: "rgba(200,232,255,0.7)", lineHeight: 1.55, fontWeight: 400 }}>{fact}</p>
                   </div>
@@ -1499,7 +1547,7 @@ function Dashboard({ github, aiData, devScore, langs, username, onReset }) {
           </div>
         )}
 
-        <div style={cardEntranceStyle(16)}>
+        <div style={cardEntranceStyle(17)}>
           <div className="gd-card gd-enter-scan" style={{ padding: "18px 18px" }}>
             <div className="gd-section-label">REPO GENOME</div>
             <TopRepositories repos={repos} username={user.login} />
@@ -1507,7 +1555,7 @@ function Dashboard({ github, aiData, devScore, langs, username, onReset }) {
         </div>
 
         {/* FOOTER */}
-        <div style={{ marginTop: 24, textAlign: "center", ...cardEntranceStyle(18) }}>
+        <div style={{ marginTop: 24, textAlign: "center", ...cardEntranceStyle(19) }}>
           <div className="gd-neon-line" />
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 10 }}>
             <span style={{ fontFamily: "Share Tech Mono,monospace", fontSize: "0.6rem", color: "rgba(0,220,255,0.3)" }}>GITDNA ENGINE v2.0 // BEHAVIORAL PROFILE GENERATED</span>
@@ -1535,9 +1583,8 @@ export default function GitDNA() {
   const [langs, setLangs] = useState([]);
   const [activeUsername, setActiveUsername] = useState("");
   const autoAnalyzeRef = useRef(false);
-  const githubHeaders = import.meta.env.VITE_GITHUB_TOKEN
-    ? { Authorization: `Bearer ${import.meta.env.VITE_GITHUB_TOKEN}` }
-    : {};
+  const streamRef = useRef(null);
+  const API_URL = (import.meta.env.VITE_API_URL || "http://localhost:8000").replace(/\/$/, "");
 
   async function analyze(username) {
     const parsedUsername = parseGithubUsername(username);
@@ -1551,153 +1598,135 @@ export default function GitDNA() {
     setLoadingStep(0);
     setError("");
 
-    const advanceTo = (step) => setLoadingStep(step);
-    const isRateLimited = (status) => status === 403 || status === 429;
+    const endpoint = `${API_URL}/api/analyze/${encodeURIComponent(parsedUsername)}`;
+
+    const applyResult = (payload) => {
+      const githubPayload = payload?.github || {};
+      const aiPayload = payload?.ai || {};
+      const user = githubPayload.user || {};
+      const normalizedRepos = Array.isArray(githubPayload.repos)
+        ? githubPayload.repos.map((repo) => {
+            const stars = repo?.stargazers_count ?? repo?.stars ?? 0;
+            const forks = repo?.forks_count ?? repo?.forks ?? 0;
+            const login = user.login || parsedUsername;
+            return {
+              ...repo,
+              stargazers_count: stars,
+              stars,
+              forks_count: forks,
+              forks,
+              html_url: repo?.html_url || `https://github.com/${login}/${repo?.name || ""}`,
+            };
+          })
+        : [];
+
+      const totalStars = githubPayload.totalStars ?? githubPayload.total_stars ?? normalizedRepos.reduce((sum, repo) => sum + (repo.stargazers_count || 0), 0);
+      const topLangs = Array.isArray(githubPayload.top_languages) && githubPayload.top_languages.length > 0
+        ? githubPayload.top_languages.map((item) => ({
+            lang: item.language || item.lang || "Unknown",
+            pct: Math.round(Number(item.percentage ?? item.pct ?? 0)),
+          }))
+        : extractTopLangs(normalizedRepos);
+
+      const normalizedGithub = {
+        ...githubPayload,
+        user,
+        repos: normalizedRepos,
+        totalStars,
+        recentCommits: githubPayload.recentCommits ?? (githubPayload.recent_commit_messages?.length || 0),
+        contributions: Array.isArray(githubPayload.contributions) ? githubPayload.contributions : [],
+      };
+
+      setGithub(normalizedGithub);
+      setAiData(aiPayload);
+      setDevScore(calcDevScore(user, normalizedRepos));
+      setLangs(topLangs);
+
+      const profileUsername = user.login || parsedUsername;
+      setActiveUsername(profileUsername);
+      window.history.pushState({}, "", `/?u=${encodeURIComponent(profileUsername)}`);
+      setLoadingStep(9);
+      setPhase("dashboard");
+    };
+
+    const handleFailure = (message) => {
+      setError(message || "Analysis failed.");
+      setPhase("error");
+    };
+
+    const fallbackFetch = async () => {
+      const res = await fetch(endpoint, {
+        headers: { Accept: "application/json" },
+      });
+      if (!res.ok) {
+        let detail = `Backend error (${res.status})`;
+        try {
+          const errJson = await res.json();
+          detail = errJson?.detail || detail;
+        } catch {
+          // Keep default detail.
+        }
+        throw new Error(detail);
+      }
+      const data = await res.json();
+      applyResult(data);
+    };
 
     try {
-      advanceTo(0);
-      const userRes = await fetch(`https://api.github.com/users/${parsedUsername}`, {
-        headers: githubHeaders,
-      });
-      if (!userRes.ok) {
-        if (isRateLimited(userRes.status)) throw new Error(RATE_LIMIT_MESSAGE);
-        throw new Error(userRes.status === 404 ? `User "${username}" not found on GitHub.` : "GitHub API error. Try again.");
+      if (streamRef.current) {
+        streamRef.current.close();
+        streamRef.current = null;
       }
-      const user = await userRes.json();
-      const profileUsername = user.login || parsedUsername;
 
-      advanceTo(1);
-      const repos = [];
-      let page = 1;
-      while (true) {
-        const reposRes = await fetch(
-          `https://api.github.com/users/${parsedUsername}/repos?per_page=100&sort=pushed&page=${page}`,
-          {
-            headers: githubHeaders,
+      if (typeof window !== "undefined" && "EventSource" in window) {
+        const source = new EventSource(endpoint);
+        streamRef.current = source;
+
+        source.onmessage = (event) => {
+          if (!event?.data) return;
+          let packet;
+          try {
+            packet = JSON.parse(event.data);
+          } catch {
+            return;
           }
-        );
-        if (!reposRes.ok) {
-          if (isRateLimited(reposRes.status)) throw new Error(RATE_LIMIT_MESSAGE);
-          break;
-        }
-        const pageRepos = await reposRes.json();
-        if (!Array.isArray(pageRepos) || pageRepos.length === 0) break;
-        repos.push(...pageRepos);
-        if (pageRepos.length < 100) break;
-        page += 1;
-      }
 
-      advanceTo(2);
-      const topLangs = extractTopLangs(Array.isArray(repos) ? repos : []);
-      const totalStars = Array.isArray(repos) ? repos.reduce((s, r) => s + (r.stargazers_count || 0), 0) : 0;
-      const score = calcDevScore(user, Array.isArray(repos) ? repos : []);
+          if (typeof packet.step === "number") {
+            const safeStep = Math.max(0, Math.min(packet.step, LOADING_STEPS.length - 1));
+            setLoadingStep(safeStep);
+          }
 
-      advanceTo(3);
-      const eventsRes = await fetch(`https://api.github.com/users/${parsedUsername}/events/public?per_page=30`, {
-        headers: githubHeaders,
-      });
-      if (!eventsRes.ok && isRateLimited(eventsRes.status)) throw new Error(RATE_LIMIT_MESSAGE);
-      const events = eventsRes.ok ? await eventsRes.json() : [];
-      const { messages, hours } = extractCommitData(Array.isArray(events) ? events : []);
-
-      advanceTo(4);
-      const rawContributions = await fetchContributionData(parsedUsername);
-      const contributions = buildContributionSeries(rawContributions);
-
-      setGithub({ user, totalStars, recentCommits: messages.length, contributions, repos });
-      setDevScore(score);
-      setLangs(topLangs);
-      setActiveUsername(profileUsername);
-
-      const langNames = topLangs.map(l => l.lang).join(", ") || "Unknown";
-      const avgHour = hours.length ? Math.round(hours.reduce((a, b) => a + b, 0) / hours.length) : 14;
-      const ageYears = ((Date.now() - new Date(user.created_at)) / (1000 * 60 * 60 * 24 * 365)).toFixed(1);
-
-      advanceTo(5);
-      const prompt = `Analyze this GitHub developer profile and return ONLY valid JSON (no markdown, no backticks):
-
-Username: ${user.login}
-Display Name: ${user.name || user.login}
-Primary Languages: ${langNames}
-Total Public Stars: ${totalStars}
-Followers: ${user.followers}
-Public Repos: ${user.public_repos}
-Account Age: ${ageYears} years
-Average Commit Hour (UTC): ${avgHour}:00 (${avgHour < 6 ? "deep night" : avgHour < 12 ? "morning" : avgHour < 18 ? "daytime" : avgHour < 22 ? "evening" : "night"})
-Sample Commit Messages: ${messages.slice(0, 8).join(" | ") || "none available"}
-Bio: ${user.bio || "none"}
-
-Return this exact JSON structure with creative, specific, personalized content:
-{
-  "devClass": "Creative RPG-style archetype title (e.g. 'The Distributed Systems Oracle', 'The Frontend Sorcerer')",
-  "chronotype": {
-    "title": "Creative name for their work time pattern (e.g. 'Midnight Architect', 'Dawn Protocol Engineer')",
-    "description": "2-sentence behavioral insight linking their commit timing to personality traits. Make it feel psychological and specific."
-  },
-  "collaborationStyle": {
-    "title": "Creative archetype for collaboration (e.g. 'The Empathic Reviewer', 'The Autonomous Builder')",
-    "description": "2-sentence insight about their collaboration patterns based on the data. Be specific and interesting."
-  },
-  "traits": {
-    "creativity": <integer 0-100>,
-    "discipline": <integer 0-100>,
-    "collaboration": <integer 0-100>,
-    "boldness": <integer 0-100>,
-    "depth": <integer 0-100>
-  },
-  "fastFacts": [
-    "Punchy, darkly witty personalized fact using their actual data (stars, repos, commit patterns)",
-    "Another personalized fact. E.g. 'Your average commit lands at ${avgHour}:00 UTC. Sleep is clearly optional.'",
-    "Third fact. Could be about their top language, account age, or behavioral quirk. Make it memorable."
-  ],
-  "dnaSequence": "16 character uppercase hex string representing their unique developer fingerprint"
-}`;
-
-      advanceTo(6);
-      let aiResult = null;
-      try {
-        const aiRes = await fetch("https://api.anthropic.com/v1/messages", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            model: "claude-sonnet-4-20250514",
-            max_tokens: 1000,
-            messages: [{ role: "user", content: prompt }],
-          }),
-        });
-        advanceTo(7);
-        const aiJson = await aiRes.json();
-        const raw = aiJson.content?.map(b => b.text || "").join("") || "";
-        const cleaned = raw.replace(/```json|```/g, "").trim();
-        aiResult = JSON.parse(cleaned);
-      } catch (e) {
-        aiResult = {
-          devClass: "The Code Phantom",
-          chronotype: { title: "Temporal Drifter", description: `Commits most frequently around hour ${avgHour}. Their schedule follows an internal clock that ignores conventional time zones entirely.` },
-          collaborationStyle: { title: "The Silent Architect", description: "Builds in focused bursts with minimal external noise. Their work speaks louder than their commit messages." },
-          traits: { creativity: 72, discipline: 68, collaboration: 55, boldness: 80, depth: 85 },
-          fastFacts: [
-            `${totalStars} stars earned across ${user.public_repos} repos. The market has spoken.`,
-            `Account age: ${ageYears} years. That's ${(parseFloat(ageYears) * 8760).toFixed(0)} hours of accumulated git muscle memory.`,
-            `Primary language: ${topLangs[0]?.lang || "Unknown"}. A choice that reveals everything and nothing.`
-          ],
-          dnaSequence: "4F6E3A1D9C2B8E7F"
+          if (packet.done) {
+            source.close();
+            streamRef.current = null;
+            applyResult(packet.data || {});
+          }
         };
+
+        source.onerror = async () => {
+          source.close();
+          streamRef.current = null;
+          try {
+            await fallbackFetch();
+          } catch (err) {
+            handleFailure(err.message || "Analysis stream failed.");
+          }
+        };
+        return;
       }
 
-      advanceTo(8);
-      setAiData(aiResult);
-      await new Promise(r => setTimeout(r, 600));
-      advanceTo(9);
-      await new Promise(r => setTimeout(r, 500));
-      window.history.pushState({}, "", `/?u=${encodeURIComponent(profileUsername)}`);
-      setPhase("dashboard");
-
+      await fallbackFetch();
     } catch (err) {
-      setError(err.message || "Analysis failed.");
-      setPhase("error");
+      handleFailure(err.message || "Analysis failed.");
     }
   }
+
+  useEffect(() => () => {
+    if (streamRef.current) {
+      streamRef.current.close();
+      streamRef.current = null;
+    }
+  }, []);
 
   useEffect(() => {
     if (autoAnalyzeRef.current) return;
