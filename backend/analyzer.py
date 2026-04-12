@@ -67,6 +67,12 @@ class GitHubAnalyzer:
                     "language": repo.get("language"),
                     "pushed_at": repo.get("pushed_at"),
                     "description": repo.get("description"),
+                    "archived": bool(repo.get("archived", False)),
+                    "is_fork": bool(repo.get("fork", False)),
+                    "open_issues_count": repo.get("open_issues_count", 0),
+                    "watchers_count": repo.get("watchers_count", 0),
+                    "size_kb": repo.get("size", 0),
+                    "topics": repo.get("topics", []) if isinstance(repo.get("topics"), list) else [],
                 }
             )
         return repos
@@ -131,10 +137,17 @@ class GitHubAnalyzer:
 
         avg_commit_hour = round(sum(hours) / len(hours), 2) if hours else None
         ratio = round(weekend_commits / weekday_commits, 3) if weekday_commits else None
+        total_commits = len(hours)
+        night_commits = sum(1 for hour in hours if hour < 6)
+        business_hour_commits = sum(1 for hour in hours if 9 <= hour <= 18)
+        peak_commit_hour = max(range(24), key=lambda index: hour_distribution[index]) if total_commits > 0 else None
 
         return {
             "avg_commit_hour": avg_commit_hour,
             "commit_hour_distribution": hour_distribution,
+            "night_commit_ratio": round(night_commits / total_commits, 3) if total_commits else 0.0,
+            "business_hour_commit_ratio": round(business_hour_commits / total_commits, 3) if total_commits else 0.0,
+            "peak_commit_hour": peak_commit_hour,
             "weekend_vs_weekday": {
                 "weekend_commits": weekend_commits,
                 "weekday_commits": weekday_commits,
@@ -168,6 +181,39 @@ class GitHubAnalyzer:
         top_languages = self._top_languages(repos)
         commit_metrics = self._commit_time_metrics(commits)
 
+        now = datetime.now(timezone.utc)
+        active_repos_30d = 0
+        active_repos_90d = 0
+        stale_repos_180d = 0
+        archived_repo_count = 0
+        fork_repo_count = 0
+        total_repo_size_kb = 0
+        total_open_issues = 0
+
+        for repo in repos:
+            if repo.get("archived"):
+                archived_repo_count += 1
+            if repo.get("is_fork"):
+                fork_repo_count += 1
+            total_repo_size_kb += int(repo.get("size_kb", 0) or 0)
+            total_open_issues += int(repo.get("open_issues_count", 0) or 0)
+
+            pushed_at = self._parse_iso_datetime(repo.get("pushed_at"))
+            if pushed_at is None:
+                continue
+            days_since_push = (now - pushed_at).total_seconds() / (60 * 60 * 24)
+            if days_since_push <= 30:
+                active_repos_30d += 1
+            if days_since_push <= 90:
+                active_repos_90d += 1
+            if days_since_push > 180:
+                stale_repos_180d += 1
+
+        top_starred_repo = max(repos, key=lambda repo: repo.get("stars", 0), default=None)
+        largest_repo = max(repos, key=lambda repo: repo.get("size_kb", 0), default=None)
+        language_diversity = len({repo.get("language") for repo in repos if repo.get("language")})
+        avg_repo_size_kb = round(total_repo_size_kb / max(len(repos), 1), 2) if repos else 0.0
+
         return {
             "user": {
                 "login": user_payload.get("login"),
@@ -189,5 +235,26 @@ class GitHubAnalyzer:
             "avg_commit_hour": commit_metrics["avg_commit_hour"],
             "commit_hour_distribution": commit_metrics["commit_hour_distribution"],
             "recent_commit_messages": [commit["message"] for commit in commits[:20]],
+            "recent_commit_timestamps": [commit["timestamp"] for commit in commits if commit.get("timestamp")],
+            "night_commit_ratio": commit_metrics["night_commit_ratio"],
+            "business_hour_commit_ratio": commit_metrics["business_hour_commit_ratio"],
+            "peak_commit_hour": commit_metrics["peak_commit_hour"],
             "weekend_vs_weekday": commit_metrics["weekend_vs_weekday"],
+            "active_repos_30d": active_repos_30d,
+            "active_repos_90d": active_repos_90d,
+            "stale_repos_180d": stale_repos_180d,
+            "archived_repo_count": archived_repo_count,
+            "fork_repo_count": fork_repo_count,
+            "language_diversity": language_diversity,
+            "total_repo_size_kb": total_repo_size_kb,
+            "avg_repo_size_kb": avg_repo_size_kb,
+            "total_open_issues": total_open_issues,
+            "top_starred_repo": {
+                "name": top_starred_repo.get("name") if top_starred_repo else None,
+                "stars": top_starred_repo.get("stars", 0) if top_starred_repo else 0,
+            },
+            "largest_repo": {
+                "name": largest_repo.get("name") if largest_repo else None,
+                "size_kb": largest_repo.get("size_kb", 0) if largest_repo else 0,
+            },
         }

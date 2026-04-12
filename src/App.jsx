@@ -2031,9 +2031,16 @@ function Dashboard({
                   setCompareError("");
                   setOpponentUsername("");
                 }}
-                style={{ marginTop: 10, padding: "7px 14px", fontSize: "0.66rem", width: "100%" }}
+                style={{
+                  marginTop: 10,
+                  padding: "10px 14px",
+                  fontSize: "0.74rem",
+                  width: "100%",
+                  fontWeight: 700,
+                  boxShadow: "0 0 14px rgba(0,220,255,0.28)",
+                }}
               >
-                ⚔ COMPARE
+                ⚔ COMPARE TWO DEVS
               </button>
               <button
                 className="gd-btn gd-btn-roast"

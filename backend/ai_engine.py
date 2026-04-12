@@ -2,6 +2,7 @@ import hashlib
 import json
 import os
 import re
+from collections import Counter
 from datetime import datetime, timezone
 from typing import Any
 
@@ -184,6 +185,19 @@ def _extract_metrics(github_data: dict[str, Any]) -> dict[str, Any]:
     if avg_commit_hour is not None:
         avg_commit_hour = max(0.0, min(23.99, avg_commit_hour))
 
+    peak_commit_hour = _to_int(github_data.get("peak_commit_hour"), -1)
+    if peak_commit_hour < 0 or peak_commit_hour > 23:
+        peak_commit_hour = None
+
+    night_commit_ratio = _to_float(github_data.get("night_commit_ratio"), None)
+    if night_commit_ratio is None:
+        if avg_commit_hour is not None and (avg_commit_hour < 6 or avg_commit_hour >= 22):
+            night_commit_ratio = 0.55
+        else:
+            night_commit_ratio = 0.0
+
+    business_hour_commit_ratio = _to_float(github_data.get("business_hour_commit_ratio"), 0.0) or 0.0
+
     weekend_data = github_data.get("weekend_vs_weekday") or {}
     weekend_commits = _to_int(weekend_data.get("weekend_commits"), 0)
     weekday_commits = _to_int(weekend_data.get("weekday_commits"), 0)
@@ -199,6 +213,40 @@ def _extract_metrics(github_data: dict[str, Any]) -> dict[str, Any]:
         if str(message).strip()
     ]
 
+    all_tokens: list[str] = []
+    for message in commit_messages:
+        all_tokens.extend(re.findall(r"[a-zA-Z]{2,}", message.lower()))
+
+    stopwords = {
+        "the", "and", "for", "from", "with", "into", "this", "that", "merge", "branch",
+        "main", "dev", "feat", "fix", "wip", "update", "test", "add", "remove", "changes",
+        "code", "issue", "pull", "request", "release", "bump", "version", "refactor", "bug",
+    }
+    filtered_tokens = [token for token in all_tokens if token not in stopwords and len(token) > 2]
+    top_terms = [term for term, _ in Counter(filtered_tokens).most_common(6)]
+
+    lexical_diversity = 0.0
+    if all_tokens:
+        lexical_diversity = round(len(set(all_tokens)) / len(all_tokens), 3)
+
+    lazy_commit_ratio = round(_lazy_commit_ratio(commit_messages), 3)
+
+    language_diversity = _to_int(github_data.get("language_diversity"), 0)
+    if language_diversity <= 0:
+        language_diversity = len({item.get("language") for item in top_languages if item.get("language")})
+
+    active_repos_30d = _to_int(github_data.get("active_repos_30d"), 0)
+    active_repos_90d = _to_int(github_data.get("active_repos_90d"), 0)
+    stale_repos_180d = _to_int(github_data.get("stale_repos_180d"), 0)
+    archived_repo_count = _to_int(github_data.get("archived_repo_count"), 0)
+    fork_repo_count = _to_int(github_data.get("fork_repo_count"), 0)
+    total_repo_size_kb = _to_int(github_data.get("total_repo_size_kb"), 0)
+    avg_repo_size_kb = _to_float(github_data.get("avg_repo_size_kb"), 0.0) or 0.0
+    total_open_issues = _to_int(github_data.get("total_open_issues"), 0)
+
+    top_starred_repo = github_data.get("top_starred_repo") if isinstance(github_data.get("top_starred_repo"), dict) else {}
+    largest_repo = github_data.get("largest_repo") if isinstance(github_data.get("largest_repo"), dict) else {}
+
     return {
         "username": username,
         "account_age_years": account_age_years,
@@ -212,7 +260,26 @@ def _extract_metrics(github_data: dict[str, Any]) -> dict[str, Any]:
         "weekday_commits": weekday_commits,
         "weekend_weekday_ratio": ratio,
         "last_commit_messages": commit_messages[:10],
+        "commit_message_lazy_ratio": lazy_commit_ratio,
+        "commit_message_lexical_diversity": lexical_diversity,
+        "commit_message_top_terms": top_terms,
         "recent_commits_30d": _estimate_recent_commits_30d(github_data),
+        "night_commit_ratio": round(max(0.0, min(1.0, night_commit_ratio)), 3),
+        "business_hour_commit_ratio": round(max(0.0, min(1.0, business_hour_commit_ratio)), 3),
+        "peak_commit_hour": peak_commit_hour,
+        "language_diversity": language_diversity,
+        "active_repos_30d": active_repos_30d,
+        "active_repos_90d": active_repos_90d,
+        "stale_repos_180d": stale_repos_180d,
+        "archived_repo_count": archived_repo_count,
+        "fork_repo_count": fork_repo_count,
+        "total_repo_size_kb": total_repo_size_kb,
+        "avg_repo_size_kb": round(avg_repo_size_kb, 2),
+        "total_open_issues": total_open_issues,
+        "top_starred_repo_name": str(top_starred_repo.get("name") or "") if top_starred_repo else "",
+        "top_starred_repo_stars": _to_int(top_starred_repo.get("stars"), 0) if top_starred_repo else 0,
+        "largest_repo_name": str(largest_repo.get("name") or "") if largest_repo else "",
+        "largest_repo_size_kb": _to_int(largest_repo.get("size_kb"), 0) if largest_repo else 0,
     }
 
 
@@ -530,6 +597,98 @@ async def analyze_roast(profile_payload: dict[str, Any]) -> dict[str, Any]:
         return fallback
 
 
+def _select_dev_class(metrics: dict[str, Any]) -> str:
+    stars = metrics["total_stars"]
+    repos = metrics["public_repos"]
+    commits_30d = metrics["recent_commits_30d"]
+    stars_per_repo = stars / max(1, repos)
+    night_ratio = metrics["night_commit_ratio"]
+    weekend_ratio = metrics["weekend_weekday_ratio"] if metrics["weekend_weekday_ratio"] is not None else 0.0
+    language_diversity = metrics["language_diversity"]
+    active_90d = metrics["active_repos_90d"]
+    lazy_ratio = metrics["commit_message_lazy_ratio"]
+
+    if repos <= 8 and stars_per_repo >= 4:
+        return "Precision Impact Builder"
+    if commits_30d >= 35 and night_ratio >= 0.4:
+        return "Midnight Ship Commander"
+    if active_90d >= max(5, int(repos * 0.45)) and commits_30d >= 20:
+        return "Release Train Operator"
+    if language_diversity >= 6:
+        return "Polyglot Systems Mapper"
+    if weekend_ratio >= 0.8 and commits_30d >= 12:
+        return "Weekend Refactor Ranger"
+    if lazy_ratio >= 0.4 and commits_30d >= 10:
+        return "Rapid Patch Firefighter"
+    if stars >= 1000 or metrics["followers"] >= 300:
+        return "Public Signal Architect"
+    return "Steady Commit Craftsman"
+
+
+def _select_archetype_name(metrics: dict[str, Any]) -> str:
+    repos = metrics["public_repos"]
+    active_30d = metrics["active_repos_30d"]
+    active_90d = metrics["active_repos_90d"]
+    stale_180d = metrics["stale_repos_180d"]
+    top_repo_stars = metrics["top_starred_repo_stars"]
+    fork_repos = metrics["fork_repo_count"]
+
+    if top_repo_stars >= 500:
+        return "Impact Beacon Architect"
+    if repos >= 120:
+        return "Repository Forge Strategist"
+    if active_30d >= 10:
+        return "High Velocity Maintainer"
+    if active_90d >= max(8, int(repos * 0.6)):
+        return "Momentum Grid Operator"
+    if stale_180d >= max(10, int(repos * 0.5)):
+        return "Archive Layer Strategist"
+    if fork_repos >= max(6, int(repos * 0.35)):
+        return "Remix Stack Integrator"
+    return "Signal Weighted Architect"
+
+
+def _select_collab_title(metrics: dict[str, Any]) -> str:
+    followers = metrics["followers"]
+    repos = metrics["public_repos"]
+    fork_repos = metrics["fork_repo_count"]
+    top_repo_stars = metrics["top_starred_repo_stars"]
+
+    if followers >= 400 or top_repo_stars >= 300:
+        return "Community Gravity Well"
+    if fork_repos >= max(6, int(repos * 0.3)):
+        return "Open Source Integrator"
+    if repos >= 70 and followers < 80:
+        return "Solo Lab Operator"
+    if metrics["active_repos_30d"] >= 7:
+        return "Async Sprint Collaborator"
+    return "Asynchronous Builder"
+
+
+def _build_fast_facts(metrics: dict[str, Any]) -> list[str]:
+    username = metrics["username"]
+    stars = metrics["total_stars"]
+    repos = metrics["public_repos"]
+    top_lang = metrics["top_languages"][0] if metrics["top_languages"] else {"language": "Unknown", "percentage": 0.0}
+    commits_30d = metrics["recent_commits_30d"]
+    active_90d = metrics["active_repos_90d"]
+    lazy_ratio = metrics["commit_message_lazy_ratio"]
+    lexical = metrics["commit_message_lexical_diversity"]
+    peak_hour = metrics["peak_commit_hour"]
+    top_repo = metrics["top_starred_repo_name"] or "unknown"
+    top_repo_stars = metrics["top_starred_repo_stars"]
+    terms = metrics["commit_message_top_terms"]
+    top_terms_line = ", ".join(terms[:3]) if terms else "no clear signal"
+
+    peak_line = f"peak commit window around {peak_hour:02d}:00 UTC" if peak_hour is not None else "commit timing spread across the day"
+
+    return [
+        f"{username} runs {repos} public repos with {stars} stars; top impact repo is {top_repo} ({top_repo_stars} stars).",
+        f"{commits_30d} commits in 30 days with {active_90d} active repos in 90 days indicates sustained execution, not one-off spikes.",
+        f"Commit style signal: lazy-ratio {lazy_ratio:.0%}, lexical diversity {lexical:.2f}, recurring terms {top_terms_line}, and {peak_line}.",
+    ]
+
+
 def _fallback_analysis(github_data: dict[str, Any]) -> dict[str, Any]:
     metrics = _extract_metrics(github_data)
     username = metrics["username"]
@@ -543,48 +702,58 @@ def _fallback_analysis(github_data: dict[str, Any]) -> dict[str, Any]:
     commits_30d = metrics["recent_commits_30d"]
     weekend_commits = metrics["weekend_commits"]
     weekday_commits = metrics["weekday_commits"]
+    active_30d = metrics["active_repos_30d"]
+    active_90d = metrics["active_repos_90d"]
+    stale_180d = metrics["stale_repos_180d"]
+    lazy_ratio = metrics["commit_message_lazy_ratio"]
+    lexical_diversity = metrics["commit_message_lexical_diversity"]
 
     stars_per_repo = stars / max(repos, 1)
     followers_per_repo = followers / max(repos, 1)
     activity_factor = min(commits_30d, 120) / 120
+    active_ratio_90d = active_90d / max(1, repos)
 
-    creativity = _clamp_int(32 + stars_per_repo * 9 + min(repos, 100) * 0.25)
-    discipline = _clamp_int(30 + activity_factor * 45 + (8 if weekday_commits >= weekend_commits else 2))
-    collaboration = _clamp_int(26 + min(followers, 1200) / 20 + followers_per_repo * 12)
-    boldness = _clamp_int(28 + min(stars, 2000) / 30 + min(repos, 120) * 0.18)
-    depth = _clamp_int(34 + stars_per_repo * 10 + min(age_years, 15) * 2.2)
-    velocity = _clamp_int(25 + activity_factor * 55 + min(repos, 100) * 0.15)
+    creativity = _clamp_int(30 + stars_per_repo * 8 + metrics["language_diversity"] * 4 + metrics["night_commit_ratio"] * 22)
+    discipline = _clamp_int(26 + activity_factor * 46 + active_ratio_90d * 28 - lazy_ratio * 16)
+    collaboration = _clamp_int(22 + min(followers, 1500) / 19 + followers_per_repo * 11 + metrics["fork_repo_count"] * 0.7)
+    boldness = _clamp_int(25 + min(stars, 3000) / 32 + min(repos, 150) * 0.16 + (8 if metrics["language_diversity"] >= 6 else 0))
+    depth = _clamp_int(30 + stars_per_repo * 9 + min(age_years, 15) * 2.4 + (8 if lexical_diversity >= 0.55 else 0))
+    velocity = _clamp_int(20 + activity_factor * 58 + active_ratio_90d * 18 - max(0, stale_180d - active_90d) * 0.2)
 
-    top_lang = metrics["top_languages"][0]
+    top_lang = metrics["top_languages"][0] if metrics["top_languages"] else {"language": "Unknown", "percentage": 0.0}
     avg_hour_display = int(avg_hour) if avg_hour is not None else 12
     chronotype_title = _chronotype_title(avg_hour)
     work_style = _chronotype_work_style(chronotype_title)
     tier = _tier_from_stars(stars)
-    dna_sequence = hashlib.md5(username.lower().encode("utf-8")).hexdigest()[:16].upper()
+    dev_class = _select_dev_class(metrics)
+    archetype_name = _select_archetype_name(metrics)
+    collab_title = _select_collab_title(metrics)
+    dna_seed = f"{username.lower()}:{stars}:{repos}:{commits_30d}:{metrics['top_starred_repo_name']}"
+    dna_sequence = hashlib.md5(dna_seed.encode("utf-8")).hexdigest()[:16].upper()
 
     return {
-        "devClass": "The Silent Builder",
+        "devClass": dev_class,
         "archetype": {
-            "name": "Signal Weighted Architect",
+            "name": archetype_name,
             "tier": tier,
             "description": (
-                f"{username} has {stars} stars, {repos} public repos, and {followers} followers, which signals tangible public impact. "
-                f"With {commits_30d} recent commits in 30 days, this profile shows a steady build cadence rather than random bursts."
+                f"{username} carries {stars} stars, {repos} repos, and {followers} followers with {active_90d} repos active in the last 90 days. "
+                f"Execution signal shows {commits_30d} recent commits and stale-to-active balance ({stale_180d} stale / {active_90d} active), which shapes this profile's delivery style."
             ),
         },
         "chronotype": {
             "title": chronotype_title,
             "description": (
-                f"Average commits land at {avg_hour_display}:00 UTC, placing this profile in {metrics['hour_bucket']} operating mode. "
-                f"Weekend to weekday ratio is {ratio_for_calc:.3f}, showing how {username} distributes output across the week."
+                f"Average commits land at {avg_hour_display}:00 UTC with night ratio {metrics['night_commit_ratio']:.2f}, placing this profile in {metrics['hour_bucket']} operating mode. "
+                f"Weekend to weekday ratio is {ratio_for_calc:.3f}, showing how {username} distributes coding pressure across the week."
             ),
             "workStyle": work_style,
         },
         "collaborationStyle": {
-            "title": "Asynchronous Builder",
+            "title": collab_title,
             "description": (
-                f"{repos} repos and {followers} followers suggest collaboration mostly through shipped artifacts and visible code outcomes. "
-                f"The weekend/weekday split ({weekend_commits}/{weekday_commits}) indicates how this builder balances solo execution with sustained public delivery."
+                f"{repos} repos, {followers} followers, and {metrics['fork_repo_count']} forked repos suggest a collaboration footprint that mixes independent shipping with selective ecosystem reuse. "
+                f"The weekend/weekday split ({weekend_commits}/{weekday_commits}) and active repo count ({active_30d} in 30 days) indicate how this builder sustains momentum under load."
             ),
             "score": collaboration,
         },
@@ -596,17 +765,13 @@ def _fallback_analysis(github_data: dict[str, Any]) -> dict[str, Any]:
             "depth": depth,
             "velocity": velocity,
         },
-        "fastFacts": [
-            f"{username} has {stars} stars across {repos} public repos, so the output signal is measurable and public.",
-            f"Average commit time is {avg_hour_display}:00 UTC, which puts this profile in {metrics['hour_bucket']} mode.",
-            f"Top language is {top_lang['language']} at {top_lang['percentage']}%, and account age is {age_years:.2f} years.",
-        ],
+        "fastFacts": _build_fast_facts(metrics),
         "dnaSequence": dna_sequence,
         "strengthReport": (
-            f"{username} excels at converting steady commit activity ({commits_30d} in 30 days) into visible public code output across {repos} repositories."
+            f"{username} performs best when converting commit velocity ({commits_30d}/30d) plus active maintenance ({active_30d} active repos/30d) into visible public output."
         ),
         "warningSign": (
-            f"With a weekend/weekday ratio of {ratio_for_calc:.3f}, pacing can drift unless deliberate recovery windows are protected during high-output cycles."
+            f"Commit-message quality signals lazy ratio {lazy_ratio:.0%} and lexical diversity {lexical_diversity:.2f}; if this drifts upward while stale repos rise ({stale_180d}), handoff clarity can decay fast."
         ),
     }
 
@@ -635,15 +800,34 @@ def _valid_dna(value: str) -> bool:
     return bool(re.fullmatch(r"[0-9A-F]{16}", value or ""))
 
 
+def _is_generic_label(value: str) -> bool:
+    lowered = (value or "").strip().lower()
+    if not lowered:
+        return True
+    generic_labels = {
+        "the silent builder",
+        "silent builder",
+        "asynchronous builder",
+        "unknown archetype",
+        "signal weighted architect",
+        "developer",
+    }
+    return lowered in generic_labels
+
+
 def _normalize_result(parsed: dict[str, Any], fallback: dict[str, Any]) -> dict[str, Any]:
     result = json.loads(json.dumps(fallback))
     if not isinstance(parsed, dict):
         return result
 
-    for key in ("devClass", "strengthReport", "warningSign"):
+    for key in ("strengthReport", "warningSign"):
         value = parsed.get(key)
         if isinstance(value, str) and value.strip():
             result[key] = value.strip()
+
+    dev_class = parsed.get("devClass")
+    if isinstance(dev_class, str) and dev_class.strip() and not _is_generic_label(dev_class):
+        result["devClass"] = dev_class.strip()
 
     dna_sequence = parsed.get("dnaSequence")
     if isinstance(dna_sequence, str) and _valid_dna(dna_sequence.strip().upper()):
@@ -651,10 +835,13 @@ def _normalize_result(parsed: dict[str, Any], fallback: dict[str, Any]) -> dict[
 
     parsed_archetype = parsed.get("archetype")
     if isinstance(parsed_archetype, dict):
-        for key in ("name", "description"):
-            value = parsed_archetype.get(key)
-            if isinstance(value, str) and value.strip():
-                result["archetype"][key] = value.strip()
+        archetype_name = parsed_archetype.get("name")
+        if isinstance(archetype_name, str) and archetype_name.strip() and not _is_generic_label(archetype_name):
+            result["archetype"]["name"] = archetype_name.strip()
+
+        archetype_description = parsed_archetype.get("description")
+        if isinstance(archetype_description, str) and archetype_description.strip():
+            result["archetype"]["description"] = archetype_description.strip()
         tier = parsed_archetype.get("tier")
         if isinstance(tier, str) and tier.strip().upper() in {"LEGENDARY", "ELITE", "VETERAN", "RISING"}:
             result["archetype"]["tier"] = tier.strip().upper()
@@ -668,10 +855,13 @@ def _normalize_result(parsed: dict[str, Any], fallback: dict[str, Any]) -> dict[
 
     parsed_collab = parsed.get("collaborationStyle")
     if isinstance(parsed_collab, dict):
-        for key in ("title", "description"):
-            value = parsed_collab.get(key)
-            if isinstance(value, str) and value.strip():
-                result["collaborationStyle"][key] = value.strip()
+        collab_title = parsed_collab.get("title")
+        if isinstance(collab_title, str) and collab_title.strip() and not _is_generic_label(collab_title):
+            result["collaborationStyle"]["title"] = collab_title.strip()
+
+        collab_description = parsed_collab.get("description")
+        if isinstance(collab_description, str) and collab_description.strip():
+            result["collaborationStyle"]["description"] = collab_description.strip()
         score = _to_float(parsed_collab.get("score"), None)
         if score is not None:
             result["collaborationStyle"]["score"] = _clamp_int(score)
@@ -709,6 +899,14 @@ def _build_user_prompt(metrics: dict[str, Any]) -> str:
         else "unknown"
     )
 
+    signature_seed = (
+        f"{metrics['username']}|{metrics['total_stars']}|{metrics['public_repos']}|"
+        f"{metrics['recent_commits_30d']}|{metrics['active_repos_90d']}|"
+        f"{metrics['language_diversity']}|{metrics['commit_message_lazy_ratio']}"
+    )
+    profile_signature = hashlib.sha1(signature_seed.encode("utf-8")).hexdigest()[:10].upper()
+    top_terms = ", ".join(metrics["commit_message_top_terms"][:5]) or "none"
+
     return f"""Analyze this GitHub behavioral dataset and return ONLY JSON.
 
 username: {metrics['username']}
@@ -716,12 +914,34 @@ account_age_years: {metrics['account_age_years']}
 total_stars: {metrics['total_stars']}
 followers: {metrics['followers']}
 public_repos: {metrics['public_repos']}
+active_repos_30d: {metrics['active_repos_30d']}
+active_repos_90d: {metrics['active_repos_90d']}
+stale_repos_180d: {metrics['stale_repos_180d']}
+archived_repo_count: {metrics['archived_repo_count']}
+fork_repo_count: {metrics['fork_repo_count']}
+language_diversity: {metrics['language_diversity']}
+top_starred_repo: {metrics['top_starred_repo_name']} ({metrics['top_starred_repo_stars']} stars)
+largest_repo: {metrics['largest_repo_name']} ({metrics['largest_repo_size_kb']} KB)
+total_open_issues: {metrics['total_open_issues']}
 top_3_languages_with_percentages: {top_langs}
 average_commit_hour_utc: {avg_hour_display}
+peak_commit_hour_utc: {metrics['peak_commit_hour']}
+night_commit_ratio: {metrics['night_commit_ratio']}
+business_hour_commit_ratio: {metrics['business_hour_commit_ratio']}
 weekend_vs_weekday_commit_ratio: {ratio_display}
 total_recent_commits_last_30_days: {metrics['recent_commits_30d']}
+commit_message_lazy_ratio: {metrics['commit_message_lazy_ratio']}
+commit_message_lexical_diversity: {metrics['commit_message_lexical_diversity']}
+top_commit_terms: {top_terms}
+profile_signature: {profile_signature}
 last_10_commit_messages_raw:
 {last_messages}
+
+Important behavior constraints:
+- Make this profile unique to the provided numbers and signature.
+- Do NOT output generic reusable archetypes.
+- Avoid repeating stock phrases like "Silent Builder" or "Asynchronous Builder" unless data strongly requires it.
+- Every sentence must include at least one concrete metric from this payload.
 
 Respond with this exact JSON schema and no extra keys:
 {{
