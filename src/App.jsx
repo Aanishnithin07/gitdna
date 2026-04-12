@@ -140,6 +140,13 @@ html,body{max-width:100%;overflow-x:hidden}
   100%{opacity:0;transform:translateY(-10px) scale(1.02)}
 }
 @keyframes founder-shimmer{0%{transform:translateX(-120%)}100%{transform:translateX(140%)}}
+@keyframes loading-letter-drift{
+  0%,18%,100%{transform:translate(0,0) rotate(0deg) scale(1);opacity:1}
+  28%{transform:translate(0,-20px) rotate(-14deg) scale(.86);opacity:.08}
+  42%{transform:translate(20px,10px) rotate(10deg) scale(.92);opacity:0}
+  62%{transform:translate(-8px,-6px) rotate(6deg) scale(1.08);opacity:1}
+}
+@keyframes loading-title-flicker{0%,100%{opacity:1}50%{opacity:.82}}
 @keyframes roast-line-rise{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}
 @keyframes torvalds-screen-glitch{
   0%{filter:none;transform:none}
@@ -217,6 +224,16 @@ html,body{max-width:100%;overflow-x:hidden}
 .gd-helix{transform-origin:50% 50%;animation:helix-spin 4.5s linear infinite;filter:drop-shadow(0 0 18px rgba(0,220,255,0.2))}
 .gd-helix-a{fill:none;stroke:#00dcff;stroke-width:3;stroke-linecap:round;stroke-dasharray:14 8;animation:helix-wave-a 1.1s linear infinite}
 .gd-helix-b{fill:none;stroke:#b347ea;stroke-width:3;stroke-linecap:round;stroke-dasharray:14 8;animation:helix-wave-b 1.1s linear infinite}
+
+.gd-loading-title{margin-top:4px;display:flex;justify-content:center;gap:4px;animation:loading-title-flicker 2.5s ease-in-out infinite;position:relative;z-index:3}
+.gd-loading-title span{display:inline-block;font-family:'Orbitron',monospace;font-weight:900;font-size:clamp(1.1rem,4.2vw,1.8rem);letter-spacing:.08em;text-shadow:0 0 14px rgba(0,220,255,.55);animation:loading-letter-drift 2.8s ease-in-out infinite;animation-delay:calc(var(--i) * 120ms)}
+.gd-loading-title span:nth-child(odd){color:#00dcff}
+.gd-loading-title span:nth-child(even){color:#b347ea}
+.gd-loading-status{position:relative;z-index:3}
+
+.gd-share-export-card{border:1px solid rgba(0,220,255,0.3);border-radius:12px;background:linear-gradient(160deg,#071424,#0a1324 50%,#110a1f);box-shadow:0 0 24px rgba(0,220,255,0.24);padding:24px;color:#dff7ff;font-family:'Rajdhani',sans-serif}
+.gd-share-export-row{display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap;margin-top:14px}
+.gd-share-export-chip{padding:7px 10px;border-radius:6px;border:1px solid rgba(0,220,255,0.28);background:rgba(7,24,38,0.85);font-family:'Share Tech Mono',monospace;font-size:.64rem;letter-spacing:.08em;color:#9de7ff}
 
 .gd-vitals-row{display:flex;gap:10px;margin-bottom:16px;flex-wrap:wrap;max-width:100%}
 .gd-unlock-flash{position:fixed;inset:0;background:radial-gradient(circle at center,rgba(255,255,255,.95),rgba(140,248,255,.72));pointer-events:none;z-index:60;animation:flash .4s ease-out forwards}
@@ -1662,10 +1679,16 @@ function LoadingPage({ step, message, feed, steps = LOADING_STEPS, ultraMode = f
           </div>
         </div>
 
-        <div style={{ fontFamily: "Share Tech Mono,monospace", fontSize: "0.68rem", color: "rgba(0,220,255,0.4)", letterSpacing: "0.15em", marginBottom: 10 }}>
+        <div className="gd-loading-title" aria-hidden="true">
+          {"GITDNA".split("").map((char, index) => (
+            <span key={`${char}-${index}`} style={{ "--i": index }}>{char}</span>
+          ))}
+        </div>
+
+        <div className="gd-loading-status" style={{ fontFamily: "Share Tech Mono,monospace", fontSize: "0.68rem", color: "rgba(0,220,255,0.72)", letterSpacing: "0.15em", marginBottom: 10, marginTop: 10 }}>
           SYSTEM PROCESS {String(safeStep + 1).padStart(2, "0")}/{safeSteps.length}
         </div>
-        <div style={{ fontFamily: "Orbitron,monospace", fontSize: "clamp(0.7rem,2vw,0.9rem)", color: "#00dcff", letterSpacing: "0.12em", fontWeight: 600, marginBottom: 28, textShadow: "0 0 10px rgba(0,220,255,0.4)", minHeight: 24 }}>
+        <div className="gd-loading-status" style={{ fontFamily: "Orbitron,monospace", fontSize: "clamp(0.78rem,2.2vw,1rem)", color: "#7feaff", letterSpacing: "0.12em", fontWeight: 700, marginBottom: 28, textShadow: "0 0 14px rgba(0,220,255,0.7)", minHeight: 24 }}>
           {currentMessage}
           <span style={{ opacity: 0.5 }}>...</span>
         </div>
@@ -1730,6 +1753,7 @@ function Dashboard({
     : (roastMode ? [EMPTY_REPO_ROAST, ...aiFacts.filter((fact) => fact !== EMPTY_REPO_ROAST)].slice(0, 3) : aiFacts);
   const dna = aiData?.dnaSequence || "0000000000000000";
   const shareCardRef = useRef(null);
+  const shareExportRef = useRef(null);
   const shareFlashTimeoutRef = useRef(null);
   const unlockFlashTimeoutRef = useRef(null);
   const founderBurstTimeoutRef = useRef(null);
@@ -1767,6 +1791,9 @@ function Dashboard({
   });
 
   const profileSharePath = `/?u=${encodeURIComponent(user.login || username || "")}`;
+  const shareLangs = Array.isArray(langs) ? langs.slice(0, 4) : [];
+  const shareHighlights = Array.isArray(facts) ? facts.slice(0, 2) : [];
+  const shareInitial = ((user.login || user.name || "?").charAt(0) || "?").toUpperCase();
 
   useEffect(() => {
     setShowUnlockFlash(true);
@@ -1916,14 +1943,25 @@ function Dashboard({
   }
 
   async function handleGenerateShareCard() {
-    if (!shareCardRef.current || isGeneratingCard) return;
+    if (isGeneratingCard) return;
+    const captureNode = shareExportRef.current || shareCardRef.current;
+    if (!captureNode) return;
 
     try {
       setIsGeneratingCard(true);
-      const canvas = await html2canvas(shareCardRef.current, {
+
+      // Two paint frames ensure the offscreen export card is fully laid out before capture.
+      await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+
+      const canvas = await html2canvas(captureNode, {
         backgroundColor: "#060b12",
         scale: window.devicePixelRatio > 1 ? 2 : 1,
         useCORS: true,
+        allowTaint: false,
+        logging: false,
+        removeContainer: true,
+        windowWidth: Math.max(document.documentElement.clientWidth, captureNode.scrollWidth || 0),
+        windowHeight: Math.max(document.documentElement.clientHeight, captureNode.scrollHeight || 0),
       });
 
       if (founderActive) {
@@ -2256,6 +2294,75 @@ function Dashboard({
               // GitDNA was conceived, designed, and built by @Aanishnithin07 — 2025
             </div>
           )}
+        </div>
+      </div>
+
+      <div aria-hidden="true" style={{ position: "fixed", left: -12000, top: 0, width: 900, pointerEvents: "none", zIndex: -1 }}>
+        <div ref={shareExportRef} className="gd-share-export-card" style={{ width: 900 }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14, gap: 14 }}>
+            <div>
+              <div style={{ fontFamily: "Share Tech Mono,monospace", fontSize: "0.62rem", letterSpacing: "0.14em", color: "rgba(0,220,255,0.72)", marginBottom: 6 }}>
+                GITDNA REPORT // @{user.login}
+              </div>
+              <div className="orb" style={{ fontSize: "1.42rem", fontWeight: 800, color: "#f0fbff", letterSpacing: "0.04em" }}>
+                {user.name || user.login}
+              </div>
+              <div style={{ marginTop: 6, fontSize: "0.78rem", color: "rgba(223,247,255,0.7)", letterSpacing: "0.06em" }}>
+                {effectiveDevClass}
+              </div>
+            </div>
+            <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
+              <div style={{ width: 52, height: 52, borderRadius: "50%", border: "1px solid rgba(0,220,255,0.38)", display: "grid", placeItems: "center", fontFamily: "Orbitron,monospace", fontWeight: 700, color: "#00dcff", background: "rgba(0,220,255,0.06)" }}>
+                {shareInitial}
+              </div>
+              <div style={{ textAlign: "right" }}>
+                <div style={{ fontFamily: "Share Tech Mono,monospace", fontSize: "0.58rem", letterSpacing: "0.13em", color: "rgba(0,220,255,0.62)" }}>DEV SCORE</div>
+                <div className="orb" style={{ fontSize: "1.38rem", fontWeight: 800, color: "#8ff3ff" }}>{devScore}</div>
+              </div>
+            </div>
+          </div>
+
+          <div className="gd-share-export-row" style={{ marginBottom: 12 }}>
+            <span className="gd-share-export-chip">⭐ {totalStars.toLocaleString()} STARS</span>
+            <span className="gd-share-export-chip">📦 {user.public_repos} REPOS</span>
+            <span className="gd-share-export-chip">👥 {user.followers.toLocaleString()} FOLLOWERS</span>
+            <span className="gd-share-export-chip">🧬 {dna.slice(0, 8)}...{dna.slice(-4)}</span>
+          </div>
+
+          <div style={{ marginBottom: 12 }}>
+            <div style={{ fontFamily: "Share Tech Mono,monospace", fontSize: "0.58rem", letterSpacing: "0.13em", color: "rgba(0,220,255,0.62)", marginBottom: 8 }}>
+              LANGUAGE TOPOLOGY
+            </div>
+            <div className="gd-share-export-row">
+              {shareLangs.length > 0 ? shareLangs.map((lang) => (
+                <span key={`share-lang-${lang.lang}`} className="gd-share-export-chip">{lang.lang}: {lang.pct}%</span>
+              )) : <span className="gd-share-export-chip">No language stats available</span>}
+            </div>
+          </div>
+
+          <div style={{ marginBottom: 10 }}>
+            <div style={{ fontFamily: "Share Tech Mono,monospace", fontSize: "0.58rem", letterSpacing: "0.13em", color: "rgba(0,220,255,0.62)", marginBottom: 6 }}>
+              AI HIGHLIGHTS
+            </div>
+            {shareHighlights.length > 0 ? shareHighlights.map((fact, index) => (
+              <div key={`share-fact-${index}`} style={{ fontSize: "0.8rem", lineHeight: 1.5, color: "rgba(223,247,255,0.86)", marginBottom: 4 }}>
+                • {fact}
+              </div>
+            )) : (
+              <div style={{ fontSize: "0.8rem", lineHeight: 1.5, color: "rgba(223,247,255,0.72)" }}>
+                AI profile highlights are not available yet.
+              </div>
+            )}
+          </div>
+
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: 14, paddingTop: 12, borderTop: "1px solid rgba(0,220,255,0.22)", gap: 12 }}>
+            <span style={{ fontFamily: "Share Tech Mono,monospace", fontSize: "0.6rem", color: "rgba(0,220,255,0.64)", letterSpacing: "0.1em" }}>
+              GITDNA ENGINE v2.0
+            </span>
+            <span style={{ fontFamily: "Share Tech Mono,monospace", fontSize: "0.6rem", color: "rgba(223,247,255,0.62)", letterSpacing: "0.08em" }}>
+              gitdna.vercel.app
+            </span>
+          </div>
         </div>
       </div>
 
