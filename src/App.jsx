@@ -26,6 +26,7 @@ const LOADING_STEPS = [
 ];
 
 const RATE_LIMIT_MESSAGE = "RATE LIMIT HIT — Add a GitHub token in .env or wait 60 minutes";
+const FOUNDER_HANDLE = "aanishnithin07";
 
 const CSS = `
 @import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@400;600;700;900&family=Share+Tech+Mono&family=Rajdhani:wght@300;400;500;600;700&display=swap');
@@ -78,6 +79,17 @@ html,body{max-width:100%;overflow-x:hidden}
 @keyframes helix-wave-b{from{stroke-dashoffset:0}to{stroke-dashoffset:96}}
 @keyframes helix-spin{from{transform:rotate(0deg)}to{transform:rotate(360deg)}}
 @keyframes flash{0%{opacity:0}20%{opacity:.6}100%{opacity:0}}
+@keyframes founder-burst{
+  0%{opacity:0;transform:scale(.82)}
+  30%{opacity:.95}
+  100%{opacity:0;transform:scale(1.18)}
+}
+@keyframes founder-pan{0%{background-position:0% 50%}100%{background-position:200% 50%}}
+@keyframes founder-ring-spin{from{transform:rotate(0deg)}to{transform:rotate(360deg)}}
+@keyframes founder-beacon{
+  0%,100%{opacity:.65;filter:drop-shadow(0 0 8px rgba(255,179,0,.5))}
+  50%{opacity:1;filter:drop-shadow(0 0 16px rgba(255,179,0,.9))}
+}
 @keyframes card-rise{from{opacity:0;transform:translateY(26px)}to{opacity:1;transform:translateY(0)}}
 @keyframes scan-sweep{0%{transform:translateY(-6px);opacity:0}12%{opacity:1}100%{transform:translateY(calc(100% + 6px));opacity:0}}
 @keyframes dna-lock{
@@ -154,6 +166,23 @@ html,body{max-width:100%;overflow-x:hidden}
 
 .gd-vitals-row{display:flex;gap:10px;margin-bottom:16px;flex-wrap:wrap;max-width:100%}
 .gd-unlock-flash{position:fixed;inset:0;background:radial-gradient(circle at center,rgba(255,255,255,.95),rgba(140,248,255,.72));pointer-events:none;z-index:60;animation:flash .4s ease-out forwards}
+.gd-founder-burst{position:fixed;inset:-20%;pointer-events:none;z-index:65;mix-blend-mode:screen;background:radial-gradient(circle at center,rgba(255,210,92,.95) 0%,rgba(255,179,0,.32) 28%,rgba(179,71,234,.22) 46%,rgba(0,220,255,.16) 63%,rgba(0,0,0,0) 78%);animation:founder-burst .95s ease-out forwards}
+
+.gd-founder-header{border-color:rgba(255,179,0,0.38);box-shadow:0 0 18px rgba(255,179,0,0.2),0 0 26px rgba(179,71,234,0.14),inset 0 0 12px rgba(255,179,0,0.05)}
+
+.gd-founder-card{position:relative;border:1px solid rgba(255,179,0,0.34);background:radial-gradient(circle at 10% 0%,rgba(255,179,0,0.2),rgba(16,11,2,0.95) 42%,rgba(7,8,16,0.94) 100%);backdrop-filter:blur(12px);border-radius:6px;overflow:hidden;box-shadow:0 0 18px rgba(255,179,0,0.14),0 0 30px rgba(179,71,234,0.1)}
+.gd-founder-card::before{content:'';position:absolute;inset:0;background:linear-gradient(120deg,transparent 15%,rgba(255,179,0,.14) 36%,rgba(179,71,234,.16) 50%,rgba(0,220,255,.12) 64%,transparent 86%);background-size:200% 100%;animation:founder-pan 7s linear infinite;pointer-events:none}
+.gd-founder-card::after{content:'';position:absolute;inset:0;border:1px solid rgba(255,179,0,0.2);border-radius:6px;pointer-events:none}
+.gd-founder-core{display:flex;justify-content:space-between;align-items:center;gap:14px;position:relative;z-index:1;flex-wrap:wrap}
+.gd-founder-title{font-family:'Orbitron',monospace;font-size:.88rem;letter-spacing:.08em;color:#ffd166;text-shadow:0 0 14px rgba(255,179,0,.35)}
+.gd-founder-note{margin-top:8px;font-size:.8rem;color:rgba(227,234,255,.72);line-height:1.5;font-weight:500;max-width:600px}
+.gd-founder-sigil-wrap{position:relative;width:78px;height:78px;flex-shrink:0;display:flex;align-items:center;justify-content:center}
+.gd-founder-ring{position:absolute;inset:0;border-radius:50%;border:1.5px solid rgba(255,179,0,.6);border-top-color:rgba(0,220,255,.85);border-bottom-color:rgba(179,71,234,.75);animation:founder-ring-spin 5.5s linear infinite}
+.gd-founder-sigil{width:56px;height:56px;border-radius:50%;display:flex;align-items:center;justify-content:center;background:rgba(255,179,0,.12);border:1px solid rgba(255,179,0,.5);color:#ffd166;letter-spacing:.2em;font-size:.64rem;font-weight:700;animation:founder-beacon 1.9s ease-in-out infinite}
+.gd-founder-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:8px;margin-top:12px;position:relative;z-index:1}
+.gd-founder-chip{border:1px solid rgba(255,179,0,.32);background:rgba(20,14,4,.78);border-radius:4px;padding:8px 10px;min-height:58px}
+.gd-founder-chip-label{font-family:'Share Tech Mono',monospace;font-size:.55rem;letter-spacing:.14em;color:rgba(255,179,0,.55);margin-bottom:5px}
+.gd-founder-chip-value{font-family:'Orbitron',monospace;font-size:.76rem;letter-spacing:.04em;color:#fff6dc;text-shadow:0 0 10px rgba(255,179,0,.25);line-height:1.35}
 
 .gd-enter-scan{overflow:hidden}
 .gd-enter-scan::after{content:'';position:absolute;left:0;right:0;top:0;height:2px;background:linear-gradient(90deg,transparent,rgba(0,220,255,0.4),transparent);transform:translateY(-6px);opacity:0;pointer-events:none;z-index:4;animation:scan-sweep .6s linear var(--scan-delay,0ms) 1 forwards}
@@ -246,6 +275,10 @@ function parseGithubUsername(input) {
 
   const candidate = withoutAt.split("/").filter(Boolean)[0] || "";
   return isValidGithubUsername(candidate) ? candidate : "";
+}
+
+function isFounderLogin(login) {
+  return (login || "").toLowerCase() === FOUNDER_HANDLE;
 }
 
 async function fetchContributionData(username) {
@@ -599,6 +632,75 @@ function ContributionHeatmap({ contributions }) {
         <span className="gd-badge gd-badge-cyan">TOTAL {totalContributions} IN LAST YEAR</span>
         <span className="gd-badge gd-badge-purple">LONGEST STREAK {longestStreak} DAYS</span>
         <span className="gd-badge gd-badge-green">CURRENT STREAK {currentStreak} DAYS</span>
+      </div>
+    </div>
+  );
+}
+
+function FounderProtocol({ user, devScore, totalStars, repos, contributions }) {
+  const safeRepos = Array.isArray(repos) ? repos : [];
+  const hottestRepo = safeRepos.reduce((top, repo) => {
+    if (!top) return repo;
+    return (repo.stargazers_count || 0) > (top.stargazers_count || 0) ? repo : top;
+  }, null);
+  const activeRepos30d = safeRepos.filter((repo) => {
+    const days = getDaysAgo(repo.pushed_at);
+    return days !== null && days <= 30;
+  }).length;
+  const yearlyContrib = (Array.isArray(contributions) ? contributions : []).reduce((sum, day) => sum + (day.count || 0), 0);
+  const missionState = devScore >= 85 ? "NETWORK DOMINANCE" : devScore >= 70 ? "ACCELERATION PHASE" : "CORE BUILD CYCLE";
+  const founderHash = `${String(user.id || 0).toString(16).toUpperCase()}-${Math.round(devScore).toString(16).toUpperCase()}-${String(totalStars % 4096).toString(16).toUpperCase().padStart(3, "0")}`;
+
+  return (
+    <div
+      className="gd-founder-card gd-enter-scan"
+      style={{
+        padding: "16px 18px",
+        marginBottom: 16,
+        opacity: 0,
+        animation: "card-rise .55s cubic-bezier(.2,.8,.2,1) 420ms forwards",
+        "--scan-delay": "140ms",
+      }}
+    >
+      <div className="gd-founder-core">
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div className="gd-section-label" style={{ color: "rgba(255,179,0,0.72)" }}>FOUNDER PROTOCOL // EXCLUSIVE</div>
+          <div className="gd-founder-title">AANISHNITHIN07 CONFIRMED AS ORIGIN NODE</div>
+          <div className="gd-founder-note">
+            Founder handshake accepted. Rendering command-layer telemetry unavailable to standard profiles.
+          </div>
+        </div>
+        <div className="gd-founder-sigil-wrap">
+          <div className="gd-founder-ring" />
+          <div className="gd-founder-sigil mono">ROOT</div>
+        </div>
+      </div>
+
+      <div className="gd-founder-grid">
+        <div className="gd-founder-chip">
+          <div className="gd-founder-chip-label">MISSION STATE</div>
+          <div className="gd-founder-chip-value">{missionState}</div>
+        </div>
+        <div className="gd-founder-chip">
+          <div className="gd-founder-chip-label">IMPACT STARS</div>
+          <div className="gd-founder-chip-value">{Number(totalStars || 0).toLocaleString()}</div>
+        </div>
+        <div className="gd-founder-chip">
+          <div className="gd-founder-chip-label">ACTIVE REPOS /30D</div>
+          <div className="gd-founder-chip-value">{activeRepos30d}</div>
+        </div>
+        <div className="gd-founder-chip">
+          <div className="gd-founder-chip-label">YEARLY COMMITS</div>
+          <div className="gd-founder-chip-value">{Number(yearlyContrib).toLocaleString()}</div>
+        </div>
+        <div className="gd-founder-chip" style={{ gridColumn: "1 / -1" }}>
+          <div className="gd-founder-chip-label">PRIMARY COMMAND REPOSITORY</div>
+          <div className="gd-founder-chip-value">{hottestRepo ? `${hottestRepo.name} // ${hottestRepo.stargazers_count || 0} stars` : "No repository telemetry available"}</div>
+        </div>
+      </div>
+
+      <div style={{ marginTop: 10, fontFamily: "Share Tech Mono,monospace", fontSize: "0.58rem", color: "rgba(255,179,0,0.6)", letterSpacing: "0.12em", position: "relative", zIndex: 1 }}>
+        FOUNDER HASH :: {founderHash}
       </div>
     </div>
   );
@@ -1181,9 +1283,12 @@ function Dashboard({ github, aiData, devScore, langs, username, onReset }) {
   const shareCardRef = useRef(null);
   const shareFlashTimeoutRef = useRef(null);
   const unlockFlashTimeoutRef = useRef(null);
+  const founderBurstTimeoutRef = useRef(null);
+  const isFounder = isFounderLogin(user.login);
   const [isGeneratingCard, setIsGeneratingCard] = useState(false);
   const [showCardSaved, setShowCardSaved] = useState(false);
   const [showUnlockFlash, setShowUnlockFlash] = useState(true);
+  const [showFounderBurst, setShowFounderBurst] = useState(false);
 
   const cardEntranceStyle = (index) => ({
     opacity: 0,
@@ -1194,6 +1299,12 @@ function Dashboard({ github, aiData, devScore, langs, username, onReset }) {
   useEffect(() => {
     setShowUnlockFlash(true);
     unlockFlashTimeoutRef.current = setTimeout(() => setShowUnlockFlash(false), 420);
+    if (isFounder) {
+      setShowFounderBurst(true);
+      founderBurstTimeoutRef.current = setTimeout(() => setShowFounderBurst(false), 950);
+    } else {
+      setShowFounderBurst(false);
+    }
     return () => {
       if (shareFlashTimeoutRef.current) {
         clearTimeout(shareFlashTimeoutRef.current);
@@ -1201,8 +1312,11 @@ function Dashboard({ github, aiData, devScore, langs, username, onReset }) {
       if (unlockFlashTimeoutRef.current) {
         clearTimeout(unlockFlashTimeoutRef.current);
       }
+      if (founderBurstTimeoutRef.current) {
+        clearTimeout(founderBurstTimeoutRef.current);
+      }
     };
-  }, []);
+  }, [isFounder]);
 
   async function handleGenerateShareCard() {
     if (!shareCardRef.current || isGeneratingCard) return;
@@ -1238,11 +1352,12 @@ function Dashboard({ github, aiData, devScore, langs, username, onReset }) {
       <BackgroundCanvas />
       <div className="gd-scanlines" />
       {showUnlockFlash && <div className="gd-unlock-flash" />}
+      {showFounderBurst && <div className="gd-founder-burst" />}
 
       <div style={{ maxWidth: 900, margin: "0 auto", padding: "24px 16px", position: "relative", zIndex: 2 }}>
         <div ref={shareCardRef} style={{ padding: 2, borderRadius: 8 }}>
           {/* HEADER */}
-          <div className="gd-card gd-header-card gd-enter-scan" style={{ padding: "20px 22px", marginBottom: 16, display: "flex", alignItems: "center", gap: 20, flexWrap: "wrap", ...cardEntranceStyle(0) }}>
+          <div className={`gd-card gd-header-card gd-enter-scan${isFounder ? " gd-founder-header" : ""}`} style={{ padding: "20px 22px", marginBottom: 16, display: "flex", alignItems: "center", gap: 20, flexWrap: "wrap", ...cardEntranceStyle(0) }}>
             <div className="scan-overlay" />
             <div style={{ position: "relative", flexShrink: 0 }}>
               <div style={{ position: "absolute", inset: -4, borderRadius: "50%", border: "1.5px solid rgba(0,220,255,0.3)", animation: "ring-spin 8s linear infinite" }} />
@@ -1259,6 +1374,7 @@ function Dashboard({ github, aiData, devScore, langs, username, onReset }) {
               <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap", marginBottom: 4 }}>
                 <h2 className="orb" style={{ fontSize: "1.25rem", fontWeight: 700, color: "#ffffff", letterSpacing: "0.05em" }}>{user.name || user.login}</h2>
                 <span className="gd-badge gd-badge-purple">{devClass}</span>
+                {isFounder && <span className="gd-badge gd-badge-gold">FOUNDER // ROOT ACCESS</span>}
               </div>
               <div style={{ fontFamily: "Share Tech Mono,monospace", fontSize: "0.72rem", color: "rgba(0,220,255,0.5)", marginBottom: 8 }}>@{user.login}</div>
               {user.bio && <div style={{ fontSize: "0.88rem", color: "rgba(200,232,255,0.55)", fontWeight: 300, marginBottom: 8 }}>{user.bio}</div>}
@@ -1272,6 +1388,16 @@ function Dashboard({ github, aiData, devScore, langs, username, onReset }) {
               <ScoreRing score={devScore} />
             </div>
           </div>
+
+          {isFounder && (
+            <FounderProtocol
+              user={user}
+              devScore={devScore}
+              totalStars={totalStars}
+              repos={repos}
+              contributions={contributions}
+            />
+          )}
 
           {/* DNA SEQUENCE */}
           <div className="gd-card gd-enter-scan" style={{ padding: "12px 18px", marginBottom: 16, ...cardEntranceStyle(1) }}>
