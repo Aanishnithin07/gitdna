@@ -830,48 +830,61 @@ function BackgroundCanvas({ attractRef = null, attractActive = false }) {
     if (!ctx) return;
 
     const state = { width: 1, height: 1, dpr: 1 };
-    const gridSize = 60;
-    const particleCount = 35;
-    const particles = [];
-    const gridHighlights = [];
-    const meteors = [];
-    let nextGridPulse = performance.now() + 3000;
-    let nextMeteor = performance.now() + 8000 + Math.random() * 4000;
+    const stars = [];
+    const wisps = [];
+    const comets = [];
+    const waveSeeds = [
+      { speed: 0.00014, freq: 0.008, amp: 0.028, phase: Math.random() * Math.PI * 2, color: "rgba(0,220,255,0.08)" },
+      { speed: 0.00011, freq: 0.006, amp: 0.035, phase: Math.random() * Math.PI * 2, color: "rgba(179,71,234,0.08)" },
+      { speed: 0.00009, freq: 0.007, amp: 0.03, phase: Math.random() * Math.PI * 2, color: "rgba(57,255,20,0.06)" },
+    ];
+    let nextComet = performance.now() + 12000 + Math.random() * 8000;
     let prevTs = performance.now();
 
-    const pickColor = () => {
-      const roll = Math.random();
-      if (roll < 0.6) return "#00dcff";
-      if (roll < 0.85) return "#b347ea";
-      return "#39ff14";
-    };
+    const wispPalette = [
+      ["rgba(0,220,255,0.22)", "rgba(0,220,255,0)"],
+      ["rgba(179,71,234,0.2)", "rgba(179,71,234,0)"],
+      ["rgba(57,255,20,0.14)", "rgba(57,255,20,0)"],
+      ["rgba(255,179,0,0.16)", "rgba(255,179,0,0)"],
+    ];
+    const starColors = ["#00dcff", "#89e8ff", "#b347ea", "#39ff14"];
 
-    const resetParticle = (particle, spawnAtBottom = false) => {
-      particle.x = Math.random() * state.width;
-      particle.y = spawnAtBottom ? state.height + Math.random() * 48 : Math.random() * state.height;
-      particle.size = 1 + Math.random() * 2;
-      particle.opacity = 0.2 + Math.random() * 0.5;
-      particle.color = pickColor();
-      particle.speed = 0.28 + Math.random() * 0.55;
-      particle.swayAmp = 0.25 + Math.random() * 0.85;
-      particle.swaySpeed = 0.018 + Math.random() * 0.04;
-      particle.phase = Math.random() * Math.PI * 2;
-    };
-
-    const createParticle = () => {
-      const particle = {
-        x: 0,
-        y: 0,
-        size: 0,
-        opacity: 0,
-        color: "#00dcff",
-        speed: 0,
-        swayAmp: 0,
-        swaySpeed: 0,
-        phase: 0,
+    const createStar = () => {
+      const layer = Math.random();
+      return {
+        x: Math.random() * state.width,
+        y: Math.random() * state.height,
+        size: 0.6 + layer * 1.8,
+        baseAlpha: 0.16 + Math.random() * 0.5,
+        twinkle: 0.0012 + Math.random() * 0.0025,
+        phase: Math.random() * Math.PI * 2,
+        driftX: (Math.random() - 0.5) * (0.04 + layer * 0.08),
+        driftY: -0.02 - Math.random() * (0.03 + layer * 0.06),
+        color: starColors[Math.floor(Math.random() * starColors.length)],
       };
-      resetParticle(particle, false);
-      return particle;
+    };
+
+    const createWisp = (index) => {
+      const palette = wispPalette[index % wispPalette.length];
+      return {
+        anchorX: 0.1 + Math.random() * 0.8,
+        anchorY: 0.1 + Math.random() * 0.8,
+        radius: 0.2 + Math.random() * 0.22,
+        driftX: 0.00004 + Math.random() * 0.00007,
+        driftY: 0.00003 + Math.random() * 0.00006,
+        phase: Math.random() * Math.PI * 2,
+        inner: palette[0],
+        outer: palette[1],
+      };
+    };
+
+    const fillBase = () => {
+      const bg = ctx.createLinearGradient(0, 0, state.width, state.height);
+      bg.addColorStop(0, "rgba(5,11,22,0.95)");
+      bg.addColorStop(0.45, "rgba(7,12,28,0.94)");
+      bg.addColorStop(1, "rgba(5,10,18,0.96)");
+      ctx.fillStyle = bg;
+      ctx.fillRect(0, 0, state.width, state.height);
     };
 
     const updateAttractPoint = () => {
@@ -898,140 +911,136 @@ function BackgroundCanvas({ attractRef = null, attractActive = false }) {
       canvas.style.width = `${width}px`;
       canvas.style.height = `${height}px`;
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-    };
 
-    const spawnGridPulse = (ts) => {
-      const count = 1 + Math.floor(Math.random() * 3);
-      const cols = Math.max(1, Math.floor(state.width / gridSize));
-      const rows = Math.max(1, Math.floor(state.height / gridSize));
-      for (let i = 0; i < count; i += 1) {
-        gridHighlights.push({
-          col: Math.floor(Math.random() * cols),
-          row: Math.floor(Math.random() * rows),
-          start: ts,
-          duration: 1000,
-        });
+      const targetStars = Math.max(80, Math.min(170, Math.floor((width * height) / 13000)));
+      while (stars.length < targetStars) stars.push(createStar());
+      if (stars.length > targetStars) stars.length = targetStars;
+
+      if (wisps.length === 0) {
+        for (let i = 0; i < 4; i += 1) wisps.push(createWisp(i));
       }
     };
 
-    const drawGrid = (ts) => {
-      ctx.save();
-      ctx.strokeStyle = "rgba(0,220,255,0.025)";
-      ctx.lineWidth = 1;
-      for (let x = 0; x <= state.width; x += gridSize) {
-        ctx.beginPath();
-        ctx.moveTo(x + 0.5, 0);
-        ctx.lineTo(x + 0.5, state.height);
-        ctx.stroke();
-      }
-      for (let y = 0; y <= state.height; y += gridSize) {
-        ctx.beginPath();
-        ctx.moveTo(0, y + 0.5);
-        ctx.lineTo(state.width, y + 0.5);
-        ctx.stroke();
-      }
-      ctx.restore();
-
-      for (let i = gridHighlights.length - 1; i >= 0; i -= 1) {
-        const pulse = gridHighlights[i];
-        const life = (ts - pulse.start) / pulse.duration;
-        if (life >= 1) {
-          gridHighlights.splice(i, 1);
-          continue;
-        }
-        const alpha = Math.max(0, 1 - life);
-        const x = pulse.col * gridSize;
-        const y = pulse.row * gridSize;
+    const drawWisps = (ts) => {
+      for (let i = 0; i < wisps.length; i += 1) {
+        const w = wisps[i];
+        const cx = w.anchorX * state.width + Math.sin(ts * w.driftX + w.phase) * state.width * 0.16;
+        const cy = w.anchorY * state.height + Math.cos(ts * w.driftY + w.phase * 1.2) * state.height * 0.14;
+        const radius = Math.min(state.width, state.height) * (w.radius + Math.sin(ts * 0.00012 + w.phase) * 0.03);
+        const grad = ctx.createRadialGradient(cx, cy, radius * 0.12, cx, cy, radius);
+        grad.addColorStop(0, w.inner);
+        grad.addColorStop(1, w.outer);
         ctx.save();
-        ctx.fillStyle = `rgba(0,220,255,${0.05 + alpha * 0.12})`;
-        ctx.fillRect(x, y, gridSize, gridSize);
-        ctx.strokeStyle = `rgba(0,220,255,${alpha * 0.55})`;
-        ctx.lineWidth = 1.2;
-        ctx.shadowColor = `rgba(0,220,255,${alpha * 0.85})`;
-        ctx.shadowBlur = 14;
-        ctx.strokeRect(x + 1, y + 1, gridSize - 2, gridSize - 2);
-        ctx.restore();
-      }
-    };
-
-    const updateAndDrawParticles = (dt) => {
-      const attractPoint = attractPointRef.current;
-      for (let i = 0; i < particles.length; i += 1) {
-        const p = particles[i];
-        p.phase += p.swaySpeed * dt;
-        p.y -= p.speed * dt;
-        p.x += Math.sin(p.phase) * p.swayAmp * 0.35 * dt;
-
-        if (attractActiveRef.current && attractPoint) {
-          const dx = attractPoint.x - p.x;
-          const dy = attractPoint.y - p.y;
-          const dist = Math.hypot(dx, dy);
-          if (dist > 1 && dist < 280) {
-            const pull = (1 - dist / 280) * 0.8;
-            p.x += (dx / dist) * pull * dt;
-            p.y += (dy / dist) * pull * dt * 0.7;
-          }
-        }
-
-        if (p.y < -12) {
-          resetParticle(p, true);
-        }
-
-        ctx.save();
+        ctx.globalCompositeOperation = "screen";
+        ctx.fillStyle = grad;
         ctx.beginPath();
-        ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2);
-        ctx.fillStyle = p.color;
-        ctx.globalAlpha = p.opacity;
+        ctx.arc(cx, cy, radius, 0, Math.PI * 2);
         ctx.fill();
         ctx.restore();
       }
     };
 
-    const drawConnections = () => {
-      let lineCount = 0;
-      for (let i = 0; i < particles.length && lineCount < 20; i += 1) {
-        for (let j = i + 1; j < particles.length && lineCount < 20; j += 1) {
-          const a = particles[i];
-          const b = particles[j];
-          const dx = a.x - b.x;
-          const dy = a.y - b.y;
-          const distance = Math.hypot(dx, dy);
-          if (distance > 80) continue;
-          const alpha = (1 - distance / 80) * 0.24;
-          ctx.save();
-          ctx.strokeStyle = `rgba(0,220,255,${alpha})`;
-          ctx.lineWidth = 1;
-          ctx.beginPath();
-          ctx.moveTo(a.x, a.y);
-          ctx.lineTo(b.x, b.y);
-          ctx.stroke();
-          ctx.restore();
-          lineCount += 1;
+    const drawWaves = (ts) => {
+      ctx.save();
+      ctx.globalCompositeOperation = "screen";
+      for (let i = 0; i < waveSeeds.length; i += 1) {
+        const seed = waveSeeds[i];
+        const baseY = state.height * (0.2 + i * 0.22 + Math.sin(ts * seed.speed + seed.phase) * 0.02);
+        ctx.beginPath();
+        ctx.moveTo(0, state.height);
+        for (let x = 0; x <= state.width; x += Math.max(16, state.width / 32)) {
+          const y = baseY + Math.sin(x * seed.freq + ts * seed.speed * 18 + seed.phase) * state.height * seed.amp;
+          ctx.lineTo(x, y);
         }
+        ctx.lineTo(state.width, state.height);
+        ctx.closePath();
+        const grad = ctx.createLinearGradient(0, baseY - 80, 0, state.height);
+        grad.addColorStop(0, seed.color);
+        grad.addColorStop(1, "rgba(0,0,0,0)");
+        ctx.fillStyle = grad;
+        ctx.fill();
+      }
+      ctx.restore();
+    };
+
+    const drawAttractAura = (ts) => {
+      if (!attractActiveRef.current || !attractPointRef.current) return;
+      const p = attractPointRef.current;
+      const pulse = 0.55 + Math.sin(ts * 0.009) * 0.2;
+      const radius = 90 + pulse * 36;
+      const grad = ctx.createRadialGradient(p.x, p.y, 0, p.x, p.y, radius);
+      grad.addColorStop(0, "rgba(0,220,255,0.2)");
+      grad.addColorStop(0.6, "rgba(0,220,255,0.06)");
+      grad.addColorStop(1, "rgba(0,220,255,0)");
+      ctx.save();
+      ctx.globalCompositeOperation = "screen";
+      ctx.fillStyle = grad;
+      ctx.beginPath();
+      ctx.arc(p.x, p.y, radius, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.restore();
+    };
+
+    const updateAndDrawStars = (ts, dt) => {
+      const attractPoint = attractPointRef.current;
+      for (let i = 0; i < stars.length; i += 1) {
+        const s = stars[i];
+        s.x += s.driftX * dt;
+        s.y += s.driftY * dt;
+
+        if (attractActiveRef.current && attractPoint) {
+          const dx = attractPoint.x - s.x;
+          const dy = attractPoint.y - s.y;
+          const dist = Math.hypot(dx, dy);
+          if (dist > 1 && dist < 240) {
+            const pull = (1 - dist / 240) * 0.38;
+            s.x += (dx / dist) * pull * dt;
+            s.y += (dy / dist) * pull * dt;
+          }
+        }
+
+        if (s.y < -6) s.y = state.height + 6;
+        if (s.y > state.height + 6) s.y = -6;
+        if (s.x < -6) s.x = state.width + 6;
+        if (s.x > state.width + 6) s.x = -6;
+
+        const alpha = s.baseAlpha * (0.62 + 0.38 * Math.sin(ts * s.twinkle + s.phase));
+        ctx.save();
+        ctx.globalAlpha = alpha;
+        ctx.fillStyle = s.color;
+        ctx.beginPath();
+        ctx.arc(s.x, s.y, s.size, 0, Math.PI * 2);
+        ctx.fill();
+        if (s.size > 1.6) {
+          ctx.globalAlpha = alpha * 0.35;
+          ctx.beginPath();
+          ctx.arc(s.x, s.y, s.size * 2.8, 0, Math.PI * 2);
+          ctx.fill();
+        }
+        ctx.restore();
       }
     };
 
-    const updateAndDrawMeteors = (ts) => {
-      for (let i = meteors.length - 1; i >= 0; i -= 1) {
-        const meteor = meteors[i];
-        const life = (ts - meteor.start) / meteor.duration;
+    const drawComets = (ts) => {
+      for (let i = comets.length - 1; i >= 0; i -= 1) {
+        const comet = comets[i];
+        const life = (ts - comet.start) / comet.duration;
         if (life >= 1) {
-          meteors.splice(i, 1);
+          comets.splice(i, 1);
           continue;
         }
-        const headX = meteor.startX - meteor.travel * life;
-        const headY = meteor.startY + meteor.travel * life;
-        const tailX = headX + meteor.length;
-        const tailY = headY - meteor.length;
-        const gradient = ctx.createLinearGradient(headX, headY, tailX, tailY);
-        gradient.addColorStop(0, `rgba(255,255,255,${(1 - life) * 0.95})`);
-        gradient.addColorStop(1, "rgba(255,255,255,0)");
-
+        const x = comet.startX - comet.travelX * life;
+        const y = comet.startY + comet.travelY * life;
+        const tailX = x + comet.tail;
+        const tailY = y - comet.tail * 0.4;
+        const grad = ctx.createLinearGradient(x, y, tailX, tailY);
+        grad.addColorStop(0, `rgba(255,255,255,${(1 - life) * 0.9})`);
+        grad.addColorStop(1, "rgba(255,255,255,0)");
         ctx.save();
-        ctx.strokeStyle = gradient;
+        ctx.strokeStyle = grad;
         ctx.lineWidth = 2;
         ctx.beginPath();
-        ctx.moveTo(headX, headY);
+        ctx.moveTo(x, y);
         ctx.lineTo(tailX, tailY);
         ctx.stroke();
         ctx.restore();
@@ -1039,27 +1048,22 @@ function BackgroundCanvas({ attractRef = null, attractActive = false }) {
     };
 
     const drawVignette = () => {
-      const gradient = ctx.createRadialGradient(
+      const vignette = ctx.createRadialGradient(
         state.width / 2,
         state.height / 2,
-        Math.min(state.width, state.height) * 0.16,
+        Math.min(state.width, state.height) * 0.2,
         state.width / 2,
         state.height / 2,
-        Math.max(state.width, state.height) * 0.72
+        Math.max(state.width, state.height) * 0.75
       );
-      gradient.addColorStop(0, "rgba(6,11,18,0)");
-      gradient.addColorStop(1, "rgba(6,11,18,0.8)");
-      ctx.save();
-      ctx.fillStyle = gradient;
+      vignette.addColorStop(0, "rgba(5,10,18,0)");
+      vignette.addColorStop(1, "rgba(5,10,18,0.84)");
+      ctx.fillStyle = vignette;
       ctx.fillRect(0, 0, state.width, state.height);
-      ctx.restore();
     };
 
     resizeCanvas();
     updateAttractPoint();
-    for (let i = 0; i < particleCount; i += 1) {
-      particles.push(createParticle());
-    }
 
     const resizeObserver = new ResizeObserver(() => {
       resizeCanvas();
@@ -1068,31 +1072,30 @@ function BackgroundCanvas({ attractRef = null, attractActive = false }) {
     resizeObserver.observe(document.documentElement);
 
     const tick = (ts) => {
-      const dt = Math.min((ts - prevTs) / 16.67, 2);
+      const dt = Math.min((ts - prevTs) / 16.67, 2.2);
       prevTs = ts;
 
-      if (ts >= nextGridPulse) {
-        spawnGridPulse(ts);
-        nextGridPulse = ts + 3000;
-      }
-      if (ts >= nextMeteor) {
-        meteors.push({
+      if (ts >= nextComet) {
+        comets.push({
           start: ts,
-          duration: 400,
-          startX: state.width + 20 + Math.random() * 80,
-          startY: -20 + Math.random() * state.height * 0.25,
-          travel: Math.max(state.width, state.height) * 0.65,
-          length: 60 + Math.random() * 60,
+          duration: 1100 + Math.random() * 700,
+          startX: state.width + 80 + Math.random() * 180,
+          startY: Math.random() * state.height * 0.35,
+          travelX: state.width * (0.9 + Math.random() * 0.4),
+          travelY: state.height * (0.3 + Math.random() * 0.2),
+          tail: 70 + Math.random() * 70,
         });
-        nextMeteor = ts + 8000 + Math.random() * 4000;
+        nextComet = ts + 12000 + Math.random() * 10000;
       }
 
       updateAttractPoint();
       ctx.clearRect(0, 0, state.width, state.height);
-      drawGrid(ts);
-      updateAndDrawParticles(dt);
-      drawConnections();
-      updateAndDrawMeteors(ts);
+      fillBase();
+      drawWisps(ts);
+      drawWaves(ts);
+      updateAndDrawStars(ts, dt);
+      drawAttractAura(ts);
+      drawComets(ts);
       drawVignette();
 
       animationRef.current = requestAnimationFrame(tick);
