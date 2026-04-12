@@ -318,9 +318,9 @@ function TraitsRadar({ traits }) {
   ];
   return (
     <ResponsiveContainer width="100%" height={200}>
-      <RadarChart data={data} cx="50%" cy="50%" outerRadius="72%">
+      <RadarChart data={data} cx="50%" cy="50%" outerRadius="64%" margin={{ top: 8, right: 26, bottom: 8, left: 26 }}>
         <PolarGrid stroke="rgba(0,220,255,0.1)" />
-        <PolarAngleAxis dataKey="trait" tick={{ fill: "rgba(0,220,255,0.45)", fontSize: 10, fontFamily: "Share Tech Mono,monospace" }} />
+        <PolarAngleAxis dataKey="trait" tick={{ fill: "rgba(0,220,255,0.45)", fontSize: 9, fontFamily: "Share Tech Mono,monospace" }} />
         <Radar dataKey="value" stroke="#00dcff" fill="#00dcff" fillOpacity={0.12} strokeWidth={1.5} dot={{ fill: "#00dcff", r: 3 }} />
       </RadarChart>
     </ResponsiveContainer>
