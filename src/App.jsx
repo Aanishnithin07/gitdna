@@ -1675,7 +1675,6 @@ function LoadingPage({ step, message, feed, steps = LOADING_STEPS, ultraMode = f
             <path className="gd-helix-b" d="M10 60 C 30 108, 50 108, 70 60 C 90 12, 110 12, 130 60 C 150 108, 170 108, 190 60 C 210 12, 230 12, 230 60" />
           </svg>
           <div style={{ position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center", pointerEvents: "none" }}>
-            <div className="orb" style={{ fontSize: "1.1rem", fontWeight: 900, color: "#00dcff", textShadow: "0 0 12px rgba(0,220,255,0.6)" }}>GIT<span style={{ color: "#b347ea" }}>DNA</span></div>
           </div>
         </div>
 
