@@ -176,6 +176,20 @@ html,body{max-width:100%;overflow-x:hidden}
 .gd-tier-header-rising{border-color:rgba(57,255,20,0.5)!important;box-shadow:0 0 16px rgba(57,255,20,0.2),inset 0 0 10px rgba(57,255,20,0.08)}
 
 .gd-cognitive-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:12px}
+.gd-compare-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:12px}
+
+.gd-modal-overlay{position:fixed;inset:0;z-index:85;display:flex;align-items:center;justify-content:center;padding:18px;background:rgba(4,8,16,0.68);backdrop-filter:blur(8px)}
+.gd-modal-card{width:100%;max-width:460px;border:1px solid rgba(0,220,255,0.26);background:rgba(6,14,24,0.95);border-radius:8px;box-shadow:0 0 24px rgba(0,220,255,0.18);padding:20px 18px;position:relative}
+.gd-modal-title{font-family:'Share Tech Mono',monospace;font-size:.68rem;letter-spacing:.18em;color:rgba(0,220,255,0.58);margin-bottom:14px}
+
+.gd-winner-chip{display:inline-flex;align-items:center;justify-content:center;padding:2px 8px;border-radius:999px;font-family:'Share Tech Mono',monospace;font-size:.52rem;letter-spacing:.14em;text-transform:uppercase}
+.gd-winner-chip-cyan{border:1px solid rgba(0,220,255,0.4);color:#00dcff;background:rgba(0,220,255,0.1)}
+.gd-winner-chip-purple{border:1px solid rgba(179,71,234,0.4);color:#c46ef8;background:rgba(179,71,234,0.1)}
+.gd-winner-chip-gold{border:1px solid rgba(255,179,0,0.45);color:#ffb300;background:rgba(255,179,0,0.1)}
+.gd-lang-pill{display:inline-flex;align-items:center;padding:4px 9px;border-radius:999px;font-family:'Share Tech Mono',monospace;font-size:.58rem;letter-spacing:.08em}
+.gd-lang-pill-shared{border:1px solid rgba(255,179,0,0.4);color:#ffb300;background:rgba(255,179,0,0.1)}
+.gd-lang-pill-left{border:1px solid rgba(0,220,255,0.36);color:#00dcff;background:rgba(0,220,255,0.09)}
+.gd-lang-pill-right{border:1px solid rgba(179,71,234,0.36);color:#c46ef8;background:rgba(179,71,234,0.1)}
 
 .gd-founder-card{position:relative;border:1px solid rgba(255,179,0,0.34);background:radial-gradient(circle at 10% 0%,rgba(255,179,0,0.2),rgba(16,11,2,0.95) 42%,rgba(7,8,16,0.94) 100%);backdrop-filter:blur(12px);border-radius:6px;overflow:hidden;box-shadow:0 0 18px rgba(255,179,0,0.14),0 0 30px rgba(179,71,234,0.1)}
 .gd-founder-card::before{content:'';position:absolute;inset:0;background:linear-gradient(120deg,transparent 15%,rgba(255,179,0,.14) 36%,rgba(179,71,234,.16) 50%,rgba(0,220,255,.12) 64%,transparent 86%);background-size:200% 100%;animation:founder-pan 7s linear infinite;pointer-events:none}
@@ -300,6 +314,114 @@ function getTierMeta(tier) {
     return { icon: "⬡", label: "VETERAN", badgeClass: "gd-badge-cyan", headerClass: "gd-tier-header-veteran" };
   }
   return { icon: "↑", label: "RISING", badgeClass: "gd-badge-green", headerClass: "gd-tier-header-rising" };
+}
+
+function parseBattleParam(rawBattleParam) {
+  const raw = (rawBattleParam || "").trim();
+  if (!raw) return null;
+  const lower = raw.toLowerCase();
+  const splitterIndex = lower.indexOf("-vs-");
+  if (splitterIndex <= 0) return null;
+  const leftRaw = raw.slice(0, splitterIndex);
+  const rightRaw = raw.slice(splitterIndex + 4);
+  const left = parseGithubUsername(leftRaw);
+  const right = parseGithubUsername(rightRaw);
+  if (!left || !right) return null;
+  return { left, right };
+}
+
+function battleSlug(leftUsername, rightUsername) {
+  return `${leftUsername}-vs-${rightUsername}`;
+}
+
+function buildBattleFallbackAnalysis(leftBundle, rightBundle) {
+  const leftScore = Number(leftBundle?.devScore || 0);
+  const rightScore = Number(rightBundle?.devScore || 0);
+  const leftCommits = Number(leftBundle?.github?.recentCommits || 0);
+  const rightCommits = Number(rightBundle?.github?.recentCommits || 0);
+  const leftStars = Number(leftBundle?.github?.totalStars || 0);
+  const rightStars = Number(rightBundle?.github?.totalStars || 0);
+
+  const reviewWinner = leftScore === rightScore
+    ? "Code review is a dead tie."
+    : (leftScore > rightScore
+        ? `${leftBundle.username} wins code review with the sharper trait profile.`
+        : `${rightBundle.username} wins code review with the sharper trait profile.`);
+
+  const speedWinner = leftCommits === rightCommits
+    ? "Shipping speed is effectively equal based on recent commits."
+    : (leftCommits > rightCommits
+        ? `${leftBundle.username} ships faster from recent commit velocity (${leftCommits} vs ${rightCommits}).`
+        : `${rightBundle.username} ships faster from recent commit velocity (${rightCommits} vs ${leftCommits}).`);
+
+  const maintainabilityWinner = leftStars === rightStars
+    ? "Maintainability signal is tied in public validation."
+    : (leftStars > rightStars
+        ? `${leftBundle.username} appears more maintainable by public trust signal (${leftStars} stars).`
+        : `${rightBundle.username} appears more maintainable by public trust signal (${rightStars} stars).`);
+
+  return `${reviewWinner} ${speedWinner} ${maintainabilityWinner}`;
+}
+
+function normalizeAnalysisPayload(payload, fallbackUsername) {
+  const githubPayload = payload?.github || {};
+  const aiPayload = payload?.ai || {};
+  const user = githubPayload.user || {};
+  const normalizedUser = {
+    ...user,
+    login: user.login || fallbackUsername,
+  };
+
+  const normalizedRepos = Array.isArray(githubPayload.repos)
+    ? githubPayload.repos.map((repo) => {
+        const stars = repo?.stargazers_count ?? repo?.stars ?? 0;
+        const forks = repo?.forks_count ?? repo?.forks ?? 0;
+        const login = normalizedUser.login || fallbackUsername;
+        return {
+          ...repo,
+          stargazers_count: stars,
+          stars,
+          forks_count: forks,
+          forks,
+          html_url: repo?.html_url || `https://github.com/${login}/${repo?.name || ""}`,
+        };
+      })
+    : [];
+
+  const totalStars = githubPayload.totalStars
+    ?? githubPayload.total_stars
+    ?? normalizedRepos.reduce((sum, repo) => sum + (repo.stargazers_count || 0), 0);
+
+  const topLangs = Array.isArray(githubPayload.top_languages) && githubPayload.top_languages.length > 0
+    ? githubPayload.top_languages.map((item) => ({
+        lang: item.language || item.lang || "Unknown",
+        pct: Math.round(Number(item.percentage ?? item.pct ?? 0)),
+      }))
+    : extractTopLangs(normalizedRepos);
+
+  const normalizedGithub = {
+    ...githubPayload,
+    user: normalizedUser,
+    repos: normalizedRepos,
+    totalStars,
+    recentCommits: githubPayload.recentCommits ?? (githubPayload.recent_commit_messages?.length || 0),
+    contributions: Array.isArray(githubPayload.contributions) ? githubPayload.contributions : [],
+  };
+
+  return {
+    github: normalizedGithub,
+    aiData: aiPayload,
+    devScore: calcDevScore(normalizedUser, normalizedRepos),
+    langs: topLangs,
+    username: normalizedUser.login || fallbackUsername,
+  };
+}
+
+function getWinner(leftValue, rightValue) {
+  const left = Number(leftValue || 0);
+  const right = Number(rightValue || 0);
+  if (left === right) return "tie";
+  return left > right ? "left" : "right";
 }
 
 async function fetchContributionData(username) {
@@ -1295,7 +1417,7 @@ function LoadingPage({ step }) {
   );
 }
 
-function Dashboard({ github, aiData, devScore, langs, username, onReset }) {
+function Dashboard({ github, aiData, devScore, langs, username, onReset, onCompare, compareBusy }) {
   const { user, totalStars, recentCommits, contributions, repos } = github;
   const acctYears = ((Date.now() - new Date(user.created_at)) / (1000 * 60 * 60 * 24 * 365)).toFixed(1);
   const devClass = aiData?.devClass || "Unknown Archetype";
@@ -1317,6 +1439,9 @@ function Dashboard({ github, aiData, devScore, langs, username, onReset }) {
   const [showCardSaved, setShowCardSaved] = useState(false);
   const [showUnlockFlash, setShowUnlockFlash] = useState(true);
   const [showFounderBurst, setShowFounderBurst] = useState(false);
+  const [showCompareModal, setShowCompareModal] = useState(false);
+  const [opponentUsername, setOpponentUsername] = useState("");
+  const [compareError, setCompareError] = useState("");
 
   const cardEntranceStyle = (index) => ({
     opacity: 0,
@@ -1415,6 +1540,17 @@ function Dashboard({ github, aiData, devScore, langs, username, onReset }) {
             </div>
             <div className="gd-header-ring" style={{ flexShrink: 0 }}>
               <ScoreRing score={devScore} />
+              <button
+                className="gd-btn"
+                onClick={() => {
+                  setShowCompareModal(true);
+                  setCompareError("");
+                  setOpponentUsername("");
+                }}
+                style={{ marginTop: 10, padding: "7px 14px", fontSize: "0.66rem", width: "100%" }}
+              >
+                ⚔ COMPARE
+              </button>
             </div>
           </div>
 
@@ -1569,6 +1705,250 @@ function Dashboard({ github, aiData, devScore, langs, username, onReset }) {
           </div>
         </div>
       </div>
+
+      {showCompareModal && (
+        <div className="gd-modal-overlay" role="dialog" aria-modal="true">
+          <div className="gd-modal-card">
+            <div className="gd-modal-title">ENTER OPPONENT USERNAME</div>
+            <div style={{ marginBottom: 10 }}>
+              <input
+                className="gd-input"
+                placeholder="opponent username or github.com/user"
+                value={opponentUsername}
+                autoFocus
+                onChange={(event) => {
+                  setOpponentUsername(event.target.value);
+                  if (compareError) setCompareError("");
+                }}
+                onKeyDown={async (event) => {
+                  if (event.key !== "Enter") return;
+                  try {
+                    await onCompare(opponentUsername);
+                    setShowCompareModal(false);
+                    setOpponentUsername("");
+                  } catch (err) {
+                    setCompareError(err?.message || "Comparison failed.");
+                  }
+                }}
+              />
+            </div>
+            {compareError && (
+              <div style={{ marginBottom: 10, fontFamily: "Share Tech Mono,monospace", fontSize: "0.62rem", color: "#ff8b8b", letterSpacing: "0.05em" }}>
+                {compareError}
+              </div>
+            )}
+            <div style={{ display: "flex", gap: 8, justifyContent: "flex-end", flexWrap: "wrap" }}>
+              <button
+                className="gd-btn"
+                onClick={() => {
+                  setShowCompareModal(false);
+                  setCompareError("");
+                }}
+                style={{ padding: "8px 13px", fontSize: "0.64rem" }}
+              >
+                CANCEL
+              </button>
+              <button
+                className="gd-btn"
+                disabled={compareBusy || !opponentUsername.trim()}
+                onClick={async () => {
+                  try {
+                    await onCompare(opponentUsername);
+                    setShowCompareModal(false);
+                    setOpponentUsername("");
+                  } catch (err) {
+                    setCompareError(err?.message || "Comparison failed.");
+                  }
+                }}
+                style={{ padding: "8px 13px", fontSize: "0.64rem" }}
+              >
+                {compareBusy ? "LOADING..." : "START DUEL"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function CompareView({ battleData, onBack, onShareBattle }) {
+  const { left, right, analysis } = battleData;
+
+  const leftTraits = left?.aiData?.traits || {};
+  const rightTraits = right?.aiData?.traits || {};
+  const traitLabels = {
+    creativity: "Creativity",
+    discipline: "Discipline",
+    collaboration: "Collab",
+    boldness: "Boldness",
+    depth: "Depth",
+    velocity: "Velocity",
+  };
+
+  const radarData = Object.keys(traitLabels).map((key) => ({
+    trait: traitLabels[key],
+    left: Number(leftTraits[key] ?? 50),
+    right: Number(rightTraits[key] ?? 50),
+  }));
+
+  const leftLangMap = new Map((left?.langs || []).map((item) => [item.lang, item.pct]));
+  const rightLangMap = new Map((right?.langs || []).map((item) => [item.lang, item.pct]));
+  const sharedLangs = [...leftLangMap.keys()].filter((lang) => rightLangMap.has(lang));
+  const leftOnlyLangs = [...leftLangMap.keys()].filter((lang) => !rightLangMap.has(lang));
+  const rightOnlyLangs = [...rightLangMap.keys()].filter((lang) => !leftLangMap.has(lang));
+
+  const leftStats = {
+    score: left.devScore,
+    stars: left.github.totalStars,
+    followers: left.github.user?.followers,
+    repos: left.github.user?.public_repos,
+    commits: left.github.recentCommits,
+  };
+
+  const rightStats = {
+    score: right.devScore,
+    stars: right.github.totalStars,
+    followers: right.github.user?.followers,
+    repos: right.github.user?.public_repos,
+    commits: right.github.recentCommits,
+  };
+
+  const statRows = [
+    { key: "score", label: "DEV SCORE" },
+    { key: "stars", label: "TOTAL STARS" },
+    { key: "followers", label: "FOLLOWERS" },
+    { key: "repos", label: "PUBLIC REPOS" },
+    { key: "commits", label: "RECENT COMMITS" },
+  ];
+
+  return (
+    <div className="gd-root" style={{ position: "relative", zIndex: 2, paddingBottom: 60 }}>
+      <BackgroundCanvas />
+      <div className="gd-scanlines" />
+
+      <div style={{ maxWidth: 980, margin: "0 auto", padding: "24px 16px", position: "relative", zIndex: 2 }}>
+        <div className="gd-card gd-enter-scan" style={{ padding: "18px 18px", marginBottom: 12 }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
+            <div>
+              <div className="gd-section-label">DEVELOPER DUEL // SPLIT-SCREEN</div>
+              <div className="orb" style={{ color: "#dff7ff", letterSpacing: "0.06em", fontSize: "0.98rem" }}>
+                {left.username} VS {right.username}
+              </div>
+            </div>
+            <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+              <button className="gd-btn" onClick={onShareBattle} style={{ padding: "8px 14px", fontSize: "0.68rem" }}>⤴ SHARE BATTLE</button>
+              <button className="gd-btn" onClick={onBack} style={{ padding: "8px 14px", fontSize: "0.68rem" }}>◀ BACK</button>
+            </div>
+          </div>
+        </div>
+
+        <div className="gd-compare-grid" style={{ marginBottom: 12 }}>
+          <div className="gd-card gd-enter-scan" style={{ padding: "16px 16px", borderColor: "rgba(0,220,255,0.45)" }}>
+            <div className="gd-section-label">LEFT // CYAN PROFILE</div>
+            <div className="orb" style={{ color: "#00dcff", fontSize: "0.96rem", letterSpacing: "0.05em", marginBottom: 10 }}>{left.username}</div>
+            <div style={{ display: "flex", justifyContent: "center" }}>
+              <ScoreRing score={left.devScore} />
+            </div>
+          </div>
+
+          <div className="gd-card-purple gd-enter-scan" style={{ padding: "16px 16px" }}>
+            <div className="gd-section-label" style={{ color: "rgba(179,71,234,0.65)" }}>RIGHT // PURPLE PROFILE</div>
+            <div className="orb" style={{ color: "#c46ef8", fontSize: "0.96rem", letterSpacing: "0.05em", marginBottom: 10 }}>{right.username}</div>
+            <div style={{ display: "flex", justifyContent: "center" }}>
+              <ScoreRing score={right.devScore} />
+            </div>
+          </div>
+        </div>
+
+        <div className="gd-card gd-enter-scan" style={{ padding: "18px 18px", marginBottom: 12 }}>
+          <div className="gd-section-label">STAT DOMINANCE</div>
+          <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+            {statRows.map((row) => {
+              const leftValue = leftStats[row.key];
+              const rightValue = rightStats[row.key];
+              const winner = getWinner(leftValue, rightValue);
+              return (
+                <div key={row.key} className="gd-card" style={{ padding: "10px 12px", background: "rgba(6,14,24,0.72)" }}>
+                  <div style={{ display: "grid", gridTemplateColumns: "1fr auto 1fr", gap: 10, alignItems: "center" }}>
+                    <div style={{ textAlign: "left" }}>
+                      <div className="orb" style={{ color: "#00dcff", fontSize: "0.92rem" }}>{Number(leftValue || 0).toLocaleString()}</div>
+                      <div style={{ marginTop: 3 }}>
+                        {winner === "left" && <span className="gd-winner-chip gd-winner-chip-cyan">WINNER</span>}
+                        {winner === "tie" && <span className="gd-winner-chip gd-winner-chip-gold">TIE</span>}
+                      </div>
+                    </div>
+
+                    <div style={{ textAlign: "center" }}>
+                      <div style={{ fontFamily: "Share Tech Mono,monospace", fontSize: "0.62rem", letterSpacing: "0.12em", color: "rgba(200,232,255,0.62)" }}>{row.label}</div>
+                    </div>
+
+                    <div style={{ textAlign: "right" }}>
+                      <div className="orb" style={{ color: "#c46ef8", fontSize: "0.92rem" }}>{Number(rightValue || 0).toLocaleString()}</div>
+                      <div style={{ marginTop: 3 }}>
+                        {winner === "right" && <span className="gd-winner-chip gd-winner-chip-purple">WINNER</span>}
+                        {winner === "tie" && <span className="gd-winner-chip gd-winner-chip-gold">TIE</span>}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+
+        <div className="gd-card gd-enter-scan" style={{ padding: "18px 18px", marginBottom: 12 }}>
+          <div className="gd-section-label">TRAIT RADAR OVERLAY</div>
+          <div style={{ width: "100%", height: 260 }}>
+            <ResponsiveContainer width="100%" height="100%">
+              <RadarChart data={radarData} cx="50%" cy="50%" outerRadius="70%" margin={{ top: 8, right: 28, bottom: 8, left: 28 }}>
+                <PolarGrid stroke="rgba(0,220,255,0.1)" />
+                <PolarAngleAxis dataKey="trait" tick={{ fill: "rgba(0,220,255,0.45)", fontSize: 10, fontFamily: "Share Tech Mono,monospace" }} />
+                <Radar name={left.username} dataKey="left" stroke="#00dcff" fill="#00dcff" fillOpacity={0.15} strokeWidth={1.8} />
+                <Radar name={right.username} dataKey="right" stroke="#b347ea" fill="#b347ea" fillOpacity={0.15} strokeWidth={1.8} />
+              </RadarChart>
+            </ResponsiveContainer>
+          </div>
+        </div>
+
+        <div className="gd-card gd-enter-scan" style={{ padding: "18px 18px", marginBottom: 12 }}>
+          <div className="gd-section-label">LANGUAGE INTERSECTION MAP</div>
+
+          <div style={{ marginBottom: 10 }}>
+            <div style={{ fontFamily: "Share Tech Mono,monospace", fontSize: "0.6rem", letterSpacing: "0.12em", color: "rgba(255,179,0,0.62)", marginBottom: 6 }}>SHARED LANGUAGES</div>
+            <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
+              {sharedLangs.length > 0 ? sharedLangs.map((lang) => (
+                <span key={`shared-${lang}`} className="gd-lang-pill gd-lang-pill-shared">{lang}</span>
+              )) : <span style={{ color: "rgba(200,232,255,0.42)", fontSize: "0.75rem" }}>No shared top languages.</span>}
+            </div>
+          </div>
+
+          <div className="gd-compare-grid">
+            <div>
+              <div style={{ fontFamily: "Share Tech Mono,monospace", fontSize: "0.6rem", letterSpacing: "0.12em", color: "rgba(0,220,255,0.62)", marginBottom: 6 }}>UNIQUE TO {left.username.toUpperCase()}</div>
+              <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
+                {leftOnlyLangs.length > 0 ? leftOnlyLangs.map((lang) => (
+                  <span key={`left-${lang}`} className="gd-lang-pill gd-lang-pill-left">{lang}</span>
+                )) : <span style={{ color: "rgba(200,232,255,0.42)", fontSize: "0.75rem" }}>No unique languages in top set.</span>}
+              </div>
+            </div>
+
+            <div>
+              <div style={{ fontFamily: "Share Tech Mono,monospace", fontSize: "0.6rem", letterSpacing: "0.12em", color: "rgba(179,71,234,0.7)", marginBottom: 6 }}>UNIQUE TO {right.username.toUpperCase()}</div>
+              <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
+                {rightOnlyLangs.length > 0 ? rightOnlyLangs.map((lang) => (
+                  <span key={`right-${lang}`} className="gd-lang-pill gd-lang-pill-right">{lang}</span>
+                )) : <span style={{ color: "rgba(200,232,255,0.42)", fontSize: "0.75rem" }}>No unique languages in top set.</span>}
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div className="gd-card-gold gd-enter-scan" style={{ padding: "18px 18px", marginBottom: 12 }}>
+          <div className="gd-section-label" style={{ color: "rgba(255,179,0,0.75)" }}>⚔ AI BATTLE ANALYSIS</div>
+          <p style={{ fontSize: "0.88rem", color: "rgba(231,236,255,0.8)", lineHeight: 1.65 }}>{analysis}</p>
+        </div>
+      </div>
     </div>
   );
 }
@@ -1582,9 +1962,50 @@ export default function GitDNA() {
   const [devScore, setDevScore] = useState(0);
   const [langs, setLangs] = useState([]);
   const [activeUsername, setActiveUsername] = useState("");
+  const [battleData, setBattleData] = useState(null);
+  const [compareBusy, setCompareBusy] = useState(false);
   const autoAnalyzeRef = useRef(false);
   const streamRef = useRef(null);
   const API_URL = (import.meta.env.VITE_API_URL || "http://localhost:8000").replace(/\/$/, "");
+
+  const fetchProfilePayload = async (username) => {
+    const endpoint = `${API_URL}/api/analyze/${encodeURIComponent(username)}`;
+    const res = await fetch(endpoint, { headers: { Accept: "application/json" } });
+    if (!res.ok) {
+      let detail = `Backend error (${res.status})`;
+      try {
+        const errJson = await res.json();
+        detail = errJson?.detail || detail;
+      } catch {
+        // Keep default detail.
+      }
+      throw new Error(detail);
+    }
+    return res.json();
+  };
+
+  const fetchBattleNarrative = async (leftPayload, rightPayload) => {
+    const endpoint = `${API_URL}/api/battle`;
+    const res = await fetch(endpoint, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Accept: "application/json" },
+      body: JSON.stringify({ left: leftPayload, right: rightPayload }),
+    });
+
+    if (!res.ok) {
+      let detail = `Battle API error (${res.status})`;
+      try {
+        const errJson = await res.json();
+        detail = errJson?.detail || detail;
+      } catch {
+        // Keep default detail.
+      }
+      throw new Error(detail);
+    }
+
+    const battle = await res.json();
+    return battle?.analysis || "Battle analysis unavailable.";
+  };
 
   async function analyze(username) {
     const parsedUsername = parseGithubUsername(username);
@@ -1597,53 +2018,18 @@ export default function GitDNA() {
     setPhase("loading");
     setLoadingStep(0);
     setError("");
+    setBattleData(null);
 
     const endpoint = `${API_URL}/api/analyze/${encodeURIComponent(parsedUsername)}`;
 
     const applyResult = (payload) => {
-      const githubPayload = payload?.github || {};
-      const aiPayload = payload?.ai || {};
-      const user = githubPayload.user || {};
-      const normalizedRepos = Array.isArray(githubPayload.repos)
-        ? githubPayload.repos.map((repo) => {
-            const stars = repo?.stargazers_count ?? repo?.stars ?? 0;
-            const forks = repo?.forks_count ?? repo?.forks ?? 0;
-            const login = user.login || parsedUsername;
-            return {
-              ...repo,
-              stargazers_count: stars,
-              stars,
-              forks_count: forks,
-              forks,
-              html_url: repo?.html_url || `https://github.com/${login}/${repo?.name || ""}`,
-            };
-          })
-        : [];
-
-      const totalStars = githubPayload.totalStars ?? githubPayload.total_stars ?? normalizedRepos.reduce((sum, repo) => sum + (repo.stargazers_count || 0), 0);
-      const topLangs = Array.isArray(githubPayload.top_languages) && githubPayload.top_languages.length > 0
-        ? githubPayload.top_languages.map((item) => ({
-            lang: item.language || item.lang || "Unknown",
-            pct: Math.round(Number(item.percentage ?? item.pct ?? 0)),
-          }))
-        : extractTopLangs(normalizedRepos);
-
-      const normalizedGithub = {
-        ...githubPayload,
-        user,
-        repos: normalizedRepos,
-        totalStars,
-        recentCommits: githubPayload.recentCommits ?? (githubPayload.recent_commit_messages?.length || 0),
-        contributions: Array.isArray(githubPayload.contributions) ? githubPayload.contributions : [],
-      };
-
-      setGithub(normalizedGithub);
-      setAiData(aiPayload);
-      setDevScore(calcDevScore(user, normalizedRepos));
-      setLangs(topLangs);
-
-      const profileUsername = user.login || parsedUsername;
-      setActiveUsername(profileUsername);
+      const bundle = normalizeAnalysisPayload(payload, parsedUsername);
+      setGithub(bundle.github);
+      setAiData(bundle.aiData);
+      setDevScore(bundle.devScore);
+      setLangs(bundle.langs);
+      setActiveUsername(bundle.username);
+      const profileUsername = bundle.username;
       window.history.pushState({}, "", `/?u=${encodeURIComponent(profileUsername)}`);
       setLoadingStep(9);
       setPhase("dashboard");
@@ -1655,20 +2041,7 @@ export default function GitDNA() {
     };
 
     const fallbackFetch = async () => {
-      const res = await fetch(endpoint, {
-        headers: { Accept: "application/json" },
-      });
-      if (!res.ok) {
-        let detail = `Backend error (${res.status})`;
-        try {
-          const errJson = await res.json();
-          detail = errJson?.detail || detail;
-        } catch {
-          // Keep default detail.
-        }
-        throw new Error(detail);
-      }
-      const data = await res.json();
+      const data = await fetchProfilePayload(parsedUsername);
       applyResult(data);
     };
 
@@ -1721,6 +2094,91 @@ export default function GitDNA() {
     }
   }
 
+  async function executeBattle(leftInput, rightInput, { showLoading = false } = {}) {
+    const leftUsername = parseGithubUsername(leftInput);
+    const rightUsername = parseGithubUsername(rightInput);
+
+    if (!leftUsername || !rightUsername) {
+      throw new Error("Provide two valid GitHub usernames for comparison.");
+    }
+
+    if (showLoading) {
+      setPhase("loading");
+      setLoadingStep(0);
+      setError("");
+    }
+
+    setCompareBusy(true);
+    try {
+      const [leftPayload, rightPayload] = await Promise.all([
+        fetchProfilePayload(leftUsername),
+        fetchProfilePayload(rightUsername),
+      ]);
+
+      if (showLoading) {
+        setLoadingStep(7);
+      }
+
+      const leftBundle = normalizeAnalysisPayload(leftPayload, leftUsername);
+      const rightBundle = normalizeAnalysisPayload(rightPayload, rightUsername);
+
+      let analysis = "";
+      try {
+        analysis = await fetchBattleNarrative(leftPayload, rightPayload);
+      } catch {
+        analysis = buildBattleFallbackAnalysis(leftBundle, rightBundle);
+      }
+
+      setGithub(leftBundle.github);
+      setAiData(leftBundle.aiData);
+      setDevScore(leftBundle.devScore);
+      setLangs(leftBundle.langs);
+      setActiveUsername(leftBundle.username);
+      setBattleData({ left: leftBundle, right: rightBundle, analysis });
+
+      const slug = battleSlug(leftBundle.username, rightBundle.username);
+      window.history.pushState({}, "", `/?battle=${encodeURIComponent(slug)}`);
+
+      if (showLoading) {
+        setLoadingStep(9);
+      }
+      setPhase("dashboard");
+    } finally {
+      setCompareBusy(false);
+    }
+  }
+
+  async function onCompareFromDashboard(opponentInput) {
+    const currentUsername = activeUsername || github?.user?.login;
+    if (!currentUsername) {
+      throw new Error("Current profile not loaded yet.");
+    }
+    await executeBattle(currentUsername, opponentInput, { showLoading: false });
+  }
+
+  function exitBattleView() {
+    setBattleData(null);
+    const fallbackUsername = activeUsername || github?.user?.login;
+    if (fallbackUsername) {
+      window.history.pushState({}, "", `/?u=${encodeURIComponent(fallbackUsername)}`);
+    } else {
+      window.history.pushState({}, "", "/");
+    }
+  }
+
+  async function shareBattleLink() {
+    if (!battleData?.left?.username || !battleData?.right?.username) return;
+    const slug = battleSlug(battleData.left.username, battleData.right.username);
+    const path = `/?battle=${encodeURIComponent(slug)}`;
+    try {
+      if (navigator?.clipboard?.writeText) {
+        await navigator.clipboard.writeText(path);
+      }
+    } catch {
+      // Ignore clipboard failures to avoid breaking the view.
+    }
+  }
+
   useEffect(() => () => {
     if (streamRef.current) {
       streamRef.current.close();
@@ -1731,7 +2189,19 @@ export default function GitDNA() {
   useEffect(() => {
     if (autoAnalyzeRef.current) return;
     autoAnalyzeRef.current = true;
-    const urlUsername = new URLSearchParams(window.location.search).get("u");
+
+    const params = new URLSearchParams(window.location.search);
+    const battleParam = params.get("battle");
+    const urlBattle = parseBattleParam(battleParam);
+    if (urlBattle) {
+      executeBattle(urlBattle.left, urlBattle.right, { showLoading: true }).catch((err) => {
+        setError(err?.message || "Battle analysis failed.");
+        setPhase("error");
+      });
+      return;
+    }
+
+    const urlUsername = params.get("u");
     if (urlUsername && urlUsername.trim()) {
       const parsedUsername = parseGithubUsername(urlUsername.trim());
       if (parsedUsername) analyze(parsedUsername);
@@ -1770,19 +2240,31 @@ export default function GitDNA() {
   return (
     <>
       <style>{CSS}</style>
-      <Dashboard
-        github={github}
-        aiData={aiData}
-        devScore={devScore}
-        langs={langs}
-        username={activeUsername}
-        onReset={() => {
-          setPhase("landing");
-          setGithub(null);
-          setAiData(null);
-          setActiveUsername("");
-        }}
-      />
+      {battleData ? (
+        <CompareView
+          battleData={battleData}
+          onBack={exitBattleView}
+          onShareBattle={shareBattleLink}
+        />
+      ) : (
+        <Dashboard
+          github={github}
+          aiData={aiData}
+          devScore={devScore}
+          langs={langs}
+          username={activeUsername}
+          compareBusy={compareBusy}
+          onCompare={onCompareFromDashboard}
+          onReset={() => {
+            setPhase("landing");
+            setBattleData(null);
+            setGithub(null);
+            setAiData(null);
+            setActiveUsername("");
+            window.history.pushState({}, "", "/");
+          }}
+        />
+      )}
     </>
   );
 }

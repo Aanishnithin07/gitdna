@@ -21,6 +21,12 @@ SYSTEM_PROMPT = (
     "You MUST respond with ONLY a valid JSON object — no explanation, no markdown, no backticks."
 )
 
+BATTLE_SYSTEM_PROMPT = (
+    "You are a brutally honest staff engineer judging two developer profiles. "
+    "Answer as direct battle analysis text with no markdown. "
+    "Be opinionated but grounded in the provided numbers."
+)
+
 
 def _clamp_int(value: float, low: int = 0, high: int = 100) -> int:
     return int(max(low, min(high, round(value))))
@@ -183,6 +189,100 @@ def _extract_metrics(github_data: dict[str, Any]) -> dict[str, Any]:
         "last_commit_messages": commit_messages[:10],
         "recent_commits_30d": _estimate_recent_commits_30d(github_data),
     }
+
+
+def _extract_github_section(payload: dict[str, Any]) -> dict[str, Any]:
+    if not isinstance(payload, dict):
+        return {}
+    github = payload.get("github")
+    if isinstance(github, dict):
+        return github
+    return payload
+
+
+def _trait(payload: dict[str, Any], key: str, default: float = 50.0) -> float:
+    if not isinstance(payload, dict):
+        return default
+
+    ai_section = payload.get("ai")
+    if not isinstance(ai_section, dict):
+        ai_section = payload.get("aiData")
+    if not isinstance(ai_section, dict):
+        return default
+
+    traits = ai_section.get("traits")
+    if not isinstance(traits, dict):
+        return default
+
+    value = _to_float(traits.get(key), None)
+    return value if value is not None else default
+
+
+def _battle_fallback(left_payload: dict[str, Any], right_payload: dict[str, Any]) -> str:
+    left_github = _extract_github_section(left_payload)
+    right_github = _extract_github_section(right_payload)
+    left = _extract_metrics(left_github)
+    right = _extract_metrics(right_github)
+
+    left_name = left["username"]
+    right_name = right["username"]
+
+    left_review = _trait(left_payload, "discipline") + _trait(left_payload, "depth") + _trait(left_payload, "collaboration")
+    right_review = _trait(right_payload, "discipline") + _trait(right_payload, "depth") + _trait(right_payload, "collaboration")
+
+    left_speed = _trait(left_payload, "velocity") + min(left["recent_commits_30d"], 60)
+    right_speed = _trait(right_payload, "velocity") + min(right["recent_commits_30d"], 60)
+
+    left_maint = _trait(left_payload, "discipline") + _trait(left_payload, "depth") + min(left["total_stars"] / 20, 35)
+    right_maint = _trait(right_payload, "discipline") + _trait(right_payload, "depth") + min(right["total_stars"] / 20, 35)
+
+    review_winner = left_name if left_review >= right_review else right_name
+    speed_winner = left_name if left_speed >= right_speed else right_name
+    maintain_winner = left_name if left_maint >= right_maint else right_name
+
+    return (
+        f"Code review winner: {review_winner}, because the review-stack score is higher "
+        f"({left_name}: {left_review:.1f}, {right_name}: {right_review:.1f}). "
+        f"Shipping speed winner: {speed_winner}, driven by velocity plus recent commit pressure "
+        f"({left_name}: {left_speed:.1f}, {right_name}: {right_speed:.1f}). "
+        f"Maintainability winner: {maintain_winner}, based on discipline-depth balance and public trust signal "
+        f"({left_name}: {left_maint:.1f}, {right_name}: {right_maint:.1f})."
+    )
+
+
+async def analyze_battle(left_payload: dict[str, Any], right_payload: dict[str, Any]) -> str:
+    fallback = _battle_fallback(left_payload, right_payload)
+    api_key = (os.getenv("GROQ_API_KEY") or "").strip()
+    if not api_key:
+        return fallback
+
+    left_github = _extract_github_section(left_payload)
+    right_github = _extract_github_section(right_payload)
+    left = _extract_metrics(left_github)
+    right = _extract_metrics(right_github)
+
+    user_prompt = (
+        "Compare these two developer profiles. Who wins in a code review? "
+        "Who ships faster? Who writes more maintainable code? Be direct and opinionated.\n\n"
+        f"Left profile: {json.dumps(left)}\n"
+        f"Right profile: {json.dumps(right)}"
+    )
+
+    try:
+        response = await client.chat.completions.create(
+            model=MODEL_NAME,
+            temperature=0.5,
+            max_tokens=260,
+            messages=[
+                {"role": "system", "content": BATTLE_SYSTEM_PROMPT},
+                {"role": "user", "content": user_prompt},
+            ],
+        )
+        content = response.choices[0].message.content if response.choices else ""
+        text = str(content or "").replace("```", "").strip()
+        return text or fallback
+    except Exception:
+        return fallback
 
 
 def _fallback_analysis(github_data: dict[str, Any]) -> dict[str, Any]:
@@ -460,3 +560,6 @@ class GroqAIEngine:
 
     async def generate_profile_insights(self, github_data: dict[str, Any]) -> dict[str, Any]:
         return await analyze_developer(github_data)
+
+    async def generate_battle_analysis(self, left_payload: dict[str, Any], right_payload: dict[str, Any]) -> str:
+        return await analyze_battle(left_payload, right_payload)

@@ -9,6 +9,7 @@ from dotenv import load_dotenv
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
+from pydantic import BaseModel
 from slowapi import Limiter, _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
 from slowapi.util import get_remote_address
@@ -45,6 +46,11 @@ _cache: dict[str, dict[str, Any]] = {}
 
 analyzer = GitHubAnalyzer(os.getenv("GITHUB_TOKEN"))
 ai_engine = GroqAIEngine(os.getenv("GROQ_API_KEY"))
+
+
+class BattlePayload(BaseModel):
+    left: dict[str, Any]
+    right: dict[str, Any]
 
 
 def _cache_key(username: str) -> str:
@@ -134,3 +140,13 @@ async def analyze_profile(request: Request, username: str):
             "X-Accel-Buffering": "no",
         },
     )
+
+
+@app.post("/api/battle")
+@limiter.limit("10/minute")
+async def battle_analysis(request: Request, payload: BattlePayload) -> dict[str, str]:
+    if not payload.left or not payload.right:
+        raise HTTPException(status_code=400, detail="Both profiles are required for battle analysis.")
+
+    analysis = await ai_engine.generate_battle_analysis(payload.left, payload.right)
+    return {"analysis": analysis}
