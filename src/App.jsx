@@ -160,6 +160,7 @@ html,body{max-width:100%;overflow-x:hidden}
 }
 @keyframes toast-down{from{opacity:0;transform:translateY(-24px)}to{opacity:1;transform:translateY(0)}}
 @keyframes dashboard-wake{0%{opacity:.7}100%{opacity:1}}
+@keyframes tier-halo-pulse{0%,100%{opacity:.6}50%{opacity:1}}
 
 .gd-glitch{animation:glitch 5s infinite}
 .gd-dashboard-wake{animation:dashboard-wake .2s ease}
@@ -759,7 +760,7 @@ function AnimatedCounter({ target, delay = 0, duration = 1600, ticker = false })
   return <>{val.toLocaleString()}</>;
 }
 
-function ScoreRing({ score, specialMode = null }) {
+function ScoreRing({ score, specialMode = null, percentileText = "", percentileColor = null }) {
   const r = 54, circ = 2 * Math.PI * r;
   const [off, setOff] = useState(circ);
   const [progress, setProgress] = useState(0);
@@ -793,6 +794,8 @@ function ScoreRing({ score, specialMode = null }) {
   const sparkAngle = progress * 2 * Math.PI;
   const sparkX = 65 + r * Math.cos(sparkAngle);
   const sparkY = 65 + r * Math.sin(sparkAngle);
+  const labelColor = useGold ? "rgba(255,215,0,0.45)" : "rgba(0,220,255,0.4)";
+  const resolvedPercentileColor = percentileColor || (useGold ? "rgba(255,215,0,0.7)" : "rgba(0,220,255,0.7)");
   return (
     <div style={{ position: "relative", width: 130, height: 130, flexShrink: 0 }}>
       <svg width="130" height="130" style={{ transform: "rotate(-90deg)", position: "absolute", inset: 0 }}>
@@ -815,7 +818,12 @@ function ScoreRing({ score, specialMode = null }) {
         <div style={{ fontFamily: "Orbitron,monospace", fontSize: "1.75rem", fontWeight: 900, color: scoreColor, lineHeight: 1, textShadow: `0 0 12px ${scoreColor}88` }}>
           <AnimatedCounter target={score} delay={500} duration={1800} />
         </div>
-        <div style={{ fontFamily: "Share Tech Mono,monospace", fontSize: "0.55rem", color: useGold ? "rgba(255,215,0,0.45)" : "rgba(0,220,255,0.4)", letterSpacing: "0.2em", marginTop: 3 }}>DEV SCORE</div>
+        <div style={{ fontFamily: "Share Tech Mono,monospace", fontSize: percentileText ? "0.5rem" : "0.55rem", color: labelColor, letterSpacing: "0.2em", marginTop: 3 }}>DEV SCORE</div>
+        {percentileText && (
+          <div style={{ fontFamily: "Share Tech Mono,monospace", fontSize: "0.5rem", color: resolvedPercentileColor, letterSpacing: "0.1em", marginTop: 2 }}>
+            {percentileText}
+          </div>
+        )}
       </div>
     </div>
   );
@@ -2656,6 +2664,77 @@ function Dashboard({
   const shareInitial = ((user.login || user.name || "?").charAt(0) || "?").toUpperCase();
   const shouldShowRoastSection = isRoasting || Boolean(roastReport) || Boolean(roastError);
   const isTimeMachineUnlocked = accountAgeYears >= 1;
+  const tierVisualKey = founderActive ? "LEGENDARY" : String(archetype.tier || "RISING").toUpperCase();
+  const tierVisual = {
+    LEGENDARY: {
+      icon: "♛",
+      label: "LEGENDARY",
+      color: "#FFD700",
+      halo: "rgba(255,215,0,0.12)",
+      text: "rgba(255,215,0,0.7)",
+      barFill: "rgba(255,215,0,0.6)",
+    },
+    ELITE: {
+      icon: "◈",
+      label: "ELITE",
+      color: "#b347ea",
+      halo: "rgba(179,71,234,0.12)",
+      text: "rgba(179,71,234,0.7)",
+      barFill: "rgba(179,71,234,0.6)",
+    },
+    VETERAN: {
+      icon: "⬡",
+      label: "VETERAN",
+      color: "#00dcff",
+      halo: "rgba(0,220,255,0.12)",
+      text: "rgba(0,220,255,0.7)",
+      barFill: "rgba(0,220,255,0.6)",
+    },
+    RISING: {
+      icon: "↑",
+      label: "RISING",
+      color: "#39ff14",
+      halo: "rgba(57,255,20,0.12)",
+      text: "rgba(57,255,20,0.7)",
+      barFill: "rgba(57,255,20,0.6)",
+    },
+  }[tierVisualKey] || {
+    icon: "↑",
+    label: "RISING",
+    color: "#39ff14",
+    halo: "rgba(57,255,20,0.12)",
+    text: "rgba(57,255,20,0.7)",
+    barFill: "rgba(57,255,20,0.6)",
+  };
+
+  const scorePercentileLabel = devScore >= 90
+    ? "TOP 1% OF GITHUB"
+    : devScore >= 75
+      ? "TOP 8% OF GITHUB"
+      : devScore >= 60
+        ? "TOP 18% OF GITHUB"
+        : devScore >= 40
+          ? "TOP 35% OF GITHUB"
+          : "TOP 60% OF GITHUB";
+
+  const starsPortion = Math.min(30, Math.floor(totalStars / 8));
+  const followersPortion = Math.min(20, Math.floor(Math.sqrt(user.followers || 0) * 2));
+  const agePortion = Math.min(14, Math.floor(accountAgeYears * 2.5));
+
+  const scoreBreakdown = [
+    {
+      label: "REPUTATION",
+      value: Math.max(0, Math.min(100, Math.round(((starsPortion + followersPortion) / 50) * 100))),
+    },
+    {
+      label: "ACTIVITY",
+      value: Math.max(0, Math.min(100, Math.round((Math.min(Number(recentCommits || 0), 30) / 30) * 100))),
+    },
+    {
+      label: "EXPERIENCE",
+      value: Math.max(0, Math.min(100, Math.round((agePortion / 14) * 100))),
+    },
+  ];
 
   const handleCloseTimeMachine = () => {
     setShowTimeMachine(false);
@@ -2954,7 +3033,65 @@ function Dashboard({
               </div>
             </div>
             <div className="gd-header-ring" style={{ flexShrink: 0 }}>
-              <ScoreRing score={devScore} specialMode={founderActive || isTorvalds ? "gold" : null} />
+              <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 8, width: 150, margin: "0 auto" }}>
+                <div
+                  className="orb"
+                  style={{
+                    fontSize: "0.62rem",
+                    letterSpacing: "0.2em",
+                    fontWeight: 600,
+                    color: tierVisual.color,
+                    textShadow: `0 0 8px ${tierVisual.color}`,
+                    textAlign: "center",
+                  }}
+                >
+                  {tierVisual.icon} {tierVisual.label}
+                </div>
+
+                <div style={{ position: "relative", width: 150, height: 150, display: "flex", alignItems: "center", justifyContent: "center" }}>
+                  <div
+                    style={{
+                      position: "absolute",
+                      inset: 0,
+                      borderRadius: "50%",
+                      background: `radial-gradient(circle, ${tierVisual.halo} 0%, transparent 70%)`,
+                      zIndex: 0,
+                      animation: "tier-halo-pulse 3s ease-in-out infinite",
+                    }}
+                  />
+                  <div style={{ position: "relative", zIndex: 1 }}>
+                    <ScoreRing
+                      score={devScore}
+                      specialMode={founderActive || isTorvalds ? "gold" : null}
+                      percentileText={scorePercentileLabel}
+                      percentileColor={tierVisual.text}
+                    />
+                  </div>
+                </div>
+
+                <div style={{ width: 130, display: "flex", flexDirection: "column", gap: 5 }}>
+                  {scoreBreakdown.map((item, index) => (
+                    <div key={`score-part-${item.label}`}>
+                      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 3 }}>
+                        <span style={{ fontFamily: "Share Tech Mono,monospace", fontSize: "0.52rem", color: "rgba(0,220,255,0.35)", letterSpacing: "0.08em" }}>{item.label}</span>
+                        <span style={{ fontFamily: "Share Tech Mono,monospace", fontSize: "0.52rem", color: "rgba(0,220,255,0.35)", letterSpacing: "0.08em" }}>{item.value}%</span>
+                      </div>
+                      <div style={{ height: 2, borderRadius: 1, background: "rgba(255,255,255,0.05)", overflow: "hidden", position: "relative" }}>
+                        <div
+                          style={{
+                            height: "100%",
+                            borderRadius: 1,
+                            background: tierVisual.barFill,
+                            width: `${item.value}%`,
+                            animation: `bar-expand .9s cubic-bezier(.2,.8,.2,1) ${index * 120}ms both`,
+                            "--w": `${item.value}%`,
+                          }}
+                        />
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
               <button
                 className="gd-btn"
                 onClick={() => {
