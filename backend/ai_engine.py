@@ -48,6 +48,13 @@ ROAST_SYSTEM_PROMPT = (
     "}"
 )
 
+TIME_MACHINE_SYSTEM_PROMPT = (
+    "You are the narrator of a developer's career story. "
+    "Write like a legendary game narrator — cinematic, punchy, occasionally dramatic. "
+    "One sentence per year. Ground every sentence in the actual numbers. "
+    "Never be generic. Return ONLY valid JSON."
+)
+
 HARDCODED_LAZY_COMMIT_LINE = (
     "Your commit messages read like someone typing with their elbows. "
     "'fix', 'wip', 'update'? Git blame will find you."
@@ -597,6 +604,66 @@ async def analyze_roast(profile_payload: dict[str, Any]) -> dict[str, Any]:
         return fallback
 
 
+async def analyze_time_machine_narration(payload: dict[str, Any]) -> dict[str, Any]:
+    api_key = (os.getenv("GROQ_API_KEY") or "").strip()
+    if not api_key:
+        raise RuntimeError("Groq API key is not configured.")
+
+    username = str(payload.get("username") or "unknown")
+    year_data = payload.get("yearData") if isinstance(payload.get("yearData"), list) else []
+    first_language = str(payload.get("firstLanguage") or "Unknown")
+    current_language = str(payload.get("currentLanguage") or "Unknown")
+    velocity_multiplier = payload.get("velocityMultiplier")
+    total_years_active = payload.get("totalYearsActive")
+
+    user_prompt = (
+        "Narrate this developer's journey year by year.\n"
+        f"Username: {username}\n"
+        f"Years data: {json.dumps(year_data)}\n\n"
+        "Return exactly this JSON structure:\n"
+        "{\n"
+        '  "yearNarrations": {\n'
+        '    "2019": "one cinematic sentence about that year",\n'
+        '    "2020": "one cinematic sentence about that year"\n'
+        "  },\n"
+        '  "evolutionSummary": "two sentences. First: their journey arc from '
+        f"{first_language}"
+        " to "
+        f"{current_language}"
+        '. Second: velocity insight using the '
+        f"{velocity_multiplier}"
+        'x number.",\n'
+        '  "heroTitle": "a 3-5 word legendary title earned from their full journey",\n'
+        '  "originStory": "one dramatic sentence about the very first year. What kind of developer were they when they started."\n'
+        "}\n"
+        f"Total years active: {total_years_active}."
+    )
+
+    response = await client.chat.completions.create(
+        model=MODEL_NAME,
+        temperature=0.65,
+        max_tokens=1200,
+        messages=[
+            {"role": "system", "content": TIME_MACHINE_SYSTEM_PROMPT},
+            {"role": "user", "content": user_prompt},
+        ],
+    )
+
+    raw_content = ""
+    if response.choices:
+        content = response.choices[0].message.content
+        if isinstance(content, list):
+            raw_content = "".join(part.get("text", "") for part in content if isinstance(part, dict))
+        else:
+            raw_content = str(content or "")
+
+    parsed = _safe_json_parse(raw_content)
+    if parsed is None:
+        raise RuntimeError("Invalid narration JSON returned by Groq.")
+
+    return parsed
+
+
 def _select_dev_class(metrics: dict[str, Any]) -> str:
     stars = metrics["total_stars"]
     repos = metrics["public_repos"]
@@ -1031,3 +1098,6 @@ class GroqAIEngine:
 
     async def generate_roast_report(self, profile_payload: dict[str, Any]) -> dict[str, Any]:
         return await analyze_roast(profile_payload)
+
+    async def generate_time_machine_narration(self, payload: dict[str, Any]) -> dict[str, Any]:
+        return await analyze_time_machine_narration(payload)

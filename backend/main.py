@@ -60,6 +60,15 @@ class RoastPayload(BaseModel):
     profile: dict[str, Any]
 
 
+class TimeMachineNarrationPayload(BaseModel):
+    username: str
+    yearData: list[dict[str, Any]]
+    firstLanguage: str
+    currentLanguage: str
+    velocityMultiplier: float
+    totalYearsActive: int
+
+
 def _cache_key(username: str) -> str:
     return username.strip().lower()
 
@@ -169,3 +178,17 @@ async def roast_profile(request: Request, payload: RoastPayload) -> dict[str, An
         raise HTTPException(status_code=400, detail="Profile payload is required for roasting.")
 
     return await ai_engine.generate_roast_report(payload.profile)
+
+
+@app.post("/api/time-machine-narration")
+@limiter.limit("10/minute")
+async def time_machine_narration(request: Request, payload: TimeMachineNarrationPayload) -> dict[str, Any]:
+    if not payload.yearData:
+        raise HTTPException(status_code=400, detail="yearData is required.")
+
+    try:
+        narration = await ai_engine.generate_time_machine_narration(payload.model_dump())
+    except Exception as exc:  # pragma: no cover - defensive API boundary
+        raise HTTPException(status_code=502, detail="Time Machine narration generation failed.") from exc
+
+    return {"narration": narration}

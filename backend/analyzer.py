@@ -65,7 +65,9 @@ class GitHubAnalyzer:
                     "stars": repo.get("stargazers_count", 0),
                     "forks": repo.get("forks_count", 0),
                     "language": repo.get("language"),
+                    "created_at": repo.get("created_at"),
                     "pushed_at": repo.get("pushed_at"),
+                    "html_url": repo.get("html_url"),
                     "description": repo.get("description"),
                     "archived": bool(repo.get("archived", False)),
                     "is_fork": bool(repo.get("fork", False)),
@@ -99,6 +101,32 @@ class GitHubAnalyzer:
                 )
 
         return commits
+
+    @staticmethod
+    def _extract_events(events_payload: list[dict[str, Any]]) -> list[dict[str, Any]]:
+        events: list[dict[str, Any]] = []
+        for event in events_payload:
+            event_type = event.get("type")
+            created_at = event.get("created_at")
+            if not isinstance(event_type, str) or not isinstance(created_at, str):
+                continue
+
+            raw_payload = event.get("payload") if isinstance(event.get("payload"), dict) else {}
+            commits = []
+            for commit in raw_payload.get("commits") or []:
+                message = (commit or {}).get("message") if isinstance(commit, dict) else None
+                if isinstance(message, str) and message.strip():
+                    commits.append({"message": message.strip()[:160]})
+
+            events.append(
+                {
+                    "type": event_type,
+                    "created_at": created_at,
+                    "payload": {"commits": commits},
+                }
+            )
+
+        return events
 
     @staticmethod
     def _top_languages(repos: list[dict[str, Any]]) -> list[dict[str, Any]]:
@@ -176,6 +204,7 @@ class GitHubAnalyzer:
 
         repos = self._extract_repositories(repos_payload if isinstance(repos_payload, list) else [])
         commits = self._extract_push_commits(events_payload if isinstance(events_payload, list) else [])
+        events = self._extract_events(events_payload if isinstance(events_payload, list) else [])
 
         total_stars = sum(repo.get("stars", 0) for repo in repos)
         top_languages = self._top_languages(repos)
@@ -230,6 +259,7 @@ class GitHubAnalyzer:
                 "updated_at": user_payload.get("updated_at"),
             },
             "repos": repos,
+            "events": events,
             "total_stars": total_stars,
             "top_languages": top_languages,
             "avg_commit_hour": commit_metrics["avg_commit_hour"],
