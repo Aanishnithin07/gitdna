@@ -2,6 +2,9 @@ import { useState, useEffect, useRef, useMemo } from "react";
 import { createPortal } from "react-dom";
 import { RadarChart, Radar, PolarGrid, PolarAngleAxis, ResponsiveContainer } from "recharts";
 import html2canvas from "html2canvas";
+import { geoContains, geoNaturalEarth1, geoPath } from "d3-geo";
+import { feature as topojsonFeature } from "topojson-client";
+import worldAtlas110m from "world-atlas/countries-110m.json";
 
 const LANG_COLORS = {
   JavaScript:"#f1e05a",TypeScript:"#3178c6",Python:"#3572A5",Rust:"#dea584",
@@ -238,9 +241,6 @@ const TZ_MAP = {
   NL: "Europe/Amsterdam",
 };
 
-let GITMAP_D3_PROMISE = null;
-let GITMAP_TOPOJSON_PROMISE = null;
-let GITMAP_WORLD_ATLAS_PROMISE = null;
 let GITMAP_WORLD_FEATURES_CACHE = null;
 let GITMAP_COUNTRY_NAME_CACHE = null;
 
@@ -682,107 +682,27 @@ function buildAppUrl(query = "") {
   return `${window.location.origin}${appPath}`;
 }
 
-function loadExternalScript(src, readyCheck) {
-  if (typeof window === "undefined") {
-    return Promise.reject(new Error("Window is unavailable."));
-  }
-  if (typeof readyCheck === "function" && readyCheck()) {
-    return Promise.resolve();
-  }
-
-  return new Promise((resolve, reject) => {
-    const existing = document.querySelector(`script[src="${src}"]`);
-    if (existing) {
-      if (typeof readyCheck === "function" && readyCheck()) {
-        resolve();
-        return;
-      }
-      const onLoad = () => {
-        existing.removeEventListener("load", onLoad);
-        existing.removeEventListener("error", onError);
-        resolve();
-      };
-      const onError = () => {
-        existing.removeEventListener("load", onLoad);
-        existing.removeEventListener("error", onError);
-        reject(new Error(`Failed to load ${src}`));
-      };
-      existing.addEventListener("load", onLoad);
-      existing.addEventListener("error", onError);
-      return;
-    }
-
-    const script = document.createElement("script");
-    script.src = src;
-    script.async = true;
-    script.onload = () => resolve();
-    script.onerror = () => reject(new Error(`Failed to load ${src}`));
-    document.body.appendChild(script);
-  });
-}
-
 async function loadGitMapCartography() {
   if (GITMAP_WORLD_FEATURES_CACHE && GITMAP_COUNTRY_NAME_CACHE) {
     return { features: GITMAP_WORLD_FEATURES_CACHE, nameById: GITMAP_COUNTRY_NAME_CACHE };
   }
 
-  if (!GITMAP_D3_PROMISE) {
-    GITMAP_D3_PROMISE = loadExternalScript(
-      "https://cdn.jsdelivr.net/npm/d3-geo@3/dist/d3-geo.min.js",
-      () => Boolean(window.d3?.geoNaturalEarth1),
-    );
-  }
-  if (!GITMAP_TOPOJSON_PROMISE) {
-    GITMAP_TOPOJSON_PROMISE = loadExternalScript(
-      "https://cdn.jsdelivr.net/npm/topojson-client@3/dist/topojson-client.min.js",
-      () => Boolean(window.topojson?.feature),
-    );
+  const countriesObject = worldAtlas110m?.objects?.countries;
+  if (!countriesObject) {
+    throw new Error("Unable to load world atlas countries data.");
   }
 
-  await Promise.all([GITMAP_D3_PROMISE, GITMAP_TOPOJSON_PROMISE]);
-
-  if (!GITMAP_WORLD_ATLAS_PROMISE) {
-    GITMAP_WORLD_ATLAS_PROMISE = fetch("https://cdn.jsdelivr.net/npm/world-atlas@2/countries-110m.json")
-      .then((res) => {
-        if (!res.ok) throw new Error("Unable to load world atlas JSON.");
-        return res.json();
-      });
-  }
-
-  const atlas = await GITMAP_WORLD_ATLAS_PROMISE;
-  const topojson = window.topojson;
-  const features = topojson.feature(atlas, atlas.objects.countries).features || [];
+  const features = topojsonFeature(worldAtlas110m, countriesObject).features || [];
   GITMAP_WORLD_FEATURES_CACHE = features;
 
   if (!GITMAP_COUNTRY_NAME_CACHE) {
     const nameMap = new Map();
-    try {
-      const tsvRes = await fetch("https://cdn.jsdelivr.net/npm/world-atlas@2/countries-110m.tsv");
-      if (tsvRes.ok) {
-        const tsv = await tsvRes.text();
-        const lines = tsv.split("\n").map((line) => line.trim()).filter(Boolean);
-        if (lines.length > 1) {
-          const headers = lines[0].split("\t");
-          const idKey = headers.find((header) => /iso_n3|id|numeric/i.test(header)) || headers[0];
-          const nameKey = headers.find((header) => /name|country/i.test(header)) || headers[1] || headers[0];
-
-          for (const line of lines.slice(1)) {
-            const cols = line.split("\t");
-            const row = {};
-            headers.forEach((header, index) => {
-              row[header] = cols[index];
-            });
-            const rawId = String(row[idKey] || "").trim();
-            const rawName = String(row[nameKey] || "").trim();
-            if (!rawId || !rawName) continue;
-            const numericId = String(Number(rawId));
-            nameMap.set(numericId, rawName);
-            nameMap.set(rawId, rawName);
-          }
-        }
+    for (const feature of features) {
+      const id = String(feature?.id || "");
+      const name = String(feature?.properties?.name || "").trim();
+      if (id && name) {
+        nameMap.set(id, name);
       }
-    } catch {
-      // Ignore optional country-name map failure; fallback labels will be used.
     }
     GITMAP_COUNTRY_NAME_CACHE = nameMap;
   }
@@ -931,22 +851,6 @@ function getWinner(leftValue, rightValue) {
 }
 
 async function fetchContributionData(username) {
-  try {
-    const svgRes = await fetch(`https://github.com/users/${username}/contributions`);
-    if (svgRes.ok) {
-      const svgText = await svgRes.text();
-      const doc = new DOMParser().parseFromString(svgText, "image/svg+xml");
-      const rects = [...doc.querySelectorAll("rect[data-date][data-count]")];
-      const parsed = rects.map((rect) => ({
-        date: rect.getAttribute("data-date") || "",
-        count: Number(rect.getAttribute("data-count") || 0),
-      })).filter((item) => item.date);
-      if (parsed.length > 0) return parsed;
-    }
-  } catch {
-    // Ignore CORS/network errors and fall back to JSON service.
-  }
-
   try {
     const fallbackRes = await fetch(`https://github-contributions-api.jogruber.de/v4/${username}`);
     if (!fallbackRes.ok) return [];
@@ -3317,38 +3221,41 @@ function GitMap({ user, avgCommitHour, totalStars, topLang, accountAge, recentCo
   }, []);
 
   const mapData = useMemo(() => {
-    if (!cartographyReady || !countries.length || typeof window === "undefined" || !window.d3) {
+    if (!cartographyReady || !countries.length) {
       return null;
     }
 
-    const d3 = window.d3;
-    const width = 1000;
-    const height = 520;
-    const projection = d3.geoNaturalEarth1().fitSize(
-      [width, height],
-      { type: "FeatureCollection", features: countries },
-    );
-    const path = d3.geoPath(projection);
-    const beacon = projection([geo.lon, geo.lat]) || [width / 2, height / 2];
+    try {
+      const width = 1000;
+      const height = 520;
+      const projection = geoNaturalEarth1().fitSize(
+        [width, height],
+        { type: "FeatureCollection", features: countries },
+      );
+      const pathFactory = geoPath(projection);
+      const beacon = projection([geo.lon, geo.lat]) || [width / 2, height / 2];
 
-    let activeCountryId = null;
-    for (const feature of countries) {
-      if (d3.geoContains(feature, [geo.lon, geo.lat])) {
-        activeCountryId = String(feature.id);
-        break;
+      let activeCountryId = null;
+      for (const feature of countries) {
+        if (geoContains(feature, [geo.lon, geo.lat])) {
+          activeCountryId = String(feature.id);
+          break;
+        }
       }
+
+      const paths = countries.map((feature) => {
+        const id = String(feature.id);
+        return {
+          id,
+          d: pathFactory(feature) || "",
+          name: countryNames.get(id) || `Country ${id}`,
+        };
+      });
+
+      return { width, height, beacon, paths, activeCountryId };
+    } catch {
+      return null;
     }
-
-    const paths = countries.map((feature) => {
-      const id = String(feature.id);
-      return {
-        id,
-        d: path(feature),
-        name: countryNames.get(id) || `Country ${id}`,
-      };
-    });
-
-    return { width, height, beacon, paths, activeCountryId };
   }, [cartographyReady, countries, countryNames, geo.lat, geo.lon]);
 
   useEffect(() => {
@@ -3587,7 +3494,7 @@ function GitMap({ user, avgCommitHour, totalStars, topLang, accountAge, recentCo
               </div>
             )}
 
-            {!cartographyLoading && cartographyFailed && (
+            {!cartographyLoading && (cartographyFailed || !mapData) && (
               <div style={{ position: "absolute", inset: 0, display: "grid", placeItems: "center", padding: 20 }}>
                 <div className="gm-card" style={{ maxWidth: 560 }}>
                   <div className="gm-card-label">MAP DATA UNAVAILABLE — SIGNAL STATS ACTIVE</div>
