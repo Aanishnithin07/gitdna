@@ -4089,6 +4089,7 @@ function Dashboard({
   const [roastShareCopied, setRoastShareCopied] = useState(false);
   const [showTimeMachine, setShowTimeMachine] = useState(false);
   const [showGitMap, setShowGitMap] = useState(false);
+  const [showAvatarPreview, setShowAvatarPreview] = useState(false);
   const [showDashboardWake, setShowDashboardWake] = useState(false);
 
   const cardEntranceStyle = (index) => ({
@@ -4323,6 +4324,19 @@ function Dashboard({
     return () => clearTimeout(scrollTimer);
   }, [shouldShowRoastSection, roastReport]);
 
+  useEffect(() => {
+    if (!showAvatarPreview) return;
+
+    const onKeyDown = (event) => {
+      if (event.key === "Escape") {
+        setShowAvatarPreview(false);
+      }
+    };
+
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [showAvatarPreview]);
+
   async function copyProfileLink() {
     try {
       if (navigator?.clipboard?.writeText) {
@@ -4470,7 +4484,21 @@ function Dashboard({
               <div style={{ position: "absolute", inset: -4, borderRadius: "50%", border: "1.5px solid rgba(0,220,255,0.3)", animation: "ring-spin 8s linear infinite" }} />
               <div style={{ position: "absolute", inset: -8, borderRadius: "50%", border: "1px solid rgba(179,71,234,0.2)", animation: "ring-spin 12s linear infinite reverse" }} />
               {user.avatar_url ? (
-                <img src={user.avatar_url} alt="" style={{ width: 72, height: 72, borderRadius: "50%", border: "2px solid rgba(0,220,255,0.35)", display: "block" }} />
+                <button
+                  type="button"
+                  onClick={() => setShowAvatarPreview(true)}
+                  title="View profile picture"
+                  style={{
+                    border: "none",
+                    padding: 0,
+                    background: "transparent",
+                    borderRadius: "50%",
+                    cursor: "zoom-in",
+                    display: "block",
+                  }}
+                >
+                  <img src={user.avatar_url} alt={`${user.login} profile`} style={{ width: 72, height: 72, borderRadius: "50%", border: "2px solid rgba(0,220,255,0.35)", display: "block" }} />
+                </button>
               ) : (
                 <div style={{ width: 72, height: 72, borderRadius: "50%", background: "rgba(0,220,255,0.1)", border: "2px solid rgba(0,220,255,0.3)", display: "flex", alignItems: "center", justifyContent: "center", fontFamily: "Orbitron,monospace", fontSize: "1.4rem", color: "#00dcff" }}>
                   {(user.login || "?")[0].toUpperCase()}
@@ -5014,6 +5042,42 @@ function Dashboard({
         <div className="gd-toast" style={{ left: "50%", transform: "translateX(-50%)", bottom: 14, border: "1px solid rgba(0,220,255,0.45)", color: "#00dcff", background: "rgba(4,12,22,0.95)" }}>
           🌑 Late night code session detected. You and this developer would probably get along.
           <button className="gd-toast-close" onClick={onNightOwlDismiss}>OK</button>
+        </div>
+      )}
+
+      {showAvatarPreview && user.avatar_url && (
+        <div
+          className="gd-modal-overlay"
+          role="dialog"
+          aria-modal="true"
+          onClick={() => setShowAvatarPreview(false)}
+          style={{ zIndex: 96 }}
+        >
+          <div
+            className="gd-modal-card"
+            onClick={(event) => event.stopPropagation()}
+            style={{
+              maxWidth: 560,
+              padding: 12,
+              background: "rgba(4,10,18,0.96)",
+              borderColor: "rgba(0,220,255,0.4)",
+              boxShadow: "0 0 30px rgba(0,220,255,0.22)",
+            }}
+          >
+            <img
+              src={user.avatar_url}
+              alt={`${user.login} profile enlarged`}
+              style={{ width: "100%", display: "block", borderRadius: 8, border: "1px solid rgba(0,220,255,0.34)" }}
+            />
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, marginTop: 10 }}>
+              <span style={{ fontFamily: "Share Tech Mono,monospace", fontSize: "0.62rem", letterSpacing: "0.11em", color: "rgba(0,220,255,0.62)" }}>
+                @{user.login}
+              </span>
+              <button className="gd-btn" onClick={() => setShowAvatarPreview(false)} style={{ padding: "6px 12px", fontSize: "0.62rem" }}>
+                CLOSE
+              </button>
+            </div>
+          </div>
         </div>
       )}
 
