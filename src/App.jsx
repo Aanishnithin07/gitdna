@@ -4480,25 +4480,27 @@ function Dashboard({
           <div className={`gd-card gd-header-card gd-enter-scan ${tierMeta.headerClass}${founderActive ? " gd-founder-header" : ""}`} style={{ padding: "20px 22px", marginBottom: 16, display: "flex", alignItems: "center", gap: 20, flexWrap: "wrap", ...cardEntranceStyle(0) }}>
             <div className="scan-overlay" />
             {founderActive && <div className="gd-founder-header-shimmer" />}
-            <div style={{ position: "relative", flexShrink: 0 }}>
-              <div style={{ position: "absolute", inset: -4, borderRadius: "50%", border: "1.5px solid rgba(0,220,255,0.3)", animation: "ring-spin 8s linear infinite" }} />
-              <div style={{ position: "absolute", inset: -8, borderRadius: "50%", border: "1px solid rgba(179,71,234,0.2)", animation: "ring-spin 12s linear infinite reverse" }} />
+            <div
+              style={{ position: "relative", flexShrink: 0, cursor: user.avatar_url ? "zoom-in" : "default" }}
+              onClick={() => {
+                if (!user.avatar_url) return;
+                setShowAvatarPreview(true);
+              }}
+              onKeyDown={(event) => {
+                if (!user.avatar_url) return;
+                if (event.key === "Enter" || event.key === " ") {
+                  event.preventDefault();
+                  setShowAvatarPreview(true);
+                }
+              }}
+              role={user.avatar_url ? "button" : undefined}
+              tabIndex={user.avatar_url ? 0 : -1}
+              title={user.avatar_url ? "View profile picture" : ""}
+            >
+              <div style={{ position: "absolute", inset: -4, borderRadius: "50%", border: "1.5px solid rgba(0,220,255,0.3)", animation: "ring-spin 8s linear infinite", pointerEvents: "none" }} />
+              <div style={{ position: "absolute", inset: -8, borderRadius: "50%", border: "1px solid rgba(179,71,234,0.2)", animation: "ring-spin 12s linear infinite reverse", pointerEvents: "none" }} />
               {user.avatar_url ? (
-                <button
-                  type="button"
-                  onClick={() => setShowAvatarPreview(true)}
-                  title="View profile picture"
-                  style={{
-                    border: "none",
-                    padding: 0,
-                    background: "transparent",
-                    borderRadius: "50%",
-                    cursor: "zoom-in",
-                    display: "block",
-                  }}
-                >
-                  <img src={user.avatar_url} alt={`${user.login} profile`} style={{ width: 72, height: 72, borderRadius: "50%", border: "2px solid rgba(0,220,255,0.35)", display: "block" }} />
-                </button>
+                <img src={user.avatar_url} alt={`${user.login} profile`} style={{ width: 72, height: 72, borderRadius: "50%", border: "2px solid rgba(0,220,255,0.35)", display: "block" }} />
               ) : (
                 <div style={{ width: 72, height: 72, borderRadius: "50%", background: "rgba(0,220,255,0.1)", border: "2px solid rgba(0,220,255,0.3)", display: "flex", alignItems: "center", justifyContent: "center", fontFamily: "Orbitron,monospace", fontSize: "1.4rem", color: "#00dcff" }}>
                   {(user.login || "?")[0].toUpperCase()}
