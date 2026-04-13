@@ -69,6 +69,16 @@ class TimeMachineNarrationPayload(BaseModel):
     totalYearsActive: int
 
 
+class GitMapInsightPayload(BaseModel):
+    username: str
+    city: str
+    country: str
+    topLang: str
+    totalStars: int
+    accountAge: float
+    recentCommits: int = 0
+
+
 def _cache_key(username: str) -> str:
     return username.strip().lower()
 
@@ -192,3 +202,14 @@ async def time_machine_narration(request: Request, payload: TimeMachineNarration
         raise HTTPException(status_code=502, detail="Time Machine narration generation failed.") from exc
 
     return {"narration": narration}
+
+
+@app.post("/api/gitmap-insight")
+@limiter.limit("20/minute")
+async def gitmap_insight(request: Request, payload: GitMapInsightPayload) -> dict[str, str]:
+    try:
+        insight = await ai_engine.generate_gitmap_insight(payload.model_dump())
+    except Exception as exc:  # pragma: no cover - defensive API boundary
+        raise HTTPException(status_code=502, detail="GitMap insight generation failed.") from exc
+
+    return {"insight": insight}

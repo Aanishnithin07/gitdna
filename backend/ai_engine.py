@@ -55,6 +55,12 @@ TIME_MACHINE_SYSTEM_PROMPT = (
     "Never be generic. Return ONLY valid JSON."
 )
 
+GITMAP_INSIGHT_SYSTEM_PROMPT = (
+    "You are a concise global developer intelligence analyst. "
+    "Write exactly one sentence in plain text. "
+    "Include concrete metrics from the payload and avoid generic language."
+)
+
 HARDCODED_LAZY_COMMIT_LINE = (
     "Your commit messages read like someone typing with their elbows. "
     "'fix', 'wip', 'update'? Git blame will find you."
@@ -664,6 +670,65 @@ async def analyze_time_machine_narration(payload: dict[str, Any]) -> dict[str, A
     return parsed
 
 
+async def analyze_gitmap_insight(payload: dict[str, Any]) -> str:
+    username = str(payload.get("username") or "unknown")
+    city = str(payload.get("city") or "Unknown City")
+    country = str(payload.get("country") or "Unknown Country")
+    top_lang = str(payload.get("topLang") or "JavaScript")
+    total_stars = _to_int(payload.get("totalStars"), 0)
+    account_age = round(_to_float(payload.get("accountAge"), 0.0) or 0.0, 1)
+    recent_commits = _to_int(payload.get("recentCommits"), 0)
+
+    fallback = (
+        f"{username} codes from {city}, {country} with {top_lang}, {total_stars} stars, "
+        f"{recent_commits} recent commits, and {account_age} years on GitHub, signaling "
+        f"{'strong' if total_stars >= 100 else 'growing'} regional momentum."
+    )
+
+    api_key = (os.getenv("GROQ_API_KEY") or "").strip()
+    if not api_key:
+        return fallback
+
+    user_prompt = (
+        "Generate one high-signal sentence for the GitMap broadcast line.\n"
+        f"username: {username}\n"
+        f"city: {city}\n"
+        f"country: {country}\n"
+        f"top_language: {top_lang}\n"
+        f"total_stars: {total_stars}\n"
+        f"recent_commits_30d: {recent_commits}\n"
+        f"account_age_years: {account_age}\n"
+        "Rules: 16-30 words, one sentence only, no markdown, no emojis, no hashtags."
+    )
+
+    try:
+        response = await client.chat.completions.create(
+            model=MODEL_NAME,
+            temperature=0.55,
+            max_tokens=120,
+            messages=[
+                {"role": "system", "content": GITMAP_INSIGHT_SYSTEM_PROMPT},
+                {"role": "user", "content": user_prompt},
+            ],
+        )
+
+        content = response.choices[0].message.content if response.choices else ""
+        text = str(content or "").replace("```", "").strip()
+        text = re.sub(r"\s+", " ", text)
+        if not text:
+            return fallback
+
+        sentence = re.split(r"(?<=[.!?])\s+", text)[0].strip()
+        if not sentence:
+            return fallback
+        if sentence[-1] not in ".!?":
+            sentence = f"{sentence}."
+
+        return sentence[:280]
+    except Exception:
+        return fallback
+
+
 def _select_dev_class(metrics: dict[str, Any]) -> str:
     stars = metrics["total_stars"]
     repos = metrics["public_repos"]
@@ -1101,3 +1166,6 @@ class GroqAIEngine:
 
     async def generate_time_machine_narration(self, payload: dict[str, Any]) -> dict[str, Any]:
         return await analyze_time_machine_narration(payload)
+
+    async def generate_gitmap_insight(self, payload: dict[str, Any]) -> str:
+        return await analyze_gitmap_insight(payload)
