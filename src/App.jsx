@@ -60,6 +60,7 @@ const EMPTY_REPO_ROAST = "Zero stars. Every legend started here.\nThe commit log
 const TIME_MACHINE_AI_CACHE = new Map();
 const GITMAP_GEOCODE_CACHE = new Map();
 const GITMAP_INSIGHT_CACHE = new Map();
+const COMMIT_LINGUISTICS_CACHE = new Map();
 
 const CITY_COORDS = {
   bangalore: [12.9716, 77.5946],
@@ -506,6 +507,17 @@ html,body{max-width:100%;overflow-x:hidden}
 .gd-cognitive-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:12px}
 .gd-compare-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:12px}
 
+.gd-commit-toggle{padding:7px 12px;font-size:.6rem;letter-spacing:.11em}
+.gd-commit-score-pill{display:flex;align-items:center;gap:10px;flex-wrap:wrap;padding:10px 12px;border:1px solid rgba(0,220,255,0.28);border-radius:8px;background:rgba(6,16,30,0.74)}
+.gd-commit-tier{display:inline-flex;align-items:center;padding:4px 9px;border:1px solid currentColor;border-radius:999px;font-family:'Share Tech Mono',monospace;font-size:.54rem;letter-spacing:.12em}
+.gd-commit-rows{display:flex;flex-direction:column;gap:7px;margin-top:10px}
+.gd-commit-row{display:flex;align-items:center;gap:10px;border:1px solid rgba(0,220,255,0.25);border-radius:8px;padding:8px 10px}
+.gd-commit-grade{display:inline-flex;align-items:center;justify-content:center;min-width:34px;padding:3px 7px;border:1px solid currentColor;border-radius:6px;font-family:'Orbitron',monospace;font-size:.62rem;letter-spacing:.08em;line-height:1}
+.gd-commit-eye{font-size:.85rem;line-height:1;filter:drop-shadow(0 0 4px rgba(255,179,0,.5))}
+.gd-commit-eye-tip{position:relative;display:inline-flex;align-items:center;justify-content:center;cursor:help}
+.gd-commit-eye-bubble{position:absolute;right:-6px;bottom:125%;width:min(220px,70vw);padding:7px 8px;border-radius:6px;border:1px solid rgba(255,179,0,.45);background:rgba(22,14,3,.95);color:rgba(255,224,168,.95);font-family:'Share Tech Mono',monospace;font-size:.54rem;line-height:1.45;letter-spacing:.08em;opacity:0;transform:translateY(6px);transition:all .18s ease;pointer-events:none;z-index:4}
+.gd-commit-eye-tip:hover .gd-commit-eye-bubble{opacity:1;transform:translateY(0)}
+
 .gd-modal-overlay{position:fixed;inset:0;z-index:85;display:flex;align-items:center;justify-content:center;padding:18px;background:rgba(4,8,16,0.68);backdrop-filter:blur(8px)}
 .gd-modal-card{width:100%;max-width:460px;border:1px solid rgba(0,220,255,0.26);background:rgba(6,14,24,0.95);border-radius:8px;box-shadow:0 0 24px rgba(0,220,255,0.18);padding:20px 18px;position:relative}
 .gd-modal-title{font-family:'Share Tech Mono',monospace;font-size:.68rem;letter-spacing:.18em;color:rgba(0,220,255,0.58);margin-bottom:14px}
@@ -627,6 +639,138 @@ function extractCommitData(events) {
     }
   });
   return { messages: messages.slice(0, 20), hours };
+}
+
+const COMMIT_GRADE_META = {
+  "A+": {
+    grade: "A+",
+    points: 10,
+    badgeColor: "#ffd770",
+    badgeBg: "rgba(255,215,112,0.15)",
+    badgeBorder: "rgba(255,215,112,0.48)",
+    rowTint: "rgba(255,215,112,0.06)",
+  },
+  A: {
+    grade: "A",
+    points: 8,
+    badgeColor: "#b8ff9f",
+    badgeBg: "rgba(123,255,100,0.14)",
+    badgeBorder: "rgba(123,255,100,0.42)",
+    rowTint: "rgba(57,255,20,0.06)",
+  },
+  B: {
+    grade: "B",
+    points: 6,
+    badgeColor: "#8deeff",
+    badgeBg: "rgba(0,220,255,0.15)",
+    badgeBorder: "rgba(0,220,255,0.42)",
+    rowTint: "rgba(0,220,255,0.06)",
+  },
+  C: {
+    grade: "C",
+    points: 4,
+    badgeColor: "#cfadff",
+    badgeBg: "rgba(179,71,234,0.16)",
+    badgeBorder: "rgba(179,71,234,0.44)",
+    rowTint: "rgba(179,71,234,0.07)",
+  },
+  D: {
+    grade: "D",
+    points: 2,
+    badgeColor: "#ffc98f",
+    badgeBg: "rgba(255,159,67,0.16)",
+    badgeBorder: "rgba(255,159,67,0.45)",
+    rowTint: "rgba(255,159,67,0.07)",
+  },
+  F: {
+    grade: "F",
+    points: 0,
+    badgeColor: "#ff9d9d",
+    badgeBg: "rgba(255,88,88,0.17)",
+    badgeBorder: "rgba(255,88,88,0.48)",
+    rowTint: "rgba(255,88,88,0.08)",
+  },
+};
+
+const COMMIT_LITERAL_BANS = new Set(["fix", ".", "asdf"]);
+const COMMIT_CONVENTIONAL_SCOPE_RE = /^(feat|fix|chore|refactor|docs)\([a-z0-9._/-]+\):\s+.+/i;
+const COMMIT_CONVENTIONAL_RE = /^(feat|fix|chore|refactor|docs):\s+.+/i;
+const COMMIT_ACTION_VERB_RE = /\b(add|fix|refactor|remove|improve|optimi[sz]e|implement|update|migrate|rename|clean|document|test|handle|support|create|prevent)\b/i;
+const COMMIT_VAGUE_SHORT_RE = /^(fix|update|test|change|misc|tmp|temp|work|stuff|quick)\b/i;
+const COMMIT_TOOLTIP_TEXT = "THIS COMMIT MESSAGE SHOULD BE ILLEGAL IN 42 COUNTRIES.";
+
+function normalizeCommitMessage(message) {
+  return String(message || "").replace(/\s+/g, " ").trim();
+}
+
+function gradeCommitMessage(rawMessage) {
+  const message = normalizeCommitMessage(rawMessage);
+  const lowered = message.toLowerCase();
+  const words = message ? message.split(" ").filter(Boolean).length : 0;
+  const chars = message.length;
+  const isLiteralBan = COMMIT_LITERAL_BANS.has(lowered);
+
+  let bucket = "D";
+  if (!message || isLiteralBan || words <= 1) {
+    bucket = "F";
+  } else if (COMMIT_CONVENTIONAL_SCOPE_RE.test(message) && chars >= 18) {
+    bucket = "A+";
+  } else if (COMMIT_CONVENTIONAL_RE.test(message)) {
+    bucket = "A";
+  } else if (chars >= 40 && chars <= 72 && COMMIT_ACTION_VERB_RE.test(lowered)) {
+    bucket = "B";
+  } else if (chars >= 15 && chars < 40 && COMMIT_ACTION_VERB_RE.test(lowered)) {
+    bucket = "C";
+  } else if (chars < 15 && COMMIT_VAGUE_SHORT_RE.test(lowered)) {
+    bucket = "D";
+  } else if (chars >= 15 && COMMIT_ACTION_VERB_RE.test(lowered)) {
+    bucket = "C";
+  }
+
+  const meta = COMMIT_GRADE_META[bucket] || COMMIT_GRADE_META.D;
+  return {
+    ...meta,
+    message: message || "(empty commit message)",
+    preview: truncateText(message || "(empty commit message)", 50),
+    showCallout: isLiteralBan,
+  };
+}
+
+function getCommitQualityTier(scorePercent) {
+  const score = Number(scorePercent || 0);
+  if (score >= 92) return { label: "ELITE MESSAGE DISCIPLINE", color: "#ffd770" };
+  if (score >= 82) return { label: "HIGH CLARITY SHIPPER", color: "#aaff9f" };
+  if (score >= 68) return { label: "SOLID COMMIT HYGIENE", color: "#8deeff" };
+  if (score >= 52) return { label: "PATCHY SIGNAL", color: "#cfadff" };
+  if (score >= 35) return { label: "VAGUE LOG TENDENCY", color: "#ffc98f" };
+  return { label: "CHAOS COMMIT STREAM", color: "#ff9d9d" };
+}
+
+function fallbackCommitLinguisticsInsight(username, messages) {
+  const safeMessages = Array.isArray(messages)
+    ? messages.map((msg) => normalizeCommitMessage(msg)).filter(Boolean).slice(0, 20)
+    : [];
+
+  if (safeMessages.length === 0) {
+    return "No recent commit messages were visible, so your writing style signal is still loading.";
+  }
+
+  const graded = safeMessages.map((message) => gradeCommitMessage(message));
+  const highSignal = graded.filter((entry) => entry.grade === "A+" || entry.grade === "A").length;
+  const weakSignal = graded.filter((entry) => entry.grade === "F" || entry.grade === "D").length;
+  const avgLength = Math.round(
+    safeMessages.reduce((sum, message) => sum + message.length, 0) / Math.max(1, safeMessages.length),
+  );
+
+  if (highSignal >= Math.ceil(safeMessages.length * 0.45)) {
+    return `@${username} writes intent-first commit logs with clear verbs and scope, which signals deliberate shipping under pressure and easier team handoffs. Average message length is ${avgLength} characters, so the narrative is concise without collapsing into noise.`;
+  }
+
+  if (weakSignal >= Math.ceil(safeMessages.length * 0.35)) {
+    return `@${username} commits fast but often drops context, which suggests execution urgency is outrunning documentation discipline. The logs show fragments more than decisions, so future-you will spend extra time reconstructing intent from code diffs.`;
+  }
+
+  return `@${username} shows mixed commit language: enough actionable messages to keep momentum, but occasional vague lines that reduce traceability. The style reads like a builder balancing speed with clarity, and that balance improves quickly when each commit states action plus affected scope.`;
 }
 
 function clampNumber(value, min, max) {
@@ -4465,6 +4609,9 @@ function Dashboard({
   const [showTradingCard, setShowTradingCard] = useState(false);
   const [showAvatarPreview, setShowAvatarPreview] = useState(false);
   const [showDashboardWake, setShowDashboardWake] = useState(false);
+  const [showCommitAnalyzer, setShowCommitAnalyzer] = useState(false);
+  const [commitInsight, setCommitInsight] = useState("");
+  const [commitInsightLoading, setCommitInsightLoading] = useState(false);
 
   const cardEntranceStyle = (index) => ({
     opacity: 0,
@@ -4481,6 +4628,7 @@ function Dashboard({
   const hasLocationData = Boolean(String(user.location || "").trim());
   const topLang = Array.isArray(langs) && langs[0]?.lang ? langs[0].lang : "Unknown";
   const avgCommitHour = Number.isFinite(Number(github.avg_commit_hour)) ? Number(github.avg_commit_hour) : 12;
+  const API_URL = (import.meta.env.VITE_API_URL || "http://localhost:8000").replace(/\/$/, "");
   const tierVisualKey = founderActive ? "LEGENDARY" : String(archetype.tier || "RISING").toUpperCase();
   const tierVisual = {
     LEGENDARY: {
@@ -4562,6 +4710,51 @@ function Dashboard({
     events,
     contributions,
   ]);
+
+  const commitData = useMemo(() => extractCommitData(events), [events]);
+
+  const commitMessages = useMemo(() => {
+    const fromGithub = Array.isArray(github?.recent_commit_messages)
+      ? github.recent_commit_messages
+      : [];
+    const merged = [...fromGithub, ...commitData.messages]
+      .map((msg) => normalizeCommitMessage(msg))
+      .filter(Boolean);
+
+    const uniqueMessages = [];
+    const seen = new Set();
+    for (const message of merged) {
+      const dedupeKey = message.toLowerCase();
+      if (seen.has(dedupeKey)) continue;
+      seen.add(dedupeKey);
+      uniqueMessages.push(message);
+      if (uniqueMessages.length >= 20) break;
+    }
+
+    return uniqueMessages;
+  }, [github?.recent_commit_messages, commitData.messages]);
+
+  const commitRows = useMemo(
+    () => commitMessages.map((message) => gradeCommitMessage(message)),
+    [commitMessages],
+  );
+
+  const commitScorePercent = useMemo(() => {
+    if (commitRows.length === 0) return 0;
+    const totalPoints = commitRows.reduce((sum, row) => sum + row.points, 0);
+    return Math.round((totalPoints / (commitRows.length * 10)) * 100);
+  }, [commitRows]);
+
+  const commitTier = useMemo(
+    () => getCommitQualityTier(commitScorePercent),
+    [commitScorePercent],
+  );
+
+  const commitInsightKey = useMemo(() => {
+    const identity = String(user.login || username || "unknown").toLowerCase();
+    const signature = commitMessages.map((message) => message.toLowerCase()).join("|");
+    return `${identity}::${signature}`;
+  }, [commitMessages, user.login, username]);
 
   const triggerDashboardWake = () => {
     setShowDashboardWake(true);
@@ -4715,6 +4908,70 @@ function Dashboard({
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
   }, [showAvatarPreview]);
+
+  useEffect(() => {
+    let cancelled = false;
+    const fallbackInsight = fallbackCommitLinguisticsInsight(user.login || username || "developer", commitMessages);
+
+    if (commitMessages.length === 0) {
+      setCommitInsightLoading(false);
+      setCommitInsight(fallbackInsight);
+      return () => {
+        cancelled = true;
+      };
+    }
+
+    const cached = COMMIT_LINGUISTICS_CACHE.get(commitInsightKey);
+    if (cached) {
+      setCommitInsightLoading(false);
+      setCommitInsight(cached);
+      return () => {
+        cancelled = true;
+      };
+    }
+
+    const abortController = new AbortController();
+    setCommitInsightLoading(true);
+
+    const run = async () => {
+      try {
+        const response = await fetch(`${API_URL}/api/commit-linguistics-insight`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json", Accept: "application/json" },
+          body: JSON.stringify({
+            username: user.login || username || "developer",
+            commitMessages,
+          }),
+          signal: abortController.signal,
+        });
+
+        if (!response.ok) {
+          throw new Error(`Commit linguistics API error (${response.status})`);
+        }
+
+        const payload = await response.json();
+        const insightText = String(payload?.insight || "").trim() || fallbackInsight;
+        COMMIT_LINGUISTICS_CACHE.set(commitInsightKey, insightText);
+        if (!cancelled) {
+          setCommitInsight(insightText);
+          setCommitInsightLoading(false);
+        }
+      } catch (error) {
+        if (error?.name === "AbortError") return;
+        if (!cancelled) {
+          setCommitInsight(fallbackInsight);
+          setCommitInsightLoading(false);
+        }
+      }
+    };
+
+    run();
+
+    return () => {
+      cancelled = true;
+      abortController.abort();
+    };
+  }, [API_URL, commitInsightKey, commitMessages, user.login, username]);
 
   async function copyProfileLink() {
     try {
@@ -5123,6 +5380,97 @@ function Dashboard({
 
           <div style={{ marginTop: -4, marginBottom: 12, fontFamily: "Share Tech Mono,monospace", fontSize: "0.52rem", letterSpacing: "0.08em", color: "rgba(200,232,255,0.38)" }}>
             This is pattern analysis, not medical advice. Data based on public GitHub activity only.
+          </div>
+
+          <div className="gd-card gd-enter-scan" style={{ padding: "14px 16px", marginBottom: 12, ...cardEntranceStyle(7) }}>
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, flexWrap: "wrap" }}>
+              <div className="gd-section-label" style={{ marginBottom: 0 }}>COMMIT QUALITY ANALYZER</div>
+              <button
+                className="gd-btn gd-commit-toggle"
+                onClick={() => setShowCommitAnalyzer((prev) => !prev)}
+              >
+                {showCommitAnalyzer ? "COLLAPSE" : "EXPAND"}
+              </button>
+            </div>
+
+            {showCommitAnalyzer && (
+              <div style={{ marginTop: 12 }}>
+                <div className="gd-commit-score-pill" style={{ marginBottom: 10 }}>
+                  <span style={{ fontFamily: "Share Tech Mono,monospace", fontSize: "0.58rem", letterSpacing: "0.12em", color: "rgba(0,220,255,0.6)" }}>
+                    OVERALL QUALITY
+                  </span>
+                  <span className="orb" style={{ fontSize: "1.1rem", color: "#e9fbff", letterSpacing: "0.05em" }}>
+                    {commitScorePercent}%
+                  </span>
+                  <span
+                    className="gd-commit-tier"
+                    style={{
+                      color: commitTier.color,
+                      borderColor: commitTier.color,
+                      background: `${commitTier.color}22`,
+                    }}
+                  >
+                    {commitTier.label}
+                  </span>
+                </div>
+
+                <div style={{ fontFamily: "Share Tech Mono,monospace", fontSize: "0.6rem", letterSpacing: "0.14em", color: "rgba(0,220,255,0.5)", marginBottom: 8 }}>
+                  COMMIT LINGUISTICS REPORT
+                </div>
+
+                <div className="gd-commit-rows">
+                  {commitRows.length > 0 ? commitRows.map((row, index) => (
+                    <div
+                      key={`commit-quality-${index}`}
+                      className="gd-commit-row"
+                      style={{ borderColor: row.badgeBorder, background: row.rowTint }}
+                    >
+                      <div style={{ display: "flex", alignItems: "center", gap: 8, minWidth: 92 }}>
+                        <span
+                          className="gd-commit-grade"
+                          style={{
+                            color: row.badgeColor,
+                            borderColor: row.badgeBorder,
+                            background: row.badgeBg,
+                          }}
+                        >
+                          {row.grade}
+                        </span>
+                        <span style={{ fontFamily: "Share Tech Mono,monospace", fontSize: "0.56rem", color: "rgba(200,232,255,0.65)", letterSpacing: "0.08em" }}>
+                          {row.points}/10
+                        </span>
+                      </div>
+
+                      <div style={{ flex: 1, minWidth: 0, display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8 }}>
+                        <span style={{ fontSize: "0.81rem", color: "rgba(220,241,255,0.9)", lineHeight: 1.45 }}>
+                          {row.preview}
+                        </span>
+
+                        {row.showCallout && (
+                          <span className="gd-commit-eye-tip" aria-label={COMMIT_TOOLTIP_TEXT}>
+                            <span className="gd-commit-eye" role="img" aria-hidden="true">👁</span>
+                            <span className="gd-commit-eye-bubble">{COMMIT_TOOLTIP_TEXT}</span>
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                  )) : (
+                    <div style={{ border: "1px solid rgba(0,220,255,0.2)", borderRadius: 8, padding: "10px 11px", color: "rgba(200,232,255,0.65)", fontSize: "0.8rem" }}>
+                      No recent commit messages found for analysis.
+                    </div>
+                  )}
+                </div>
+
+                <div style={{ marginTop: 10, border: "1px solid rgba(179,71,234,0.3)", borderRadius: 8, background: "rgba(15,7,26,0.7)", padding: "10px 12px" }}>
+                  <div style={{ fontFamily: "Share Tech Mono,monospace", fontSize: "0.58rem", letterSpacing: "0.12em", color: "rgba(179,71,234,0.72)", marginBottom: 6 }}>
+                    WHAT YOUR COMMITS SAY ABOUT YOU
+                  </div>
+                  <p style={{ margin: 0, fontSize: "0.82rem", color: "rgba(227,235,255,0.86)", lineHeight: 1.58 }}>
+                    {commitInsightLoading ? "Reading commit language patterns..." : commitInsight}
+                  </p>
+                </div>
+              </div>
+            )}
           </div>
         </div>
 

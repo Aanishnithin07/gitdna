@@ -61,6 +61,13 @@ GITMAP_INSIGHT_SYSTEM_PROMPT = (
     "Include concrete metrics from the payload and avoid generic language."
 )
 
+COMMIT_LINGUISTICS_SYSTEM_PROMPT = (
+    "You are a developer writing-style profiler. "
+    "Given raw commit messages, produce exactly one short paragraph in plain text. "
+    "Be specific, direct, and grounded in the visible message patterns. "
+    "No markdown, no bullets, no emojis."
+)
+
 HARDCODED_LAZY_COMMIT_LINE = (
     "Your commit messages read like someone typing with their elbows. "
     "'fix', 'wip', 'update'? Git blame will find you."
@@ -729,6 +736,127 @@ async def analyze_gitmap_insight(payload: dict[str, Any]) -> str:
         return fallback
 
 
+def _fallback_commit_linguistics_insight(username: str, messages: list[str]) -> str:
+    safe_messages = [str(message).strip() for message in messages if str(message).strip()][:20]
+    if not safe_messages:
+        return (
+            "No recent commit messages were available, so there is not enough writing data to infer style yet."
+        )
+
+    graded = [_grade_commit_message(message) for message in safe_messages]
+    top_tier = sum(1 for item in graded if item["grade"] in {"A+", "A"})
+    weak_tier = sum(1 for item in graded if item["grade"] in {"F", "D"})
+    avg_length = round(sum(len(message) for message in safe_messages) / max(1, len(safe_messages)))
+
+    if top_tier >= max(1, round(len(safe_messages) * 0.45)):
+        return (
+            f"@{username} tends to write intent-first commit messages with consistent action verbs and useful scope, "
+            f"which signals clear execution discipline; average message length is {avg_length} characters, balancing "
+            "brevity with context for future readers."
+        )
+
+    if weak_tier >= max(1, round(len(safe_messages) * 0.35)):
+        return (
+            f"@{username} appears to ship quickly but often drops context in commit logs, which suggests delivery "
+            "urgency outruns communication discipline; the message trail favors short placeholders over explicit intent."
+        )
+
+    return (
+        f"@{username} shows mixed commit language, with enough clear entries to track progress but periodic vague "
+        "messages that reduce historical traceability; tightening each message to action plus affected scope would "
+        "make collaboration and rollback reasoning far easier."
+    )
+
+
+def _grade_commit_message(message: str) -> dict[str, Any]:
+    normalized = re.sub(r"\s+", " ", str(message or "")).strip()
+    lowered = normalized.lower()
+    words = len([word for word in normalized.split(" ") if word]) if normalized else 0
+    chars = len(normalized)
+
+    literal_bans = {"fix", ".", "asdf"}
+    conventional_scope = re.compile(r"^(feat|fix|chore|refactor|docs)\([a-z0-9._/-]+\):\s+.+", re.IGNORECASE)
+    conventional = re.compile(r"^(feat|fix|chore|refactor|docs):\s+.+", re.IGNORECASE)
+    action_verb = re.compile(
+        r"\b(add|fix|refactor|remove|improve|optimi[sz]e|implement|update|migrate|rename|clean|document|test|handle|support|create|prevent)\b",
+        re.IGNORECASE,
+    )
+    vague_short = re.compile(r"^(fix|update|test|change|misc|tmp|temp|work|stuff|quick)\b", re.IGNORECASE)
+
+    grade = "D"
+    if not normalized or lowered in literal_bans or words <= 1:
+        grade = "F"
+    elif conventional_scope.search(normalized) and chars >= 18:
+        grade = "A+"
+    elif conventional.search(normalized):
+        grade = "A"
+    elif 40 <= chars <= 72 and action_verb.search(normalized):
+        grade = "B"
+    elif 15 <= chars < 40 and action_verb.search(normalized):
+        grade = "C"
+    elif chars < 15 and vague_short.search(normalized):
+        grade = "D"
+    elif chars >= 15 and action_verb.search(normalized):
+        grade = "C"
+
+    points_map = {"A+": 10, "A": 8, "B": 6, "C": 4, "D": 2, "F": 0}
+    return {
+        "grade": grade,
+        "points": points_map.get(grade, 2),
+        "message": normalized or "(empty commit message)",
+    }
+
+
+async def analyze_commit_linguistics_insight(payload: dict[str, Any]) -> str:
+    username = str(payload.get("username") or "developer")
+    raw_messages = payload.get("commitMessages") if isinstance(payload.get("commitMessages"), list) else []
+    commit_messages = [str(message).strip()[:160] for message in raw_messages if str(message).strip()][:20]
+
+    fallback = _fallback_commit_linguistics_insight(username, commit_messages)
+    api_key = (os.getenv("GROQ_API_KEY") or "").strip()
+    if not api_key:
+        return fallback
+
+    graded = [_grade_commit_message(message) for message in commit_messages]
+    average_score = 0.0
+    if graded:
+        average_score = round(sum(item["points"] for item in graded) / max(1, len(graded)), 2)
+
+    user_prompt = (
+        "Write one short paragraph called WHAT YOUR COMMITS SAY ABOUT YOU, based only on raw commit messages.\n"
+        f"username: {username}\n"
+        f"messages_count: {len(commit_messages)}\n"
+        f"average_commit_score_out_of_10: {average_score}\n"
+        "raw_commit_messages:\n"
+        f"{json.dumps(commit_messages)}\n"
+        "Rules: 35-65 words, no markdown, no list, no emojis, no quotes."
+    )
+
+    try:
+        response = await client.chat.completions.create(
+            model=MODEL_NAME,
+            temperature=0.55,
+            max_tokens=170,
+            messages=[
+                {"role": "system", "content": COMMIT_LINGUISTICS_SYSTEM_PROMPT},
+                {"role": "user", "content": user_prompt},
+            ],
+        )
+
+        content = response.choices[0].message.content if response.choices else ""
+        text = str(content or "").replace("```", "").strip()
+        text = re.sub(r"\s+", " ", text)
+        if not text:
+            return fallback
+
+        cleaned = text[:360].strip()
+        if cleaned and cleaned[-1] not in ".!?":
+            cleaned = f"{cleaned}."
+        return cleaned or fallback
+    except Exception:
+        return fallback
+
+
 def _select_dev_class(metrics: dict[str, Any]) -> str:
     stars = metrics["total_stars"]
     repos = metrics["public_repos"]
@@ -1169,3 +1297,6 @@ class GroqAIEngine:
 
     async def generate_gitmap_insight(self, payload: dict[str, Any]) -> str:
         return await analyze_gitmap_insight(payload)
+
+    async def generate_commit_linguistics_insight(self, payload: dict[str, Any]) -> str:
+        return await analyze_commit_linguistics_insight(payload)

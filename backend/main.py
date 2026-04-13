@@ -79,6 +79,11 @@ class GitMapInsightPayload(BaseModel):
     recentCommits: int = 0
 
 
+class CommitLinguisticsPayload(BaseModel):
+    username: str
+    commitMessages: list[str]
+
+
 def _cache_key(username: str) -> str:
     return username.strip().lower()
 
@@ -211,5 +216,16 @@ async def gitmap_insight(request: Request, payload: GitMapInsightPayload) -> dic
         insight = await ai_engine.generate_gitmap_insight(payload.model_dump())
     except Exception as exc:  # pragma: no cover - defensive API boundary
         raise HTTPException(status_code=502, detail="GitMap insight generation failed.") from exc
+
+    return {"insight": insight}
+
+
+@app.post("/api/commit-linguistics-insight")
+@limiter.limit("25/minute")
+async def commit_linguistics_insight(request: Request, payload: CommitLinguisticsPayload) -> dict[str, str]:
+    try:
+        insight = await ai_engine.generate_commit_linguistics_insight(payload.model_dump())
+    except Exception as exc:  # pragma: no cover - defensive API boundary
+        raise HTTPException(status_code=502, detail="Commit linguistics insight generation failed.") from exc
 
     return {"insight": insight}
