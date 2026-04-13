@@ -663,6 +663,25 @@ function inferTimezone(countryCode) {
   return TZ_MAP[String(countryCode || "").toUpperCase()] || "UTC";
 }
 
+function getAppBasePath() {
+  const rawBase = String(import.meta.env.BASE_URL || "/");
+  const withLeadingSlash = rawBase.startsWith("/") ? rawBase : `/${rawBase}`;
+  return withLeadingSlash.endsWith("/") ? withLeadingSlash : `${withLeadingSlash}/`;
+}
+
+function buildAppPath(query = "") {
+  const normalizedQuery = query
+    ? (String(query).startsWith("?") ? String(query) : `?${String(query)}`)
+    : "";
+  return `${getAppBasePath()}${normalizedQuery}`;
+}
+
+function buildAppUrl(query = "") {
+  const appPath = buildAppPath(query);
+  if (typeof window === "undefined") return appPath;
+  return `${window.location.origin}${appPath}`;
+}
+
 function loadExternalScript(src, readyCheck) {
   if (typeof window === "undefined") {
     return Promise.reject(new Error("Window is unavailable."));
@@ -3884,7 +3903,7 @@ function Dashboard({
     "--scan-delay": `${index * 150}ms`,
   });
 
-  const profileSharePath = `/?u=${encodeURIComponent(user.login || username || "")}`;
+  const profileShareUrl = buildAppUrl(`u=${encodeURIComponent(user.login || username || "")}`);
   const shareLangs = Array.isArray(langs) ? langs.slice(0, 4) : [];
   const shareHighlights = Array.isArray(facts) ? facts.slice(0, 2) : [];
   const shareInitial = ((user.login || user.name || "?").charAt(0) || "?").toUpperCase();
@@ -4103,7 +4122,7 @@ function Dashboard({
   async function copyProfileLink() {
     try {
       if (navigator?.clipboard?.writeText) {
-        await navigator.clipboard.writeText(profileSharePath);
+        await navigator.clipboard.writeText(profileShareUrl);
       }
     } catch {
       // Ignore clipboard failures.
@@ -5329,7 +5348,7 @@ export default function GitDNA() {
       }
 
       const profileUsername = bundle.username;
-      window.history.pushState({}, "", `/?u=${encodeURIComponent(profileUsername)}`);
+      window.history.pushState({}, "", buildAppPath(`u=${encodeURIComponent(profileUsername)}`));
       const finalStepIndex = Math.max(0, selectedLoadingSteps.length - 1);
       const finalMessage = selectedLoadingSteps[finalStepIndex] || selectedLoadingSteps[0] || LOADING_STEPS[0];
       setLoadingStep(finalStepIndex);
@@ -5474,7 +5493,7 @@ export default function GitDNA() {
       setBattleData({ left: leftBundle, right: rightBundle, analysis });
 
       const slug = battleSlug(leftBundle.username, rightBundle.username);
-      window.history.pushState({}, "", `/?battle=${encodeURIComponent(slug)}`);
+      window.history.pushState({}, "", buildAppPath(`battle=${encodeURIComponent(slug)}`));
 
       if (showLoading) {
         setLoadingStep(9);
@@ -5514,16 +5533,16 @@ export default function GitDNA() {
     setBattleData(null);
     const fallbackUsername = activeUsername || github?.user?.login;
     if (fallbackUsername) {
-      window.history.pushState({}, "", `/?u=${encodeURIComponent(fallbackUsername)}`);
+      window.history.pushState({}, "", buildAppPath(`u=${encodeURIComponent(fallbackUsername)}`));
     } else {
-      window.history.pushState({}, "", "/");
+      window.history.pushState({}, "", buildAppPath());
     }
   }
 
   async function shareBattleLink() {
     if (!battleData?.left?.username || !battleData?.right?.username) return;
     const slug = battleSlug(battleData.left.username, battleData.right.username);
-    const path = `/?battle=${encodeURIComponent(slug)}`;
+    const path = buildAppUrl(`battle=${encodeURIComponent(slug)}`);
     try {
       if (navigator?.clipboard?.writeText) {
         await navigator.clipboard.writeText(path);
@@ -5669,7 +5688,7 @@ export default function GitDNA() {
             setIsFounder(false);
             setStarTier(null);
             setNightOwlToastVisible(false);
-            window.history.pushState({}, "", "/");
+            window.history.pushState({}, "", buildAppPath());
           }}
         />
       )}
