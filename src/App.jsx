@@ -579,6 +579,226 @@ function extractCommitData(events) {
   return { messages: messages.slice(0, 20), hours };
 }
 
+function clampNumber(value, min, max) {
+  return Math.min(max, Math.max(min, value));
+}
+
+function getCurrentContributionStreak(contributions) {
+  const safe = Array.isArray(contributions)
+    ? contributions.map((entry) => ({
+        date: String(entry?.date || ""),
+        count: Number(entry?.count || 0),
+      })).filter((entry) => entry.date)
+    : [];
+
+  if (safe.length === 0) return 0;
+  safe.sort((a, b) => a.date.localeCompare(b.date));
+
+  let streak = 0;
+  for (let i = safe.length - 1; i >= 0; i -= 1) {
+    if (safe[i].count > 0) {
+      streak += 1;
+    } else {
+      break;
+    }
+  }
+
+  return streak;
+}
+
+function detectCommitSpikeDrop(events) {
+  const monthlyBuckets = new Map();
+  const safeEvents = Array.isArray(events) ? events : [];
+
+  for (const event of safeEvents) {
+    if (event?.type !== "PushEvent") continue;
+    const dt = new Date(event?.created_at || "");
+    if (Number.isNaN(dt.getTime())) continue;
+
+    const key = `${dt.getUTCFullYear()}-${String(dt.getUTCMonth() + 1).padStart(2, "0")}`;
+    const commitCount = Math.max(1, Array.isArray(event?.payload?.commits) ? event.payload.commits.length : 0);
+    monthlyBuckets.set(key, (monthlyBuckets.get(key) || 0) + commitCount);
+  }
+
+  const counts = [...monthlyBuckets.entries()]
+    .sort((a, b) => a[0].localeCompare(b[0]))
+    .map((entry) => entry[1]);
+
+  if (counts.length < 3) {
+    return { detected: false, dropPct: 0 };
+  }
+
+  let bestDrop = 0;
+  for (let i = 1; i < counts.length - 1; i += 1) {
+    const prev = counts[i - 1];
+    const current = counts[i];
+    const next = counts[i + 1];
+    if (current < Math.max(8, prev * 1.8)) continue;
+    if (next > current * 0.55) continue;
+    const drop = Math.round(((current - next) / Math.max(current, 1)) * 100);
+    bestDrop = Math.max(bestDrop, drop);
+  }
+
+  return {
+    detected: bestDrop > 0,
+    dropPct: bestDrop,
+  };
+}
+
+function buildBurnoutAnalysis({ github, user, repos, events, contributions }) {
+  const safeGithub = github || {};
+  const fallbackCommitData = extractCommitData(events || []);
+
+  const commitMessages = Array.isArray(safeGithub.recent_commit_messages) && safeGithub.recent_commit_messages.length > 0
+    ? safeGithub.recent_commit_messages.map((msg) => String(msg || ""))
+    : fallbackCommitData.messages;
+
+  const hourDistribution = Array.isArray(safeGithub.commit_hour_distribution) && safeGithub.commit_hour_distribution.length === 24
+    ? safeGithub.commit_hour_distribution.map((entry) => Number(entry || 0))
+    : (() => {
+        const dist = Array(24).fill(0);
+        fallbackCommitData.hours.forEach((hour) => {
+          if (Number.isInteger(hour) && hour >= 0 && hour <= 23) {
+            dist[hour] += 1;
+          }
+        });
+        return dist;
+      })();
+
+  const totalHourSamples = hourDistribution.reduce((sum, value) => sum + value, 0);
+  let maxWindowRatio = 0;
+  if (totalHourSamples > 0) {
+    for (let i = 0; i < 24; i += 1) {
+      const windowSum = hourDistribution[i] + hourDistribution[(i + 1) % 24] + hourDistribution[(i + 2) % 24];
+      maxWindowRatio = Math.max(maxWindowRatio, windowSum / totalHourSamples);
+    }
+  }
+
+  const meanHour = totalHourSamples > 0 ? totalHourSamples / 24 : 0;
+  const variance = totalHourSamples > 0
+    ? hourDistribution.reduce((sum, value) => sum + Math.pow(value - meanHour, 2), 0) / 24
+    : 0;
+  const stdDev = Math.sqrt(variance);
+
+  const concentratedWindow = totalHourSamples >= 12 && maxWindowRatio >= 0.55;
+  const evenlySpread = totalHourSamples >= 12 && maxWindowRatio <= 0.3 && stdDev <= (meanHour * 1.15);
+
+  const providedNightRatio = Number(safeGithub.night_commit_ratio);
+  const computedNightRatio = totalHourSamples > 0
+    ? (hourDistribution.slice(0, 6).reduce((sum, value) => sum + value, 0) / totalHourSamples)
+    : 0;
+  const nightRatio = Number.isFinite(providedNightRatio) ? providedNightRatio : computedNightRatio;
+
+  let weekendCommits = Number(safeGithub?.weekend_vs_weekday?.weekend_commits || 0);
+  let weekdayCommits = Number(safeGithub?.weekend_vs_weekday?.weekday_commits || 0);
+
+  if (weekendCommits + weekdayCommits === 0 && Array.isArray(safeGithub.recent_commit_timestamps)) {
+    safeGithub.recent_commit_timestamps.forEach((timestamp) => {
+      const dt = new Date(timestamp);
+      if (Number.isNaN(dt.getTime())) return;
+      if (dt.getUTCDay() === 0 || dt.getUTCDay() === 6) weekendCommits += 1;
+      else weekdayCommits += 1;
+    });
+  }
+
+  const weekdayShare = (weekdayCommits + weekendCommits) > 0
+    ? (weekdayCommits / (weekdayCommits + weekendCommits))
+    : 0;
+
+  const lazyRegex = /\b(?:wip|fix|hotfix)\b/i;
+  const lazyCount = commitMessages.filter((message) => lazyRegex.test(message)).length;
+  const lazyRatio = commitMessages.length > 0 ? (lazyCount / commitMessages.length) : 0;
+
+  const descriptiveCount = commitMessages.filter((message) => {
+    const words = String(message || "").trim().split(/\s+/).filter(Boolean).length;
+    return words >= 5 && message.length >= 28 && !lazyRegex.test(message);
+  }).length;
+  const descriptiveRatio = commitMessages.length > 0 ? (descriptiveCount / commitMessages.length) : 0;
+
+  const repoCount = Number(user?.public_repos ?? repos?.length ?? 0);
+  const streakLength = getCurrentContributionStreak(contributions || []);
+  const spikeDrop = detectCommitSpikeDrop(events || []);
+
+  let score = 50;
+  const signals = [];
+
+  if (concentratedWindow) {
+    score += 15;
+    signals.push({ impact: 15, text: `${Math.round(maxWindowRatio * 100)}% of commits cluster inside 3-hour windows` });
+  }
+
+  if (nightRatio > 0.4) {
+    score += 12;
+    signals.push({ impact: 12, text: `${Math.round(nightRatio * 100)}% of commits between midnight and 5am` });
+  }
+
+  if (spikeDrop.detected) {
+    score += 10;
+    signals.push({ impact: 10, text: `Commit velocity spiked then dropped ${spikeDrop.dropPct}% in adjacent periods` });
+  }
+
+  if ((weekdayCommits + weekendCommits) >= 10 && weekdayShare > 0.6) {
+    score += 8;
+    signals.push({ impact: 8, text: `${Math.round(weekdayShare * 100)}% of commits on weekdays vs weekends` });
+  }
+
+  if (commitMessages.length >= 6 && lazyRatio >= 0.35) {
+    score += 8;
+    signals.push({ impact: 8, text: `${Math.round(lazyRatio * 100)}% of commit messages are wip/fix/hotfix` });
+  }
+
+  if (repoCount >= 50) {
+    score += 7;
+    signals.push({ impact: 7, text: `${repoCount} repositories detected — high context switching` });
+  }
+
+  if (evenlySpread) {
+    score -= 10;
+    signals.push({ impact: -10, text: `Commit activity is evenly spread (${Math.round(maxWindowRatio * 100)}% max 3-hour concentration)` });
+  }
+
+  if (weekendCommits > 0) {
+    score -= 8;
+    signals.push({ impact: -8, text: "Weekend activity detected — healthy passion signals" });
+  }
+
+  if (streakLength >= 7 && streakLength <= 21) {
+    score -= 5;
+    signals.push({ impact: -5, text: `${streakLength}-day streak sits in a sustainable range` });
+  }
+
+  if (commitMessages.length >= 6 && descriptiveRatio >= 0.45) {
+    score -= 5;
+    signals.push({ impact: -5, text: `${Math.round(descriptiveRatio * 100)}% of commit messages are descriptive` });
+  }
+
+  const burnoutIndex = Math.round(clampNumber(score, 0, 100));
+  const tier = burnoutIndex <= 30
+    ? { label: "OPTIMAL", color: "#39ff14" }
+    : burnoutIndex <= 60
+      ? { label: "ELEVATED", color: "#ffb300" }
+      : burnoutIndex <= 80
+        ? { label: "HIGH", color: "#ff7a00" }
+        : { label: "CRITICAL", color: "#ff4545" };
+
+  const rankedSignals = [...signals]
+    .sort((a, b) => Math.abs(b.impact) - Math.abs(a.impact))
+    .slice(0, 3);
+
+  const recommendation = burnoutIndex > 60
+    ? "The data suggests unsustainable velocity. Ships fast. Sleeps less. History is watching."
+    : burnoutIndex < 30
+      ? "Balanced output. Rare. Most developers never find this equilibrium."
+      : "Current velocity is manageable, but guard your sleep windows and context switches before they become structural debt.";
+
+  return {
+    burnoutIndex,
+    tier,
+    recommendation,
+    topSignals: rankedSignals,
+  };
+}
+
 function isValidGithubUsername(name) {
   if (!name || name.length > 39) return false;
   if (name.startsWith("-") || name.endsWith("-")) return false;
@@ -1047,6 +1267,73 @@ function ScoreRing({ score, specialMode = null, percentileText = "", percentileC
             {percentileText}
           </div>
         )}
+      </div>
+    </div>
+  );
+}
+
+function BurnoutGauge({ score }) {
+  const safeScore = clampNumber(Number(score) || 0, 0, 100);
+  const tier = safeScore <= 30
+    ? { label: "OPTIMAL", color: "#39ff14" }
+    : safeScore <= 60
+      ? { label: "ELEVATED", color: "#ffb300" }
+      : safeScore <= 80
+        ? { label: "HIGH", color: "#ff7a00" }
+        : { label: "CRITICAL", color: "#ff4545" };
+
+  const radius = 62;
+  const circumference = 2 * Math.PI * radius;
+  const [offset, setOffset] = useState(circumference);
+
+  useEffect(() => {
+    const targetProgress = safeScore / 100;
+    let start = null;
+    let rafId = 0;
+
+    const animate = (ts) => {
+      if (!start) start = ts;
+      const progress = Math.min((ts - start) / 1400, 1);
+      const eased = 1 - Math.pow(1 - progress, 3);
+      const current = targetProgress * eased;
+      setOffset(circumference * (1 - current));
+      if (progress < 1) {
+        rafId = requestAnimationFrame(animate);
+      }
+    };
+
+    rafId = requestAnimationFrame(animate);
+    return () => cancelAnimationFrame(rafId);
+  }, [safeScore, circumference]);
+
+  return (
+    <div style={{ position: "relative", width: 170, height: 170 }}>
+      <svg width="170" height="170" style={{ transform: "rotate(-90deg)", position: "absolute", inset: 0 }}>
+        <circle cx="85" cy="85" r={radius} fill="none" stroke="rgba(255,255,255,0.07)" strokeWidth="10" />
+        <circle cx="85" cy="85" r={radius} fill="none" stroke="rgba(255,255,255,0.06)" strokeWidth="10" strokeDasharray="5 8" />
+        <circle
+          cx="85"
+          cy="85"
+          r={radius}
+          fill="none"
+          stroke={tier.color}
+          strokeWidth="10"
+          strokeLinecap="round"
+          strokeDasharray={circumference}
+          strokeDashoffset={offset}
+          style={{ filter: `drop-shadow(0 0 10px ${tier.color}99)` }}
+        />
+      </svg>
+      <div style={{ position: "absolute", inset: 0, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center" }}>
+        <div style={{ fontFamily: "Orbitron,monospace", fontSize: "2rem", fontWeight: 900, lineHeight: 1, color: tier.color, textShadow: `0 0 12px ${tier.color}88` }}>
+          <AnimatedCounter target={safeScore} delay={180} duration={1000} />
+        </div>
+        <div style={{ marginTop: 4, fontFamily: "Share Tech Mono,monospace", fontSize: "0.5rem", letterSpacing: "0.16em", color: "rgba(0,220,255,0.58)" }}>
+          BURNOUT INDEX
+        </div>
+        <div style={{ marginTop: 4, fontFamily: "Share Tech Mono,monospace", fontSize: "0.6rem", letterSpacing: "0.13em", color: tier.color }}>
+          {tier.label}
+        </div>
       </div>
     </div>
   );
@@ -3891,6 +4178,16 @@ function Dashboard({
     },
   ];
 
+  const burnoutReport = useMemo(() => (
+    buildBurnoutAnalysis({ github, user, repos, events, contributions })
+  ), [
+    github,
+    user,
+    repos,
+    events,
+    contributions,
+  ]);
+
   const triggerDashboardWake = () => {
     setShowDashboardWake(true);
     if (dashboardWakeTimeoutRef.current) {
@@ -4350,9 +4647,62 @@ function Dashboard({
             <StatCard label="REPOSITORIES" value={user.public_repos} delay={4} sub="public codebases" enterIndex={4} ticker={true} />
             <StatCard label="COMMITS" value={recentCommits} delay={5} sub="recent activity" enterIndex={5} />
           </div>
+
+          <div className="gd-card gd-enter-scan" style={{ padding: "18px 18px", marginBottom: 12, ...cardEntranceStyle(6) }}>
+            <div className="gd-section-label" style={{ marginBottom: 12 }}>COGNITIVE LOAD ANALYSIS</div>
+            <div style={{ display: "flex", gap: 16, flexWrap: "wrap", alignItems: "stretch" }}>
+              <div style={{ flex: "0 1 230px", display: "flex", alignItems: "center", justifyContent: "center", minWidth: 190 }}>
+                <BurnoutGauge score={burnoutReport.burnoutIndex} />
+              </div>
+
+              <div style={{ flex: "1 1 360px", minWidth: 240 }}>
+                <div style={{ display: "flex", flexDirection: "column", gap: 8, marginBottom: 12 }}>
+                  {(burnoutReport.topSignals.length > 0 ? burnoutReport.topSignals : [{ impact: 0, text: "Insufficient signal variance — profile appears stable from visible public activity." }]).map((signal, index) => {
+                    const isRisk = signal.impact > 0;
+                    return (
+                      <div
+                        key={`burnout-signal-${index}`}
+                        style={{
+                          display: "flex",
+                          alignItems: "center",
+                          gap: 8,
+                          padding: "8px 10px",
+                          border: `1px solid ${isRisk ? "rgba(255,122,0,0.32)" : "rgba(57,255,20,0.28)"}`,
+                          background: isRisk ? "rgba(32,12,8,0.62)" : "rgba(8,26,10,0.62)",
+                          borderRadius: 8,
+                          fontSize: "0.82rem",
+                          color: isRisk ? "rgba(255,196,170,0.92)" : "rgba(177,255,170,0.92)",
+                          lineHeight: 1.45,
+                        }}
+                      >
+                        <span style={{ fontSize: "0.9rem", lineHeight: 1 }}>{isRisk ? "⚠" : "✓"}</span>
+                        <span>{signal.text}</span>
+                      </div>
+                    );
+                  })}
+                </div>
+
+                <div style={{
+                  border: "1px solid rgba(0,220,255,0.28)",
+                  borderRadius: 8,
+                  background: "rgba(6,16,30,0.72)",
+                  padding: "10px 12px",
+                  fontSize: "0.82rem",
+                  lineHeight: 1.6,
+                  color: "rgba(208,239,255,0.88)",
+                }}>
+                  {burnoutReport.recommendation}
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div style={{ marginTop: -4, marginBottom: 12, fontFamily: "Share Tech Mono,monospace", fontSize: "0.52rem", letterSpacing: "0.08em", color: "rgba(200,232,255,0.38)" }}>
+            This is pattern analysis, not medical advice. Data based on public GitHub activity only.
+          </div>
         </div>
 
-        <div className="gd-card gd-enter-scan" style={{ padding: "18px 18px", marginBottom: 12, ...cardEntranceStyle(6) }}>
+        <div className="gd-card gd-enter-scan" style={{ padding: "18px 18px", marginBottom: 12, ...cardEntranceStyle(7) }}>
           <div className="gd-section-label">CONTRIBUTION GENOME — LAST 52 WEEKS</div>
           <ContributionHeatmap contributions={contributions} />
         </div>
