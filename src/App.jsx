@@ -285,6 +285,7 @@ const TRADING_CARD_STYLES = `
 .tc-card.tc-rarity-uncommon .tc-face{border-color:rgba(76,231,255,.68);box-shadow:0 0 14px rgba(0,220,255,.28),0 16px 40px rgba(0,0,0,.45)}
 .tc-card.tc-rarity-common .tc-face{border-color:rgba(176,188,206,.48)}
 .tc-card.tc-rarity-legendary .tc-face::after{content:'';position:absolute;inset:-80% -20%;background:linear-gradient(120deg,transparent 42%,rgba(255,220,120,.24) 50%,transparent 58%);animation:tc-shimmer 4.2s linear infinite;pointer-events:none}
+.tc-export-static,.tc-export-static *{animation:none!important;transition:none!important}
 @keyframes tc-hue{from{filter:hue-rotate(0deg)}to{filter:hue-rotate(360deg)}}
 @keyframes tc-shimmer{0%{transform:translateX(-45%) translateY(-10%)}100%{transform:translateX(55%) translateY(10%)}}
 @media (max-width:430px){.tc-overlay{padding:10px}.tc-card{transform:scale(.92);transform-origin:center top;margin-bottom:-34px}}
@@ -4171,15 +4172,76 @@ function TradingCard({
     if (!cardRef.current || isDownloading) return;
     setIsDownloading(true);
 
+    let exportNode = null;
     try {
-      const canvas = await html2canvas(cardRef.current, {
+      if (document?.fonts?.ready) {
+        await document.fonts.ready;
+      }
+
+      const sourceNode = cardRef.current;
+      exportNode = sourceNode.cloneNode(true);
+      exportNode.classList.add("tc-export-static");
+
+      const currentMx = sourceNode.style.getPropertyValue("--mx") || "50";
+      const currentMy = sourceNode.style.getPropertyValue("--my") || "50";
+      const currentBand = sourceNode.style.getPropertyValue("--tier-band") || tierBand;
+
+      exportNode.style.setProperty("--mx", currentMx);
+      exportNode.style.setProperty("--my", currentMy);
+      exportNode.style.setProperty("--tier-band", currentBand);
+      exportNode.style.position = "fixed";
+      exportNode.style.left = "-10000px";
+      exportNode.style.top = "0";
+      exportNode.style.margin = "0";
+      exportNode.style.transform = "none";
+      exportNode.style.width = "320px";
+      exportNode.style.height = "480px";
+      exportNode.style.zIndex = "-1";
+      exportNode.style.pointerEvents = "none";
+
+      const exportInner = exportNode.querySelector(".tc-inner");
+      const exportFront = exportNode.querySelector(".tc-front");
+      const exportBack = exportNode.querySelector(".tc-back");
+
+      if (exportInner) {
+        exportInner.classList.remove("flipped");
+        exportInner.style.transform = "none";
+        exportInner.style.transition = "none";
+      }
+
+      const activateFace = (face, hiddenFace) => {
+        if (hiddenFace) hiddenFace.style.display = "none";
+        if (!face) return;
+        face.style.display = "flex";
+        face.style.position = "relative";
+        face.style.inset = "auto";
+        face.style.transform = "none";
+        face.style.backfaceVisibility = "visible";
+      };
+
+      if (flipped) activateFace(exportBack, exportFront);
+      else activateFace(exportFront, exportBack);
+
+      document.body.appendChild(exportNode);
+      await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+
+      const canvas = await html2canvas(exportNode, {
         backgroundColor: null,
-        scale: window.devicePixelRatio > 1 ? 2 : 1,
+        scale: Math.max(2, window.devicePixelRatio || 1),
         useCORS: true,
         allowTaint: false,
         logging: false,
         removeContainer: true,
+        width: 320,
+        height: 480,
+        windowWidth: 320,
+        windowHeight: 480,
       });
+
+      if (exportNode && exportNode.parentNode) {
+        exportNode.parentNode.removeChild(exportNode);
+        exportNode = null;
+      }
 
       const filename = `gitdna-card-${String(user?.login || "dev")}.png`;
       const link = document.createElement("a");
@@ -4196,6 +4258,9 @@ function TradingCard({
     } catch {
       // Keep flow silent if browser blocks canvas/clipboard.
     } finally {
+      if (exportNode && exportNode.parentNode) {
+        exportNode.parentNode.removeChild(exportNode);
+      }
       setIsDownloading(false);
     }
   };
