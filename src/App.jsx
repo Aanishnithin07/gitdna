@@ -32,6 +32,7 @@ const LOADING_STEPS = [
 const RATE_LIMIT_MESSAGE = "RATE LIMIT HIT — Add a GitHub token in .env or wait 60 minutes";
 const FOUNDER_HANDLE = "aanishnithin07";
 const TORVALDS_HANDLE = "torvalds";
+const BALATHARUNR_HANDLE = "balatharunr";
 const FOUNDER_LOADING_STEPS = [
   "WAIT... THIS SIGNATURE IS FAMILIAR",
   "CROSS-REFERENCING FOUNDER DATABASE",
@@ -286,6 +287,10 @@ const TRADING_CARD_STYLES = `
 .tc-card.tc-rarity-uncommon .tc-face{border-color:rgba(76,231,255,.68);box-shadow:0 0 14px rgba(0,220,255,.28),0 16px 40px rgba(0,0,0,.45)}
 .tc-card.tc-rarity-common .tc-face{border-color:rgba(176,188,206,.48)}
 .tc-card.tc-rarity-legendary .tc-face::after{content:'';position:absolute;inset:-80% -20%;background:linear-gradient(120deg,transparent 42%,rgba(255,220,120,.24) 50%,transparent 58%);animation:tc-shimmer 4.2s linear infinite;pointer-events:none}
+.tc-card.tc-collab-silver .tc-face{border-color:rgba(214,223,233,.88);box-shadow:0 0 20px rgba(220,228,240,.35),0 0 34px rgba(152,168,186,.24),0 16px 40px rgba(0,0,0,.45)}
+.tc-card.tc-collab-silver .tc-face::after{content:'';position:absolute;inset:-80% -20%;background:linear-gradient(120deg,transparent 40%,rgba(236,242,249,.34) 50%,transparent 60%);animation:tc-shimmer 3.4s linear infinite;pointer-events:none}
+.tc-card.tc-collab-silver .tc-rarity{border-color:rgba(222,232,246,.65);color:rgba(232,241,253,.96);box-shadow:0 0 10px rgba(214,223,236,.28)}
+.tc-card.tc-collab-silver .tc-card-number{color:#f1f6ff;text-shadow:0 0 10px rgba(216,228,242,.5)}
 .tc-export-static,.tc-export-static *{animation:none!important;transition:none!important}
 @keyframes tc-hue{from{filter:hue-rotate(0deg)}to{filter:hue-rotate(360deg)}}
 @keyframes tc-shimmer{0%{transform:translateX(-45%) translateY(-10%)}100%{transform:translateX(55%) translateY(10%)}}
@@ -4243,12 +4248,16 @@ function TradingCard({
   }, [onClose]);
 
   const normalizedTier = String(tier || "RISING").toUpperCase();
+  const isBalatharunr = (user?.login || "").toLowerCase() === BALATHARUNR_HANDLE;
   const tierBand = {
     LEGENDARY: "linear-gradient(90deg,#8e5b00,#ffd76a,#9f5f00)",
     ELITE: "linear-gradient(90deg,#2a103f,#9f4eff,#2d1146)",
     VETERAN: "linear-gradient(90deg,#063649,#00dcff,#0a3d4d)",
     RISING: "linear-gradient(90deg,#163c0d,#39ff14,#1f4313)",
   }[normalizedTier] || "linear-gradient(90deg,#163c0d,#39ff14,#1f4313)";
+  const effectiveTierBand = isBalatharunr
+    ? "linear-gradient(90deg,#3a434f,#d9e1ec,#465463)"
+    : tierBand;
 
   const scoreValue = clampNumber(Number(devScore) || 0, 0, 100);
   const rarity = scoreValue >= 90
@@ -4274,7 +4283,9 @@ function TradingCard({
   }, [traits, velocity]);
 
   const velocityValue = safeTraits.find((item) => item.key === "velocity")?.value || 50;
-  const cardNumber = `#${String(dnaSequence || "0000").slice(-4).toUpperCase()}`;
+  const cardNumber = isBalatharunr
+    ? "#9NX"
+    : `#${String(dnaSequence || "0000").slice(-4).toUpperCase()}`;
 
   const radarCenter = 90;
   const radarRadius = 66;
@@ -4328,7 +4339,7 @@ function TradingCard({
 
       const currentMx = sourceNode.style.getPropertyValue("--mx") || "50";
       const currentMy = sourceNode.style.getPropertyValue("--my") || "50";
-      const currentBand = sourceNode.style.getPropertyValue("--tier-band") || tierBand;
+      const currentBand = sourceNode.style.getPropertyValue("--tier-band") || effectiveTierBand;
 
       exportNode.style.setProperty("--mx", currentMx);
       exportNode.style.setProperty("--my", currentMy);
@@ -4417,11 +4428,11 @@ function TradingCard({
       <div className="tc-shell" onClick={(event) => event.stopPropagation()}>
         <div
           ref={cardRef}
-          className={`tc-card ${rarity.className}`}
+          className={`tc-card ${rarity.className}${isBalatharunr ? " tc-collab-silver" : ""}`}
           onMouseMove={handleHoloMove}
           onMouseLeave={resetHolo}
           onClick={() => setFlipped((prev) => !prev)}
-          style={{ "--tier-band": tierBand }}
+          style={{ "--tier-band": effectiveTierBand }}
         >
           <div className={`tc-inner${flipped ? " flipped" : ""}`}>
             <article className="tc-face tc-front">
