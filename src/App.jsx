@@ -405,6 +405,9 @@ html,body{max-width:100%;overflow-x:hidden}
 @keyframes toast-down{from{opacity:0;transform:translateY(-24px)}to{opacity:1;transform:translateY(0)}}
 @keyframes dashboard-wake{0%{opacity:.7}100%{opacity:1}}
 @keyframes tier-halo-pulse{0%,100%{opacity:.6}50%{opacity:1}}
+@keyframes ach-reveal{from{opacity:0;transform:scale(.8);filter:blur(4px)}to{opacity:1;transform:scale(1);filter:blur(0)}}
+@keyframes ach-legendary-flash{0%{opacity:0}35%{opacity:.4}100%{opacity:0}}
+@keyframes ach-legendary-shimmer{0%{transform:translateX(-120%);opacity:0}20%{opacity:1}100%{transform:translateX(140%);opacity:0}}
 
 .gd-glitch{animation:glitch 5s infinite}
 .gd-dashboard-wake{animation:dashboard-wake .2s ease}
@@ -522,6 +525,43 @@ html,body{max-width:100%;overflow-x:hidden}
 .gd-commit-eye-tip{position:relative;display:inline-flex;align-items:center;justify-content:center;cursor:help}
 .gd-commit-eye-bubble{position:absolute;right:-6px;bottom:125%;width:min(220px,70vw);padding:7px 8px;border-radius:6px;border:1px solid rgba(255,179,0,.45);background:rgba(22,14,3,.95);color:rgba(255,224,168,.95);font-family:'Share Tech Mono',monospace;font-size:.54rem;line-height:1.45;letter-spacing:.08em;opacity:0;transform:translateY(6px);transition:all .18s ease;pointer-events:none;z-index:4}
 .gd-commit-eye-tip:hover .gd-commit-eye-bubble{opacity:1;transform:translateY(0)}
+
+.gd-achievement-vault-header{display:flex;justify-content:space-between;align-items:flex-start;gap:12px;flex-wrap:wrap}
+.gd-achievement-vault-title{font-family:'Share Tech Mono',monospace;font-size:.64rem;letter-spacing:.16em;color:rgba(0,220,255,.58)}
+.gd-achievement-progress-wrap{display:flex;align-items:center;gap:10px}
+.gd-achievement-progress-text{font-family:'Orbitron',monospace;font-size:.66rem;letter-spacing:.1em;color:#dff7ff;text-align:right;line-height:1.35}
+.gd-achievement-progress-ring{position:relative;width:40px;height:40px;display:grid;place-items:center;flex-shrink:0}
+.gd-achievement-progress-ring svg{position:absolute;inset:0;transform:rotate(-90deg)}
+.gd-achievement-progress-value{font-family:'Share Tech Mono',monospace;font-size:.54rem;letter-spacing:.08em;color:rgba(0,220,255,.78)}
+
+.gd-achievement-filter-row{margin-top:10px;display:flex;flex-wrap:wrap;gap:8px}
+.gd-achievement-filter-pill{padding:5px 10px;border-radius:999px;border:1px solid rgba(0,220,255,.25);background:rgba(0,220,255,.07);color:rgba(0,220,255,.72);font-family:'Share Tech Mono',monospace;font-size:.56rem;letter-spacing:.11em;cursor:pointer;transition:all .2s ease}
+.gd-achievement-filter-pill:hover{border-color:rgba(0,220,255,.45);background:rgba(0,220,255,.14)}
+.gd-achievement-filter-pill.active{border-color:rgba(0,220,255,.65);background:rgba(0,220,255,.2);color:#00dcff;box-shadow:0 0 14px rgba(0,220,255,.18)}
+
+.gd-achievement-summary{margin-top:12px;padding:8px 10px;border:1px solid rgba(0,220,255,.2);border-radius:8px;background:rgba(6,16,30,.72);display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.gd-achievement-summary-item{display:inline-flex;align-items:center;gap:6px;font-family:'Share Tech Mono',monospace;font-size:.58rem;letter-spacing:.08em;color:rgba(200,232,255,.76)}
+.gd-achievement-summary-dot{width:7px;height:7px;border-radius:2px;display:inline-block;box-shadow:0 0 10px currentColor}
+
+.gd-achievement-grid{margin-top:12px;display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:10px}
+.gd-achievement-card{position:relative;border-radius:8px;padding:12px 10px 10px;background:rgba(4,14,26,.9);border:1px solid rgba(255,255,255,.06);min-height:220px;display:flex;flex-direction:column;align-items:center;text-align:center;overflow:hidden;transition:transform .2s ease,filter .2s ease,opacity .2s ease}
+.gd-achievement-card--unlocked{opacity:0;transform:scale(.8);filter:blur(4px)}
+.gd-achievement-card--unlocked.gd-achievement-card--revealed{animation:ach-reveal .55s cubic-bezier(.2,.8,.2,1) forwards;animation-delay:calc(var(--ach-delay,0ms) + var(--ach-legendary-delay,0ms))}
+.gd-achievement-card--legendary-unlocked::before{content:'';position:absolute;inset:0;background:rgba(255,215,0,.4);opacity:0;pointer-events:none;animation:ach-legendary-flash .3s ease-out forwards;animation-delay:var(--ach-delay,0ms)}
+.gd-achievement-card--legendary-unlocked::after{content:'';position:absolute;inset:-8px;pointer-events:none;background:linear-gradient(110deg,transparent 30%,rgba(255,255,255,.88) 50%,transparent 70%);opacity:0;transform:translateX(-120%);animation:ach-legendary-shimmer .8s ease forwards;animation-delay:calc(var(--ach-delay,0ms) + 300ms)}
+.gd-achievement-card--locked{filter:grayscale(100%) opacity(.35);border:1px solid rgba(255,255,255,.06);cursor:not-allowed}
+.gd-achievement-card--locked:hover{filter:grayscale(60%) opacity(.6)}
+.gd-achievement-pip{position:absolute;top:8px;left:8px;width:6px;height:6px;border-radius:50%;background:var(--ach-color,#00dcff);box-shadow:0 0 8px var(--ach-color,#00dcff)}
+.gd-achievement-icon{font-size:2rem;line-height:1;filter:drop-shadow(0 0 6px var(--ach-color,#00dcff));margin-top:14px}
+.gd-achievement-card--locked .gd-achievement-icon{font-size:2rem;color:rgba(255,255,255,.15);filter:none;text-shadow:none}
+.gd-achievement-name{margin-top:8px;font-family:'Orbitron',monospace;font-size:.65rem;letter-spacing:.1em;color:var(--ach-color,#00dcff);line-height:1.35}
+.gd-achievement-desc{margin-top:4px;font-family:'Share Tech Mono',monospace;font-size:.58rem;line-height:1.45;color:rgba(200,232,255,.5)}
+.gd-achievement-flavor{margin-top:8px;padding-top:8px;border-top:1px solid var(--ach-divider,rgba(255,255,255,.12));font-family:'Rajdhani',sans-serif;font-size:.78rem;font-style:italic;line-height:1.5;color:rgba(200,232,255,.7);width:100%}
+.gd-achievement-card--locked .gd-achievement-flavor{color:rgba(200,232,255,.62);opacity:.56}
+.gd-achievement-card--locked:hover .gd-achievement-flavor{opacity:.95}
+.gd-achievement-rarity-pill{margin-top:auto;padding:3px 8px;border-radius:999px;border:1px solid currentColor;font-family:'Share Tech Mono',monospace;font-size:.52rem;letter-spacing:.12em;background:var(--ach-pill-bg,rgba(0,220,255,.12));color:var(--ach-color,#00dcff)}
+.gd-achievement-empty{margin-top:12px;border:1px dashed rgba(0,220,255,.26);border-radius:8px;padding:12px;font-family:'Share Tech Mono',monospace;font-size:.62rem;letter-spacing:.07em;color:rgba(200,232,255,.62);text-align:center}
+.gd-achievement-actions{margin-top:12px;display:flex;align-items:center;gap:8px;flex-wrap:wrap}
 
 .gd-modal-overlay{position:fixed;inset:0;z-index:85;display:flex;align-items:center;justify-content:center;padding:18px;background:rgba(4,8,16,0.68);backdrop-filter:blur(8px)}
 .gd-modal-card{width:100%;max-width:460px;border:1px solid rgba(0,220,255,0.26);background:rgba(6,14,24,0.95);border-radius:8px;box-shadow:0 0 24px rgba(0,220,255,0.18);padding:20px 18px;position:relative}
@@ -703,6 +743,458 @@ const COMMIT_CONVENTIONAL_RE = /^(feat|fix|chore|refactor|docs):\s+.+/i;
 const COMMIT_ACTION_VERB_RE = /\b(add|fix|refactor|remove|improve|optimi[sz]e|implement|update|migrate|rename|clean|document|test|handle|support|create|prevent)\b/i;
 const COMMIT_VAGUE_SHORT_RE = /^(fix|update|test|change|misc|tmp|temp|work|stuff|quick)\b/i;
 const COMMIT_TOOLTIP_TEXT = "THIS COMMIT MESSAGE SHOULD BE ILLEGAL IN 42 COUNTRIES.";
+
+const ACHIEVEMENT_RARITY_COLORS = {
+  COMMON: "rgba(136,136,136,1)",
+  UNCOMMON: "rgba(57,255,20,1)",
+  RARE: "rgba(0,220,255,1)",
+  EPIC: "rgba(179,71,234,1)",
+  LEGENDARY: "rgba(255,215,0,1)",
+};
+
+const ACHIEVEMENT_RARITY_META = {
+  COMMON: { rank: 0, color: ACHIEVEMENT_RARITY_COLORS.COMMON },
+  UNCOMMON: { rank: 1, color: ACHIEVEMENT_RARITY_COLORS.UNCOMMON },
+  RARE: { rank: 2, color: ACHIEVEMENT_RARITY_COLORS.RARE },
+  EPIC: { rank: 3, color: ACHIEVEMENT_RARITY_COLORS.EPIC },
+  LEGENDARY: { rank: 4, color: ACHIEVEMENT_RARITY_COLORS.LEGENDARY },
+};
+
+const ACHIEVEMENT_RARITY_ORDER = ["LEGENDARY", "EPIC", "RARE", "UNCOMMON", "COMMON"];
+const ACHIEVEMENT_FILTERS = ["ALL", ...ACHIEVEMENT_RARITY_ORDER];
+
+function rgbaWithAlpha(color, alpha) {
+  const safeAlpha = clampNumber(Number(alpha) || 0, 0, 1);
+  const match = String(color || "").match(/^rgba?\(([^)]+)\)$/i);
+  if (!match) return color;
+  const parts = match[1].split(",").map((part) => part.trim());
+  if (parts.length < 3) return color;
+  return `rgba(${parts[0]},${parts[1]},${parts[2]},${safeAlpha})`;
+}
+
+function createAchievement(definition) {
+  const rarity = String(definition?.rarity || "COMMON").toUpperCase();
+  return {
+    ...definition,
+    rarity,
+    rarityColor: ACHIEVEMENT_RARITY_COLORS[rarity] || ACHIEVEMENT_RARITY_COLORS.COMMON,
+  };
+}
+
+const ACHIEVEMENTS = [
+  createAchievement({
+    id: "first_blood",
+    icon: "🩸",
+    name: "FIRST BLOOD",
+    description: "Created your first repository",
+    rarity: "COMMON",
+    condition: (data) => data.totalRepos >= 1,
+    unlockedText: "The journey starts with a single commit.",
+    lockedText: "Create your first repository.",
+  }),
+  createAchievement({
+    id: "night_shift",
+    icon: "🌑",
+    name: "NIGHT SHIFT",
+    description: "Committed code after midnight",
+    rarity: "COMMON",
+    condition: (data) => data.avgCommitHour >= 0 && data.avgCommitHour <= 4,
+    unlockedText: "Sleep is for the compiled.",
+    lockedText: "Commit code between midnight and 4am.",
+  }),
+  createAchievement({
+    id: "polyglot_init",
+    icon: "🗣",
+    name: "POLYGLOT INIT",
+    description: "Used 3 or more programming languages",
+    rarity: "COMMON",
+    condition: (data) => data.topLangs.length >= 3,
+    unlockedText: "You speak in multiple tongues.",
+    lockedText: "Use at least 3 different languages.",
+  }),
+  createAchievement({
+    id: "social_signal",
+    icon: "📡",
+    name: "SOCIAL SIGNAL",
+    description: "Gained your first 10 followers",
+    rarity: "COMMON",
+    condition: (data) => data.followers >= 10,
+    unlockedText: "People are watching. Build accordingly.",
+    lockedText: "Reach 10 followers.",
+  }),
+  createAchievement({
+    id: "repo_hoarder",
+    icon: "📦",
+    name: "REPO HOARDER",
+    description: "Created 20+ repositories",
+    rarity: "COMMON",
+    condition: (data) => data.totalRepos >= 20,
+    unlockedText: "You have a lot of ideas. Most incomplete. That tracks.",
+    lockedText: "Create 20 repositories.",
+  }),
+  createAchievement({
+    id: "star_child",
+    icon: "⭐",
+    name: "STAR CHILD",
+    description: "Earned your first star",
+    rarity: "COMMON",
+    condition: (data) => data.totalStars >= 1,
+    unlockedText: "Someone out there noticed.",
+    lockedText: "Earn at least 1 star on any repo.",
+  }),
+  createAchievement({
+    id: "veteran_badge",
+    icon: "🎖",
+    name: "YEAR ONE",
+    description: "GitHub account over 1 year old",
+    rarity: "COMMON",
+    condition: (data) => data.accountAge >= 1,
+    unlockedText: "You survived year one. Most don't come back.",
+    lockedText: "Maintain your GitHub for 1 year.",
+  }),
+  createAchievement({
+    id: "bio_written",
+    icon: "✍",
+    name: "IDENTITY ESTABLISHED",
+    description: "Filled in your GitHub bio",
+    rarity: "COMMON",
+    condition: (data) => Boolean(data.bio),
+    unlockedText: "You exist. Officially.",
+    lockedText: "Add a bio to your GitHub profile.",
+  }),
+  createAchievement({
+    id: "century_stars",
+    icon: "💫",
+    name: "CENTURY MARK",
+    description: "Earned 100 total stars",
+    rarity: "UNCOMMON",
+    condition: (data) => data.totalStars >= 100,
+    unlockedText: "Triple digits. The algorithm has spoken.",
+    lockedText: "Earn 100 stars across all repos.",
+  }),
+  createAchievement({
+    id: "open_source_soul",
+    icon: "🔓",
+    name: "OPEN SOURCE SOUL",
+    description: "Has 10+ public repos with descriptions",
+    rarity: "UNCOMMON",
+    condition: (data) => data.repos.filter((repo) => repo.description).length >= 10,
+    unlockedText: "You document for strangers. Rare energy.",
+    lockedText: "Add descriptions to 10+ repos.",
+  }),
+  createAchievement({
+    id: "weekend_warrior",
+    icon: "⚔",
+    name: "WEEKEND WARRIOR",
+    description: "Commits on weekends consistently",
+    rarity: "UNCOMMON",
+    condition: (data) => data.weekendRatio > 0.25,
+    unlockedText: "The hustle doesn't take days off.",
+    lockedText: "Make 25% of commits on weekends.",
+  }),
+  createAchievement({
+    id: "language_master",
+    icon: "🏆",
+    name: "LANGUAGE DOMINANT",
+    description: "80%+ of repos in one language",
+    rarity: "UNCOMMON",
+    condition: (data) => data.topLangs[0]?.pct >= 80,
+    unlockedText: "Specialist. Committed. Possibly stubborn.",
+    lockedText: "Have one language exceed 80% of your repos.",
+  }),
+  createAchievement({
+    id: "networked",
+    icon: "🕸",
+    name: "NETWORKED",
+    description: "Following 100+ developers",
+    rarity: "UNCOMMON",
+    condition: (data) => data.following >= 100,
+    unlockedText: "You watch everyone. They don't all watch back.",
+    lockedText: "Follow 100+ developers.",
+  }),
+  createAchievement({
+    id: "consistent",
+    icon: "📅",
+    name: "CONSISTENT",
+    description: "Active on GitHub for 3+ consecutive months",
+    rarity: "UNCOMMON",
+    condition: (data) => data.accountAge >= 0.25,
+    unlockedText: "Consistency is rarer than talent.",
+    lockedText: "Stay active for 3+ months.",
+  }),
+  createAchievement({
+    id: "commit_quality",
+    icon: "📝",
+    name: "CLEAN COMMIT",
+    description: "Commit message quality score above 70%",
+    rarity: "UNCOMMON",
+    condition: (data) => data.commitQualityScore >= 70,
+    unlockedText: "Your git log is readable by humans. Exceptional.",
+    lockedText: "Achieve 70%+ commit message quality.",
+  }),
+  createAchievement({
+    id: "portfolio_complete",
+    icon: "💼",
+    name: "PROFILE COMPLETE",
+    description: "Has bio, location, website and photo",
+    rarity: "UNCOMMON",
+    condition: (data) => Boolean(data.bio && data.location && data.blog),
+    unlockedText: "You take this seriously. It shows.",
+    lockedText: "Fill in bio, location, and website.",
+  }),
+  createAchievement({
+    id: "fork_life",
+    icon: "🍴",
+    name: "FORK LIFE",
+    description: "Forked 10+ repositories",
+    rarity: "UNCOMMON",
+    condition: (data) => data.repos.filter((repo) => repo.fork).length >= 10,
+    unlockedText: "You learn by taking apart other people's work. Smart.",
+    lockedText: "Fork 10+ repositories.",
+  }),
+  createAchievement({
+    id: "five_years",
+    icon: "🗓",
+    name: "HALF DECADE",
+    description: "GitHub account over 5 years old",
+    rarity: "UNCOMMON",
+    condition: (data) => data.accountAge >= 5,
+    unlockedText: "Five years of commits. The discipline is real.",
+    lockedText: "Maintain your GitHub for 5 years.",
+  }),
+  createAchievement({
+    id: "thousand_stars",
+    icon: "🌟",
+    name: "STAR FORGE",
+    description: "Earned 1000+ total stars",
+    rarity: "RARE",
+    condition: (data) => data.totalStars >= 1000,
+    unlockedText: "Top 5% of GitHub developers.",
+    lockedText: "Earn 1000 stars across all repos.",
+  }),
+  createAchievement({
+    id: "hundred_followers",
+    icon: "👥",
+    name: "SIGNAL AMPLIFIED",
+    description: "100+ followers",
+    rarity: "RARE",
+    condition: (data) => data.followers >= 100,
+    unlockedText: "You have an audience. Use it.",
+    lockedText: "Reach 100 followers.",
+  }),
+  createAchievement({
+    id: "midnight_architect",
+    icon: "🏗",
+    name: "MIDNIGHT ARCHITECT",
+    description: "50%+ of commits between 10pm and 4am",
+    rarity: "RARE",
+    condition: (data) => {
+      const nightHours = data.commitHourDist
+        .slice(22, 24)
+        .concat(data.commitHourDist.slice(0, 4))
+        .reduce((sum, count) => sum + count, 0);
+      const total = data.commitHourDist.reduce((sum, count) => sum + count, 0) || 1;
+      return (nightHours / total) >= 0.5;
+    },
+    unlockedText: "You don't work at night. You live there.",
+    lockedText: "Make 50%+ of commits between 10pm and 4am.",
+  }),
+  createAchievement({
+    id: "polyglot_master",
+    icon: "🌐",
+    name: "TOWER OF BABEL",
+    description: "Used 7+ different languages",
+    rarity: "RARE",
+    condition: (data) => data.topLangs.length >= 7,
+    unlockedText: "You have no allegiances. Only tools.",
+    lockedText: "Use 7 or more programming languages.",
+  }),
+  createAchievement({
+    id: "repo_empire",
+    icon: "🏛",
+    name: "REPO EMPIRE",
+    description: "50+ public repositories",
+    rarity: "RARE",
+    condition: (data) => data.totalRepos >= 50,
+    unlockedText: "An empire of code. How many are finished?",
+    lockedText: "Create 50+ public repositories.",
+  }),
+  createAchievement({
+    id: "ancient",
+    icon: "⏳",
+    name: "THE ANCIENT",
+    description: "Account created before 2015",
+    rarity: "RARE",
+    condition: (data) => new Date(data.createdAt).getFullYear() <= 2015,
+    unlockedText: "You were here before the gold rush.",
+    lockedText: "Have a GitHub account created before 2015.",
+  }),
+  createAchievement({
+    id: "tenk_stars",
+    icon: "💎",
+    name: "DIAMOND HANDS",
+    description: "Single repo with 1000+ stars",
+    rarity: "RARE",
+    condition: (data) => data.repos.some((repo) => repo.stargazers_count >= 1000),
+    unlockedText: "One repo. Thousands of developers said yes.",
+    lockedText: "Get a single repo to 1000 stars.",
+  }),
+  createAchievement({
+    id: "commit_machine",
+    icon: "⚡",
+    name: "COMMIT MACHINE",
+    description: "500+ total contributions in a single year",
+    rarity: "RARE",
+    condition: (data) => data.totalContributions >= 500,
+    unlockedText: "This isn't a hobby. This is a way of life.",
+    lockedText: "Make 500+ contributions in a year.",
+  }),
+  createAchievement({
+    id: "rust_belt",
+    icon: "🦀",
+    name: "RUST BELT",
+    description: "Primary language is Rust",
+    rarity: "RARE",
+    condition: (data) => data.topLangs[0]?.lang === "Rust",
+    unlockedText: "You chose the hard path. Respect.",
+    lockedText: "Make Rust your primary language.",
+  }),
+  createAchievement({
+    id: "go_getter",
+    icon: "🏃",
+    name: "GO GETTER",
+    description: "Primary language is Go",
+    rarity: "RARE",
+    condition: (data) => data.topLangs[0]?.lang === "Go",
+    unlockedText: "You build for scale before you need it.",
+    lockedText: "Make Go your primary language.",
+  }),
+  createAchievement({
+    id: "ten_thousand_stars",
+    icon: "🌠",
+    name: "SUPERNOVA",
+    description: "Earned 10,000+ total stars",
+    rarity: "EPIC",
+    condition: (data) => data.totalStars >= 10000,
+    unlockedText: "You are in the top 0.1% of GitHub. Undeniable.",
+    lockedText: "Earn 10,000 total stars.",
+  }),
+  createAchievement({
+    id: "thousand_followers",
+    icon: "📻",
+    name: "BROADCAST TOWER",
+    description: "1000+ followers",
+    rarity: "EPIC",
+    condition: (data) => data.followers >= 1000,
+    unlockedText: "Four digits. Your commit log has fans.",
+    lockedText: "Reach 1,000 followers.",
+  }),
+  createAchievement({
+    id: "decade",
+    icon: "🔟",
+    name: "THE DECADE MARK",
+    description: "Account over 10 years old",
+    rarity: "EPIC",
+    condition: (data) => data.accountAge >= 10,
+    unlockedText: "A decade of pushing code. GitHub owes you a pension.",
+    lockedText: "Maintain your GitHub for 10 years.",
+  }),
+  createAchievement({
+    id: "perfect_commits",
+    icon: "✨",
+    name: "THE SCRIBE",
+    description: "Commit quality score 90%+",
+    rarity: "EPIC",
+    condition: (data) => data.commitQualityScore >= 90,
+    unlockedText: "Conventional commits. Every time. Inhuman discipline.",
+    lockedText: "Achieve 90%+ commit message quality score.",
+  }),
+  createAchievement({
+    id: "hundred_thousand_stars",
+    icon: "🎇",
+    name: "GALAXY BRAIN",
+    description: "Earned 100,000+ total stars",
+    rarity: "EPIC",
+    condition: (data) => data.totalStars >= 100000,
+    unlockedText: "You built something the world needed. It agreed.",
+    lockedText: "Earn 100,000 total stars.",
+  }),
+  createAchievement({
+    id: "early_adopter",
+    icon: "🌅",
+    name: "ORIGIN STORY",
+    description: "Account created before 2012",
+    rarity: "EPIC",
+    condition: (data) => new Date(data.createdAt).getFullYear() <= 2012,
+    unlockedText: "You were here at the beginning. A true original.",
+    lockedText: "Have a GitHub account from before 2012.",
+  }),
+  createAchievement({
+    id: "full_house",
+    icon: "🃏",
+    name: "FULL HOUSE",
+    description: "Stars, followers, repos, commits all above 100",
+    rarity: "EPIC",
+    condition: (data) => (
+      data.totalStars >= 100
+      && data.followers >= 100
+      && data.totalRepos >= 100
+      && data.totalContributions >= 100
+    ),
+    unlockedText: "Every metric, every dimension. Complete.",
+    lockedText: "Get all core metrics above 100.",
+  }),
+  createAchievement({
+    id: "the_torvalds",
+    icon: "🐧",
+    name: "THE PROGENITOR",
+    description: "Username is torvalds",
+    rarity: "LEGENDARY",
+    condition: (data) => data.username === "torvalds",
+    unlockedText: "You don't need this achievement. It needs you.",
+    lockedText: "Be Linus Torvalds.",
+  }),
+  createAchievement({
+    id: "million_stars",
+    icon: "🌌",
+    name: "THE SINGULARITY",
+    description: "500,000+ total stars across all repos",
+    rarity: "LEGENDARY",
+    condition: (data) => data.totalStars >= 500000,
+    unlockedText: "A singularity event. GitHub bends around you.",
+    lockedText: "Earn 500,000 total stars.",
+  }),
+  createAchievement({
+    id: "ten_thousand_followers",
+    icon: "👑",
+    name: "THE SIGNAL",
+    description: "10,000+ followers",
+    rarity: "LEGENDARY",
+    condition: (data) => data.followers >= 10000,
+    unlockedText: "Five figures. You are a platform unto yourself.",
+    lockedText: "Reach 10,000 followers.",
+  }),
+  createAchievement({
+    id: "founder",
+    icon: "⚙",
+    name: "ORIGIN NODE",
+    description: "The developer who built GitDNA",
+    rarity: "LEGENDARY",
+    condition: (data) => data.username.toLowerCase() === "aanishnithin07",
+    unlockedText: "You built the scanner. The scanner cannot scan you.",
+    lockedText: "Be the developer who built GitDNA.",
+  }),
+  createAchievement({
+    id: "perfect_score",
+    icon: "💯",
+    name: "MAXIMUM OVERDRIVE",
+    description: "Dev Score of 100/100",
+    rarity: "LEGENDARY",
+    condition: (data) => data.devScore >= 100,
+    unlockedText: "The algorithm ran out of numbers.",
+    lockedText: "Achieve a perfect GitDNA Dev Score.",
+  }),
+];
 
 function normalizeCommitMessage(message) {
   return String(message || "").replace(/\s+/g, " ").trim();
@@ -1189,6 +1681,7 @@ function normalizeAnalysisPayload(payload, fallbackUsername) {
     ? githubPayload.repos.map((repo) => {
         const stars = repo?.stargazers_count ?? repo?.stars ?? 0;
         const forks = repo?.forks_count ?? repo?.forks ?? 0;
+        const fork = Boolean(repo?.fork ?? repo?.is_fork ?? false);
         const login = normalizedUser.login || fallbackUsername;
         return {
           ...repo,
@@ -1196,6 +1689,7 @@ function normalizeAnalysisPayload(payload, fallbackUsername) {
           stars,
           forks_count: forks,
           forks,
+          fork,
           html_url: repo?.html_url || `https://github.com/${login}/${repo?.name || ""}`,
         };
       })
@@ -4596,6 +5090,7 @@ function Dashboard({
   const roastRevealTimerRef = useRef(null);
   const roastMeterTimerRef = useRef(null);
   const roastShareTimerRef = useRef(null);
+  const achievementShareTimerRef = useRef(null);
   const dashboardWakeTimeoutRef = useRef(null);
   const [isGeneratingCard, setIsGeneratingCard] = useState(false);
   const [showCardSaved, setShowCardSaved] = useState(false);
@@ -4623,6 +5118,9 @@ function Dashboard({
   const [showCommitAnalyzer, setShowCommitAnalyzer] = useState(false);
   const [commitInsight, setCommitInsight] = useState("");
   const [commitInsightLoading, setCommitInsightLoading] = useState(false);
+  const [achievementFilter, setAchievementFilter] = useState("ALL");
+  const [achievementRevealReady, setAchievementRevealReady] = useState(false);
+  const [achievementShareCopied, setAchievementShareCopied] = useState(false);
 
   const cardEntranceStyle = (index) => ({
     opacity: 0,
@@ -4767,6 +5265,152 @@ function Dashboard({
     return `${identity}::${signature}`;
   }, [commitMessages, user.login, username]);
 
+  const achievementData = useMemo(() => {
+    const safeHourDist = Array.isArray(github?.commit_hour_distribution) && github.commit_hour_distribution.length === 24
+      ? github.commit_hour_distribution.map((entry) => Number(entry || 0))
+      : Array.from({ length: 24 }, () => 0);
+
+    const weekendCommits = Number(github?.weekend_vs_weekday?.weekend_commits || 0);
+    const weekdayCommits = Number(github?.weekend_vs_weekday?.weekday_commits || 0);
+    const weekendRatio = (weekendCommits + weekdayCommits) > 0
+      ? (weekendCommits / (weekendCommits + weekdayCommits))
+      : 0;
+
+    const totalContributions = Array.isArray(contributions)
+      ? contributions.reduce((sum, item) => sum + Number(item?.count || 0), 0)
+      : 0;
+
+    const normalizedRepos = Array.isArray(repos)
+      ? repos.map((repo) => ({
+          ...repo,
+          fork: Boolean(repo?.fork ?? repo?.is_fork ?? false),
+        }))
+      : [];
+
+    const totalRepos = Math.max(
+      Number(user?.public_repos || 0),
+      normalizedRepos.length,
+    );
+
+    return {
+      username: String(user?.login || username || "").toLowerCase(),
+      createdAt: user?.created_at || "",
+      accountAge: accountAgeYears,
+      avgCommitHour: Number.isFinite(Number(github?.avg_commit_hour)) ? Number(github.avg_commit_hour) : -1,
+      commitHourDist: safeHourDist,
+      topLangs: Array.isArray(langs) ? langs : [],
+      totalStars: Number(totalStars || 0),
+      totalRepos,
+      followers: Number(user?.followers || 0),
+      following: Number(user?.following || 0),
+      bio: String(user?.bio || "").trim(),
+      location: String(user?.location || "").trim(),
+      blog: String(user?.blog || "").trim(),
+      repos: normalizedRepos,
+      weekendRatio,
+      commitQualityScore: Number(commitScorePercent || 0),
+      totalContributions,
+      devScore: Number(devScore || 0),
+    };
+  }, [
+    github?.avg_commit_hour,
+    github?.commit_hour_distribution,
+    github?.weekend_vs_weekday?.weekend_commits,
+    github?.weekend_vs_weekday?.weekday_commits,
+    contributions,
+    repos,
+    user?.public_repos,
+    user?.login,
+    user?.created_at,
+    user?.followers,
+    user?.following,
+    user?.bio,
+    user?.location,
+    user?.blog,
+    username,
+    accountAgeYears,
+    langs,
+    totalStars,
+    commitScorePercent,
+    devScore,
+  ]);
+
+  const achievementRows = useMemo(() => {
+    return ACHIEVEMENTS.map((achievement) => {
+      let unlocked = false;
+      try {
+        unlocked = Boolean(achievement.condition?.(achievementData));
+      } catch {
+        unlocked = false;
+      }
+
+      return {
+        ...achievement,
+        unlocked,
+      };
+    });
+  }, [achievementData]);
+
+  const unlockedAchievementCount = useMemo(
+    () => achievementRows.filter((achievement) => achievement.unlocked).length,
+    [achievementRows],
+  );
+
+  const rarityUnlockedCounts = useMemo(() => {
+    const counts = {
+      LEGENDARY: 0,
+      EPIC: 0,
+      RARE: 0,
+      UNCOMMON: 0,
+      COMMON: 0,
+    };
+
+    for (const achievement of achievementRows) {
+      if (!achievement.unlocked) continue;
+      const rarity = String(achievement.rarity || "COMMON").toUpperCase();
+      if (Object.prototype.hasOwnProperty.call(counts, rarity)) {
+        counts[rarity] += 1;
+      }
+    }
+
+    return counts;
+  }, [achievementRows]);
+
+  const filteredAchievements = useMemo(() => {
+    if (achievementFilter === "ALL") return achievementRows;
+    return achievementRows.filter((achievement) => achievement.rarity === achievementFilter);
+  }, [achievementRows, achievementFilter]);
+
+  const unlockedSequenceById = useMemo(() => {
+    const lookup = new Map();
+    let sequence = 0;
+    for (const achievement of filteredAchievements) {
+      if (!achievement.unlocked) continue;
+      lookup.set(achievement.id, sequence);
+      sequence += 1;
+    }
+    return lookup;
+  }, [filteredAchievements]);
+
+  const rarestUnlockedAchievements = useMemo(() => {
+    return achievementRows
+      .filter((achievement) => achievement.unlocked)
+      .sort((left, right) => {
+        const leftRank = ACHIEVEMENT_RARITY_META[left.rarity]?.rank || 0;
+        const rightRank = ACHIEVEMENT_RARITY_META[right.rarity]?.rank || 0;
+        if (leftRank !== rightRank) return rightRank - leftRank;
+        return left.name.localeCompare(right.name);
+      })
+      .slice(0, 3);
+  }, [achievementRows]);
+
+  const achievementProgress = ACHIEVEMENTS.length > 0
+    ? (unlockedAchievementCount / ACHIEVEMENTS.length)
+    : 0;
+  const achievementRingRadius = 14;
+  const achievementRingCircumference = 2 * Math.PI * achievementRingRadius;
+  const achievementRingOffset = achievementRingCircumference * (1 - achievementProgress);
+
   const triggerDashboardWake = () => {
     setShowDashboardWake(true);
     if (dashboardWakeTimeoutRef.current) {
@@ -4774,6 +5418,12 @@ function Dashboard({
     }
     dashboardWakeTimeoutRef.current = setTimeout(() => setShowDashboardWake(false), 220);
   };
+
+  useEffect(() => {
+    setAchievementRevealReady(false);
+    const raf = requestAnimationFrame(() => setAchievementRevealReady(true));
+    return () => cancelAnimationFrame(raf);
+  }, [user?.login]);
 
   const handleCloseTimeMachine = () => {
     setShowTimeMachine(false);
@@ -4842,6 +5492,7 @@ function Dashboard({
         roastRevealTimerRef,
         roastMeterTimerRef,
         roastShareTimerRef,
+        achievementShareTimerRef,
         dashboardWakeTimeoutRef,
       ].forEach((ref) => {
         if (ref.current) {
@@ -5031,6 +5682,28 @@ function Dashboard({
         clearTimeout(roastShareTimerRef.current);
       }
       roastShareTimerRef.current = setTimeout(() => setRoastShareCopied(false), 1800);
+    } catch {
+      // Ignore clipboard failures.
+    }
+  }
+
+  async function handleShareAchievements() {
+    const topThree = rarestUnlockedAchievements;
+    const lines = topThree.length > 0
+      ? topThree.map((achievement) => `   ${achievement.icon} ${achievement.name} — ${achievement.description}`)
+      : ["   No achievements unlocked yet. Start your GitHub arc."];
+
+    const shareText = `${user.login}'s rarest GitDNA achievements:\n${lines.join("\n")}\n\nWhat's your vault? gitdna.vercel.app #GitDNA`;
+
+    try {
+      if (navigator?.clipboard?.writeText) {
+        await navigator.clipboard.writeText(shareText);
+      }
+      setAchievementShareCopied(true);
+      if (achievementShareTimerRef.current) {
+        clearTimeout(achievementShareTimerRef.current);
+      }
+      achievementShareTimerRef.current = setTimeout(() => setAchievementShareCopied(false), 1800);
     } catch {
       // Ignore clipboard failures.
     }
@@ -5488,6 +6161,118 @@ function Dashboard({
         <div className="gd-card gd-enter-scan" style={{ padding: "18px 18px", marginBottom: 12, ...cardEntranceStyle(7) }}>
           <div className="gd-section-label">CONTRIBUTION GENOME — LAST 52 WEEKS</div>
           <ContributionHeatmap contributions={contributions} />
+        </div>
+
+        <div className="gd-card gd-enter-scan" style={{ padding: "18px 18px", marginBottom: 12, ...cardEntranceStyle(7) }}>
+          <div className="gd-achievement-vault-header">
+            <div>
+              <div className="gd-section-label" style={{ marginBottom: 6 }}>// ACHIEVEMENT VAULT</div>
+              <div className="gd-achievement-vault-title">Xbox/Steam style progression for your real GitHub career.</div>
+            </div>
+
+            <div className="gd-achievement-progress-wrap">
+              <div className="gd-achievement-progress-ring" aria-hidden="true">
+                <svg width="40" height="40" viewBox="0 0 40 40">
+                  <circle cx="20" cy="20" r={achievementRingRadius} fill="none" stroke="rgba(0,220,255,0.12)" strokeWidth="4" />
+                  <circle
+                    cx="20"
+                    cy="20"
+                    r={achievementRingRadius}
+                    fill="none"
+                    stroke="#00dcff"
+                    strokeWidth="4"
+                    strokeLinecap="round"
+                    strokeDasharray={achievementRingCircumference}
+                    strokeDashoffset={achievementRingOffset}
+                    style={{ filter: "drop-shadow(0 0 6px rgba(0,220,255,0.7))" }}
+                  />
+                </svg>
+                <span className="gd-achievement-progress-value">{Math.round(achievementProgress * 100)}%</span>
+              </div>
+
+              <div className="gd-achievement-progress-text">
+                {unlockedAchievementCount}/{ACHIEVEMENTS.length} UNLOCKED
+              </div>
+            </div>
+          </div>
+
+          <div className="gd-achievement-filter-row">
+            {ACHIEVEMENT_FILTERS.map((filter) => (
+              <button
+                key={`achievement-filter-${filter}`}
+                className={`gd-achievement-filter-pill${achievementFilter === filter ? " active" : ""}`}
+                onClick={() => setAchievementFilter(filter)}
+              >
+                {filter}
+              </button>
+            ))}
+          </div>
+
+          <div className="gd-achievement-summary">
+            {ACHIEVEMENT_RARITY_ORDER.map((rarity) => (
+              <div key={`achievement-summary-${rarity}`} className="gd-achievement-summary-item">
+                <span
+                  className="gd-achievement-summary-dot"
+                  style={{ color: ACHIEVEMENT_RARITY_COLORS[rarity], background: ACHIEVEMENT_RARITY_COLORS[rarity] }}
+                />
+                <span>{rarityUnlockedCounts[rarity]} {rarity}</span>
+              </div>
+            ))}
+          </div>
+
+          {filteredAchievements.length > 0 ? (
+            <div className="gd-achievement-grid">
+              {filteredAchievements.map((achievement) => {
+                const rarityColor = achievement.rarityColor;
+                const unlockedOrder = unlockedSequenceById.get(achievement.id) || 0;
+                const isLegendaryUnlocked = achievement.unlocked && achievement.rarity === "LEGENDARY";
+
+                return (
+                  <article
+                    key={achievement.id}
+                    className={[
+                      "gd-achievement-card",
+                      achievement.unlocked ? "gd-achievement-card--unlocked" : "gd-achievement-card--locked",
+                      achievement.unlocked && achievementRevealReady ? "gd-achievement-card--revealed" : "",
+                      isLegendaryUnlocked ? "gd-achievement-card--legendary-unlocked" : "",
+                    ].filter(Boolean).join(" ")}
+                    style={{
+                      "--ach-color": rarityColor,
+                      "--ach-divider": rgbaWithAlpha(rarityColor, 0.15),
+                      "--ach-pill-bg": rgbaWithAlpha(rarityColor, 0.12),
+                      "--ach-delay": `${unlockedOrder * 60}ms`,
+                      "--ach-legendary-delay": isLegendaryUnlocked ? "300ms" : "0ms",
+                      border: achievement.unlocked
+                        ? `1px solid ${rgbaWithAlpha(rarityColor, 0.4)}`
+                        : "1px solid rgba(255,255,255,0.06)",
+                      boxShadow: achievement.unlocked
+                        ? `0 0 12px ${rgbaWithAlpha(rarityColor, 0.15)}`
+                        : "none",
+                    }}
+                    title={achievement.unlocked ? achievement.unlockedText : achievement.lockedText}
+                  >
+                    <span className="gd-achievement-pip" />
+                    <div className="gd-achievement-icon">{achievement.unlocked ? achievement.icon : "?"}</div>
+                    <div className="gd-achievement-name">{achievement.name}</div>
+                    <div className="gd-achievement-desc">{achievement.description}</div>
+                    <div className="gd-achievement-flavor">
+                      {achievement.unlocked ? achievement.unlockedText : achievement.lockedText}
+                    </div>
+                    <div className="gd-achievement-rarity-pill">{achievement.rarity}</div>
+                  </article>
+                );
+              })}
+            </div>
+          ) : (
+            <div className="gd-achievement-empty">No achievements match this filter yet.</div>
+          )}
+
+          <div className="gd-achievement-actions">
+            <button className="gd-btn" onClick={handleShareAchievements} style={{ padding: "8px 14px", fontSize: "0.66rem" }}>
+              ↗ SHARE ACHIEVEMENTS
+            </button>
+            {achievementShareCopied && <span className="gd-badge gd-badge-green">VAULT COPIED</span>}
+          </div>
         </div>
 
         {shouldShowRoastSection && (
@@ -6217,7 +7002,58 @@ export default function GitDNA() {
   const konamiFlashTimeoutRef = useRef(null);
   const konamiMessageTimeoutRef = useRef(null);
   const nightOwlShownRef = useRef(false);
-  const API_URL = (import.meta.env.VITE_API_URL || "http://localhost:8000").replace(/\/$/, "");
+  const preferredHost = typeof window !== "undefined" && window.location.hostname === "localhost"
+    ? "http://localhost:8000"
+    : "http://127.0.0.1:8000";
+  const [apiBaseUrl, setApiBaseUrl] = useState(() => {
+    const configured = String(import.meta.env.VITE_API_URL || "").trim().replace(/\/$/, "");
+    return configured || preferredHost;
+  });
+  const API_URL = apiBaseUrl;
+  const apiBaseCandidates = useMemo(() => {
+    const configured = String(import.meta.env.VITE_API_URL || "").trim().replace(/\/$/, "");
+    const hostMatched = preferredHost;
+    const alternateHost = hostMatched === "http://localhost:8000"
+      ? "http://127.0.0.1:8000"
+      : "http://localhost:8000";
+
+    return Array.from(new Set([
+      apiBaseUrl,
+      configured,
+      hostMatched,
+      alternateHost,
+    ].filter(Boolean)));
+  }, [apiBaseUrl, preferredHost]);
+
+  const isNetworkFetchError = (err) => {
+    const msg = String(err?.message || "");
+    return err instanceof TypeError || /Failed to fetch|NetworkError|Load failed|fetch/i.test(msg);
+  };
+
+  const fetchFromBackend = async (path, init) => {
+    let lastNetworkError = null;
+
+    for (const base of apiBaseCandidates) {
+      try {
+        const response = await fetch(`${base}${path}`, init);
+        if (base !== apiBaseUrl) {
+          setApiBaseUrl(base);
+        }
+        return response;
+      } catch (err) {
+        if (!isNetworkFetchError(err)) {
+          throw err;
+        }
+        lastNetworkError = err;
+      }
+    }
+
+    const triedHosts = apiBaseCandidates.join(", ");
+    throw new Error(
+      `Cannot reach backend at ${triedHosts}. Start FastAPI on port 8000 and try again.`,
+      { cause: lastNetworkError || undefined },
+    );
+  };
 
   const beginBattleIntro = () => {
     if (battleIntroTimerRef.current) {
@@ -6232,8 +7068,9 @@ export default function GitDNA() {
   };
 
   const fetchProfilePayload = async (username) => {
-    const endpoint = `${API_URL}/api/analyze/${encodeURIComponent(username)}`;
-    const res = await fetch(endpoint, { headers: { Accept: "application/json" } });
+    const res = await fetchFromBackend(`/api/analyze/${encodeURIComponent(username)}`, {
+      headers: { Accept: "application/json" },
+    });
     if (!res.ok) {
       let detail = `Backend error (${res.status})`;
       try {
@@ -6248,8 +7085,7 @@ export default function GitDNA() {
   };
 
   const fetchBattleNarrative = async (leftPayload, rightPayload) => {
-    const endpoint = `${API_URL}/api/battle`;
-    const res = await fetch(endpoint, {
+    const res = await fetchFromBackend("/api/battle", {
       method: "POST",
       headers: { "Content-Type": "application/json", Accept: "application/json" },
       body: JSON.stringify({ left: leftPayload, right: rightPayload }),
@@ -6271,8 +7107,7 @@ export default function GitDNA() {
   };
 
   const fetchRoastReport = async (profilePayload) => {
-    const endpoint = `${API_URL}/api/roast`;
-    const res = await fetch(endpoint, {
+    const res = await fetchFromBackend("/api/roast", {
       method: "POST",
       headers: { "Content-Type": "application/json", Accept: "application/json" },
       body: JSON.stringify({ profile: profilePayload }),
