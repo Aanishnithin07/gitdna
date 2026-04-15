@@ -5910,6 +5910,18 @@ function Dashboard({
               {user.bio && <div style={{ fontSize: "0.88rem", color: "rgba(200,232,255,0.55)", fontWeight: 300, marginBottom: 8 }}>{user.bio}</div>}
               <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
                 {user.location && <span className="gd-badge gd-badge-cyan">📍 {user.location}</span>}
+                <button
+                  className="gd-btn"
+                  onClick={onReset}
+                  title="Return to scanner and analyze another profile"
+                  style={{
+                    padding: "5px 10px",
+                    fontSize: "0.58rem",
+                    letterSpacing: "0.1em",
+                  }}
+                >
+                  ◀ NEW SCAN
+                </button>
                 <span
                   title={
                     hasLocationData
