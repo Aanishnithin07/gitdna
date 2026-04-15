@@ -6287,6 +6287,13 @@ function Dashboard({
                 const rarityColor = achievement.rarityColor;
                 const unlockedOrder = unlockedPreviewSequenceById.get(achievement.id) || 0;
                 const isLegendaryUnlocked = achievement.rarity === "LEGENDARY";
+                const isCommonUnlocked = achievement.rarity === "COMMON";
+                const unlockedBorder = isCommonUnlocked
+                  ? "rgba(178,208,245,0.62)"
+                  : rgbaWithAlpha(rarityColor, 0.4);
+                const unlockedGlow = isCommonUnlocked
+                  ? "rgba(178,208,245,0.22)"
+                  : rgbaWithAlpha(rarityColor, 0.15);
 
                 return (
                   <article
@@ -6303,8 +6310,8 @@ function Dashboard({
                       "--ach-pill-bg": rgbaWithAlpha(rarityColor, 0.12),
                       "--ach-delay": `${unlockedOrder * 60}ms`,
                       "--ach-legendary-delay": isLegendaryUnlocked ? "300ms" : "0ms",
-                      border: `1px solid ${rgbaWithAlpha(rarityColor, 0.4)}`,
-                      boxShadow: `0 0 12px ${rgbaWithAlpha(rarityColor, 0.15)}`,
+                      border: `1px solid ${unlockedBorder}`,
+                      boxShadow: `0 0 12px ${unlockedGlow}`,
                     }}
                     title={achievement.unlockedText}
                   >
@@ -6399,6 +6406,13 @@ function Dashboard({
                         const rarityColor = achievement.rarityColor;
                         const unlockedOrder = vaultPanelUnlockedSequenceById.get(achievement.id) || 0;
                         const isLegendaryUnlocked = achievement.unlocked && achievement.rarity === "LEGENDARY";
+                        const isCommonUnlocked = achievement.unlocked && achievement.rarity === "COMMON";
+                        const unlockedBorder = isCommonUnlocked
+                          ? "rgba(178,208,245,0.62)"
+                          : rgbaWithAlpha(rarityColor, 0.4);
+                        const unlockedGlow = isCommonUnlocked
+                          ? "rgba(178,208,245,0.22)"
+                          : rgbaWithAlpha(rarityColor, 0.15);
 
                         return (
                           <article
@@ -6416,10 +6430,10 @@ function Dashboard({
                               "--ach-delay": `${unlockedOrder * 60}ms`,
                               "--ach-legendary-delay": isLegendaryUnlocked ? "300ms" : "0ms",
                               border: achievement.unlocked
-                                ? `1px solid ${rgbaWithAlpha(rarityColor, 0.4)}`
+                                ? `1px solid ${unlockedBorder}`
                                 : "1px solid rgba(255,255,255,0.06)",
                               boxShadow: achievement.unlocked
-                                ? `0 0 12px ${rgbaWithAlpha(rarityColor, 0.15)}`
+                                ? `0 0 12px ${unlockedGlow}`
                                 : "none",
                             }}
                             title={achievement.unlocked ? achievement.unlockedText : achievement.lockedText}
