@@ -408,6 +408,11 @@ html,body{max-width:100%;overflow-x:hidden}
 @keyframes ach-reveal{from{opacity:0;transform:scale(.8);filter:blur(4px)}to{opacity:1;transform:scale(1);filter:blur(0)}}
 @keyframes ach-legendary-flash{0%{opacity:0}35%{opacity:.4}100%{opacity:0}}
 @keyframes ach-legendary-shimmer{0%{transform:translateX(-120%);opacity:0}20%{opacity:1}100%{transform:translateX(140%);opacity:0}}
+@keyframes ach-vault-backdrop-in{from{opacity:0}to{opacity:1}}
+@keyframes ach-vault-shell-in{0%{opacity:0;transform:translateY(52px) scale(.95)}100%{opacity:1;transform:translateY(0) scale(1)}}
+@keyframes ach-vault-scan{0%{transform:translateY(-120%)}100%{transform:translateY(520%)}}
+@keyframes ach-vault-title-flicker{0%,100%{opacity:1}48%{opacity:.84}50%{opacity:.72}52%{opacity:.98}}
+@keyframes ach-vault-orb-pulse{0%,100%{box-shadow:0 0 0 rgba(0,220,255,0)}50%{box-shadow:0 0 18px rgba(0,220,255,.35)}}
 
 .gd-glitch{animation:glitch 5s infinite}
 .gd-dashboard-wake{animation:dashboard-wake .2s ease}
@@ -562,6 +567,26 @@ html,body{max-width:100%;overflow-x:hidden}
 .gd-achievement-rarity-pill{margin-top:auto;padding:3px 8px;border-radius:999px;border:1px solid currentColor;font-family:'Share Tech Mono',monospace;font-size:.52rem;letter-spacing:.12em;background:var(--ach-pill-bg,rgba(0,220,255,.12));color:var(--ach-color,#00dcff)}
 .gd-achievement-empty{margin-top:12px;border:1px dashed rgba(0,220,255,.26);border-radius:8px;padding:12px;font-family:'Share Tech Mono',monospace;font-size:.62rem;letter-spacing:.07em;color:rgba(200,232,255,.62);text-align:center}
 .gd-achievement-actions{margin-top:12px;display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.gd-achievement-compact-label{margin-top:12px;font-family:'Share Tech Mono',monospace;font-size:.56rem;letter-spacing:.15em;color:rgba(0,220,255,.62)}
+.gd-achievement-grid--compact{max-height:410px;overflow:auto;padding-right:4px}
+.gd-achievement-vault-open-btn{border-color:rgba(255,215,0,.38)!important;color:#ffd770!important;background:linear-gradient(135deg,rgba(255,215,0,.16),rgba(0,220,255,.16))!important;animation:ach-vault-orb-pulse 2.4s ease-in-out infinite}
+
+.gd-achievement-vault-overlay{position:fixed;inset:0;z-index:96;display:flex;align-items:flex-end;justify-content:center;padding:20px;background:radial-gradient(circle at 50% 10%,rgba(0,220,255,.14),rgba(4,10,20,.92) 45%,rgba(2,4,10,.97) 100%);backdrop-filter:blur(8px);animation:ach-vault-backdrop-in .3s ease forwards}
+.gd-achievement-vault-shell{position:relative;width:min(1180px,96vw);max-height:min(84vh,860px);border:1px solid rgba(0,220,255,.36);border-radius:14px 14px 10px 10px;background:linear-gradient(180deg,rgba(7,18,34,.97),rgba(4,12,24,.97));box-shadow:0 0 34px rgba(0,220,255,.2),0 0 50px rgba(179,71,234,.12);display:flex;flex-direction:column;overflow:hidden;animation:ach-vault-shell-in .45s cubic-bezier(.2,.8,.2,1) forwards}
+.gd-achievement-vault-shell::before{content:'';position:absolute;inset:0;pointer-events:none;background:linear-gradient(120deg,transparent 28%,rgba(0,220,255,.1) 46%,transparent 65%);opacity:.5}
+.gd-achievement-vault-shell::after{content:'';position:absolute;left:-20%;right:-20%;top:0;height:2px;background:linear-gradient(90deg,transparent,rgba(0,220,255,.7),transparent);opacity:.6;pointer-events:none;animation:ach-vault-scan 3.5s linear infinite}
+.gd-achievement-vault-top{padding:14px 16px;border-bottom:1px solid rgba(0,220,255,.2);display:flex;justify-content:space-between;align-items:flex-start;gap:12px;flex-wrap:wrap;position:relative;z-index:1}
+.gd-achievement-vault-heading{font-family:'Orbitron',monospace;font-size:.75rem;letter-spacing:.15em;color:#dff7ff;animation:ach-vault-title-flicker 2.8s steps(1,end) infinite}
+.gd-achievement-vault-sub{margin-top:5px;font-family:'Share Tech Mono',monospace;font-size:.56rem;letter-spacing:.1em;color:rgba(0,220,255,.58)}
+.gd-achievement-vault-close{padding:6px 10px;border-radius:999px;border:1px solid rgba(255,120,120,.45);background:rgba(44,12,14,.75);color:#ff9b9b;font-family:'Share Tech Mono',monospace;font-size:.56rem;letter-spacing:.12em;cursor:pointer;transition:all .2s ease}
+.gd-achievement-vault-close:hover{background:rgba(64,16,20,.86);border-color:rgba(255,120,120,.65)}
+.gd-achievement-vault-body{padding:12px 14px 16px;overflow:auto;position:relative;z-index:1}
+.gd-achievement-grid--panel{margin-top:10px}
+
+@media (max-width:720px){
+  .gd-achievement-vault-overlay{padding:10px}
+  .gd-achievement-vault-shell{width:100%;max-height:90vh;border-radius:12px}
+}
 
 .gd-modal-overlay{position:fixed;inset:0;z-index:85;display:flex;align-items:center;justify-content:center;padding:18px;background:rgba(4,8,16,0.68);backdrop-filter:blur(8px)}
 .gd-modal-card{width:100%;max-width:460px;border:1px solid rgba(0,220,255,0.26);background:rgba(6,14,24,0.95);border-radius:8px;box-shadow:0 0 24px rgba(0,220,255,0.18);padding:20px 18px;position:relative}
@@ -5121,6 +5146,7 @@ function Dashboard({
   const [achievementFilter, setAchievementFilter] = useState("ALL");
   const [achievementRevealReady, setAchievementRevealReady] = useState(false);
   const [achievementShareCopied, setAchievementShareCopied] = useState(false);
+  const [showAchievementVaultPanel, setShowAchievementVaultPanel] = useState(false);
 
   const cardEntranceStyle = (index) => ({
     opacity: 0,
@@ -5376,21 +5402,34 @@ function Dashboard({
     return counts;
   }, [achievementRows]);
 
-  const filteredAchievements = useMemo(() => {
+  const unlockedAchievements = useMemo(
+    () => achievementRows.filter((achievement) => achievement.unlocked),
+    [achievementRows],
+  );
+
+  const vaultPanelAchievements = useMemo(() => {
     if (achievementFilter === "ALL") return achievementRows;
     return achievementRows.filter((achievement) => achievement.rarity === achievementFilter);
   }, [achievementRows, achievementFilter]);
 
-  const unlockedSequenceById = useMemo(() => {
+  const unlockedPreviewSequenceById = useMemo(() => {
+    const lookup = new Map();
+    unlockedAchievements.forEach((achievement, index) => {
+      lookup.set(achievement.id, index);
+    });
+    return lookup;
+  }, [unlockedAchievements]);
+
+  const vaultPanelUnlockedSequenceById = useMemo(() => {
     const lookup = new Map();
     let sequence = 0;
-    for (const achievement of filteredAchievements) {
+    for (const achievement of vaultPanelAchievements) {
       if (!achievement.unlocked) continue;
       lookup.set(achievement.id, sequence);
       sequence += 1;
     }
     return lookup;
-  }, [filteredAchievements]);
+  }, [vaultPanelAchievements]);
 
   const rarestUnlockedAchievements = useMemo(() => {
     return achievementRows
@@ -5421,9 +5460,38 @@ function Dashboard({
 
   useEffect(() => {
     setAchievementRevealReady(false);
+    setShowAchievementVaultPanel(false);
+    setAchievementFilter("ALL");
     const raf = requestAnimationFrame(() => setAchievementRevealReady(true));
     return () => cancelAnimationFrame(raf);
   }, [user?.login]);
+
+  useEffect(() => {
+    if (!showAchievementVaultPanel) return;
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+
+    const onKeyDown = (event) => {
+      if (event.key !== "Escape") return;
+      setShowAchievementVaultPanel(false);
+      triggerDashboardWake();
+    };
+
+    window.addEventListener("keydown", onKeyDown);
+    return () => {
+      document.body.style.overflow = previousOverflow;
+      window.removeEventListener("keydown", onKeyDown);
+    };
+  }, [showAchievementVaultPanel]);
+
+  const handleOpenAchievementVault = () => {
+    setShowAchievementVaultPanel(true);
+  };
+
+  const handleCloseAchievementVault = () => {
+    setShowAchievementVaultPanel(false);
+    triggerDashboardWake();
+  };
 
   const handleCloseTimeMachine = () => {
     setShowTimeMachine(false);
@@ -6196,18 +6264,6 @@ function Dashboard({
             </div>
           </div>
 
-          <div className="gd-achievement-filter-row">
-            {ACHIEVEMENT_FILTERS.map((filter) => (
-              <button
-                key={`achievement-filter-${filter}`}
-                className={`gd-achievement-filter-pill${achievementFilter === filter ? " active" : ""}`}
-                onClick={() => setAchievementFilter(filter)}
-              >
-                {filter}
-              </button>
-            ))}
-          </div>
-
           <div className="gd-achievement-summary">
             {ACHIEVEMENT_RARITY_ORDER.map((rarity) => (
               <div key={`achievement-summary-${rarity}`} className="gd-achievement-summary-item">
@@ -6220,20 +6276,22 @@ function Dashboard({
             ))}
           </div>
 
-          {filteredAchievements.length > 0 ? (
-            <div className="gd-achievement-grid">
-              {filteredAchievements.map((achievement) => {
+          <div className="gd-achievement-compact-label">UNLOCKED NOW</div>
+
+          {unlockedAchievements.length > 0 ? (
+            <div className="gd-achievement-grid gd-achievement-grid--compact">
+              {unlockedAchievements.map((achievement) => {
                 const rarityColor = achievement.rarityColor;
-                const unlockedOrder = unlockedSequenceById.get(achievement.id) || 0;
-                const isLegendaryUnlocked = achievement.unlocked && achievement.rarity === "LEGENDARY";
+                const unlockedOrder = unlockedPreviewSequenceById.get(achievement.id) || 0;
+                const isLegendaryUnlocked = achievement.rarity === "LEGENDARY";
 
                 return (
                   <article
                     key={achievement.id}
                     className={[
                       "gd-achievement-card",
-                      achievement.unlocked ? "gd-achievement-card--unlocked" : "gd-achievement-card--locked",
-                      achievement.unlocked && achievementRevealReady ? "gd-achievement-card--revealed" : "",
+                      "gd-achievement-card--unlocked",
+                      achievementRevealReady ? "gd-achievement-card--revealed" : "",
                       isLegendaryUnlocked ? "gd-achievement-card--legendary-unlocked" : "",
                     ].filter(Boolean).join(" ")}
                     style={{
@@ -6242,37 +6300,138 @@ function Dashboard({
                       "--ach-pill-bg": rgbaWithAlpha(rarityColor, 0.12),
                       "--ach-delay": `${unlockedOrder * 60}ms`,
                       "--ach-legendary-delay": isLegendaryUnlocked ? "300ms" : "0ms",
-                      border: achievement.unlocked
-                        ? `1px solid ${rgbaWithAlpha(rarityColor, 0.4)}`
-                        : "1px solid rgba(255,255,255,0.06)",
-                      boxShadow: achievement.unlocked
-                        ? `0 0 12px ${rgbaWithAlpha(rarityColor, 0.15)}`
-                        : "none",
+                      border: `1px solid ${rgbaWithAlpha(rarityColor, 0.4)}`,
+                      boxShadow: `0 0 12px ${rgbaWithAlpha(rarityColor, 0.15)}`,
                     }}
-                    title={achievement.unlocked ? achievement.unlockedText : achievement.lockedText}
+                    title={achievement.unlockedText}
                   >
                     <span className="gd-achievement-pip" />
-                    <div className="gd-achievement-icon">{achievement.unlocked ? achievement.icon : "?"}</div>
+                    <div className="gd-achievement-icon">{achievement.icon}</div>
                     <div className="gd-achievement-name">{achievement.name}</div>
                     <div className="gd-achievement-desc">{achievement.description}</div>
-                    <div className="gd-achievement-flavor">
-                      {achievement.unlocked ? achievement.unlockedText : achievement.lockedText}
-                    </div>
+                    <div className="gd-achievement-flavor">{achievement.unlockedText}</div>
                     <div className="gd-achievement-rarity-pill">{achievement.rarity}</div>
                   </article>
                 );
               })}
             </div>
           ) : (
-            <div className="gd-achievement-empty">No achievements match this filter yet.</div>
+            <div className="gd-achievement-empty">
+              No achievements unlocked yet. Start scanning repos and your first cards will light up here.
+            </div>
           )}
 
           <div className="gd-achievement-actions">
+            <button
+              className="gd-btn gd-achievement-vault-open-btn"
+              onClick={handleOpenAchievementVault}
+              style={{ padding: "8px 14px", fontSize: "0.66rem" }}
+            >
+              ⬢ OPEN FULL VAULT
+            </button>
             <button className="gd-btn" onClick={handleShareAchievements} style={{ padding: "8px 14px", fontSize: "0.66rem" }}>
               ↗ SHARE ACHIEVEMENTS
             </button>
             {achievementShareCopied && <span className="gd-badge gd-badge-green">VAULT COPIED</span>}
           </div>
+
+          {showAchievementVaultPanel && (
+            <div className="gd-achievement-vault-overlay" onClick={handleCloseAchievementVault}>
+              <div
+                className="gd-achievement-vault-shell"
+                role="dialog"
+                aria-modal="true"
+                aria-label="Full achievement vault"
+                onClick={(event) => event.stopPropagation()}
+              >
+                <div className="gd-achievement-vault-top">
+                  <div>
+                    <div className="gd-achievement-vault-heading">FULL ACHIEVEMENT VAULT</div>
+                    <div className="gd-achievement-vault-sub">
+                      All {ACHIEVEMENTS.length} cards. Locked, unlocked, and everything in between.
+                    </div>
+                  </div>
+
+                  <button className="gd-achievement-vault-close" onClick={handleCloseAchievementVault}>
+                    CLOSE
+                  </button>
+                </div>
+
+                <div className="gd-achievement-vault-body">
+                  <div className="gd-achievement-filter-row">
+                    {ACHIEVEMENT_FILTERS.map((filter) => (
+                      <button
+                        key={`achievement-filter-${filter}`}
+                        className={`gd-achievement-filter-pill${achievementFilter === filter ? " active" : ""}`}
+                        onClick={() => setAchievementFilter(filter)}
+                      >
+                        {filter}
+                      </button>
+                    ))}
+                  </div>
+
+                  <div className="gd-achievement-summary">
+                    {ACHIEVEMENT_RARITY_ORDER.map((rarity) => (
+                      <div key={`achievement-panel-summary-${rarity}`} className="gd-achievement-summary-item">
+                        <span
+                          className="gd-achievement-summary-dot"
+                          style={{ color: ACHIEVEMENT_RARITY_COLORS[rarity], background: ACHIEVEMENT_RARITY_COLORS[rarity] }}
+                        />
+                        <span>{rarityUnlockedCounts[rarity]} {rarity}</span>
+                      </div>
+                    ))}
+                  </div>
+
+                  {vaultPanelAchievements.length > 0 ? (
+                    <div className="gd-achievement-grid gd-achievement-grid--panel">
+                      {vaultPanelAchievements.map((achievement) => {
+                        const rarityColor = achievement.rarityColor;
+                        const unlockedOrder = vaultPanelUnlockedSequenceById.get(achievement.id) || 0;
+                        const isLegendaryUnlocked = achievement.unlocked && achievement.rarity === "LEGENDARY";
+
+                        return (
+                          <article
+                            key={`vault-panel-${achievement.id}`}
+                            className={[
+                              "gd-achievement-card",
+                              achievement.unlocked ? "gd-achievement-card--unlocked" : "gd-achievement-card--locked",
+                              achievement.unlocked && achievementRevealReady ? "gd-achievement-card--revealed" : "",
+                              isLegendaryUnlocked ? "gd-achievement-card--legendary-unlocked" : "",
+                            ].filter(Boolean).join(" ")}
+                            style={{
+                              "--ach-color": rarityColor,
+                              "--ach-divider": rgbaWithAlpha(rarityColor, 0.15),
+                              "--ach-pill-bg": rgbaWithAlpha(rarityColor, 0.12),
+                              "--ach-delay": `${unlockedOrder * 60}ms`,
+                              "--ach-legendary-delay": isLegendaryUnlocked ? "300ms" : "0ms",
+                              border: achievement.unlocked
+                                ? `1px solid ${rgbaWithAlpha(rarityColor, 0.4)}`
+                                : "1px solid rgba(255,255,255,0.06)",
+                              boxShadow: achievement.unlocked
+                                ? `0 0 12px ${rgbaWithAlpha(rarityColor, 0.15)}`
+                                : "none",
+                            }}
+                            title={achievement.unlocked ? achievement.unlockedText : achievement.lockedText}
+                          >
+                            <span className="gd-achievement-pip" />
+                            <div className="gd-achievement-icon">{achievement.unlocked ? achievement.icon : "?"}</div>
+                            <div className="gd-achievement-name">{achievement.name}</div>
+                            <div className="gd-achievement-desc">{achievement.description}</div>
+                            <div className="gd-achievement-flavor">
+                              {achievement.unlocked ? achievement.unlockedText : achievement.lockedText}
+                            </div>
+                            <div className="gd-achievement-rarity-pill">{achievement.rarity}</div>
+                          </article>
+                        );
+                      })}
+                    </div>
+                  ) : (
+                    <div className="gd-achievement-empty">No achievements match this filter yet.</div>
+                  )}
+                </div>
+              </div>
+            </div>
+          )}
         </div>
 
         {shouldShowRoastSection && (
