@@ -580,8 +580,11 @@ html,body{max-width:100%;overflow-x:hidden}
 .gd-achievement-vault-sub{margin-top:5px;font-family:'Share Tech Mono',monospace;font-size:.56rem;letter-spacing:.1em;color:rgba(0,220,255,.58)}
 .gd-achievement-vault-close{padding:6px 10px;border-radius:999px;border:1px solid rgba(255,120,120,.45);background:rgba(44,12,14,.75);color:#ff9b9b;font-family:'Share Tech Mono',monospace;font-size:.56rem;letter-spacing:.12em;cursor:pointer;transition:all .2s ease}
 .gd-achievement-vault-close:hover{background:rgba(64,16,20,.86);border-color:rgba(255,120,120,.65)}
+.gd-achievement-vault-close-icon{position:absolute;top:10px;right:10px;width:34px;height:34px;border-radius:999px;border:1px solid rgba(255,120,120,.5);background:rgba(44,12,14,.8);color:#ffb4b4;font-family:'Orbitron',monospace;font-size:.92rem;line-height:1;cursor:pointer;display:flex;align-items:center;justify-content:center;z-index:3;transition:all .2s ease}
+.gd-achievement-vault-close-icon:hover{background:rgba(66,14,18,.92);border-color:rgba(255,120,120,.72);color:#ffd2d2}
 .gd-achievement-vault-body{padding:12px 14px 16px;overflow:auto;position:relative;z-index:1}
 .gd-achievement-grid--panel{margin-top:10px}
+.gd-achievement-vault-footer{margin-top:14px;padding-top:12px;border-top:1px solid rgba(0,220,255,.18);display:flex;justify-content:flex-end}
 
 @media (max-width:720px){
   .gd-achievement-vault-overlay{padding:10px}
@@ -6344,6 +6347,14 @@ function Dashboard({
                 aria-label="Full achievement vault"
                 onClick={(event) => event.stopPropagation()}
               >
+                <button
+                  className="gd-achievement-vault-close-icon"
+                  aria-label="Close achievement vault"
+                  onClick={handleCloseAchievementVault}
+                >
+                  ×
+                </button>
+
                 <div className="gd-achievement-vault-top">
                   <div>
                     <div className="gd-achievement-vault-heading">FULL ACHIEVEMENT VAULT</div>
@@ -6353,7 +6364,7 @@ function Dashboard({
                   </div>
 
                   <button className="gd-achievement-vault-close" onClick={handleCloseAchievementVault}>
-                    CLOSE
+                    CLOSE VAULT
                   </button>
                 </div>
 
@@ -6428,6 +6439,12 @@ function Dashboard({
                   ) : (
                     <div className="gd-achievement-empty">No achievements match this filter yet.</div>
                   )}
+
+                  <div className="gd-achievement-vault-footer">
+                    <button className="gd-achievement-vault-close" onClick={handleCloseAchievementVault}>
+                      CLOSE VAULT
+                    </button>
+                  </div>
                 </div>
               </div>
             </div>
