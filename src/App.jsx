@@ -1,6 +1,6 @@
-import { useState, useEffect, useRef, useMemo } from "react";
+import { useState, useEffect, useRef, useMemo, useId } from "react";
 import { createPortal } from "react-dom";
-import { RadarChart, Radar, PolarGrid, PolarAngleAxis, ResponsiveContainer } from "recharts";
+import { RadarChart, Radar, PolarGrid, PolarAngleAxis, PolarRadiusAxis, ResponsiveContainer } from "recharts";
 import html2canvas from "html2canvas";
 import { geoContains, geoNaturalEarth1, geoPath } from "d3-geo";
 import { feature as topojsonFeature } from "topojson-client";
@@ -1800,6 +1800,133 @@ function clampNumber(value, min, max) {
   return Math.min(max, Math.max(min, value));
 }
 
+const TRAIT_KEYS = ["creativity", "discipline", "collaboration", "boldness", "depth", "velocity"];
+
+function calculateBaseTraits(data) {
+  const {
+    totalStars,
+    totalRepos,
+    followers,
+    following,
+    accountAge,
+    recentCommits,
+    topLangs,
+    avgCommitHour,
+    weekendRatio,
+    commitMessages,
+    bio,
+    blog,
+    repos,
+  } = data;
+
+  const safeTopLangs = Array.isArray(topLangs) ? topLangs : [];
+  const safeCommitMessages = Array.isArray(commitMessages)
+    ? commitMessages.map((message) => normalizeCommitMessage(message)).filter(Boolean)
+    : [];
+  const safeRepos = Array.isArray(repos) ? repos : [];
+  const safeRecentCommits = Math.max(0, Number(recentCommits || 0));
+  const safeTotalRepos = Math.max(0, Number(totalRepos || 0));
+  const safeTotalStars = Math.max(0, Number(totalStars || 0));
+  const safeFollowers = Math.max(0, Number(followers || 0));
+  const safeFollowing = Math.max(0, Number(following || 0));
+  const safeAccountAge = Math.max(0, Number(accountAge || 0));
+  const safeAvgCommitHour = Number.isFinite(Number(avgCommitHour)) ? Number(avgCommitHour) : 12;
+  const safeWeekendRatio = Math.max(0, Number(weekendRatio || 0));
+
+  // CREATIVITY (0-100)
+  let creativity = 40;
+  creativity += Math.min(25, safeTopLangs.length * 5);
+  const starPerRepo = safeTotalRepos > 0 ? (safeTotalStars / safeTotalRepos) : 0;
+  creativity += Math.min(20, Math.round(starPerRepo * 2));
+  if (safeAvgCommitHour >= 20 || safeAvgCommitHour <= 5) creativity += 10;
+  if (safeWeekendRatio > 0.2) creativity += 5;
+  creativity = clampNumber(Math.round(creativity), 5, 100);
+
+  // DISCIPLINE (0-100)
+  let discipline = 40;
+  if (safeCommitMessages.length > 0) {
+    const conventionalCount = safeCommitMessages.filter((message) => (
+      /^(feat|fix|docs|refactor|chore|perf|test|style|build|ci):/i.test(message)
+    )).length;
+    discipline += Math.min(30, Math.round((conventionalCount / safeCommitMessages.length) * 30));
+  }
+  discipline += Math.min(20, Math.round(safeAccountAge * 4));
+  if (safeRecentCommits > 10) discipline += 10;
+  discipline = clampNumber(Math.round(discipline), 5, 100);
+
+  // COLLABORATION (0-100)
+  let collaboration = 30;
+  collaboration += Math.min(25, Math.round(Math.sqrt(safeFollowers) * 3));
+  const followRatio = safeFollowing > 0 ? Math.min(2, safeFollowers / safeFollowing) : 0;
+  collaboration += Math.min(15, Math.round(followRatio * 8));
+  if (bio && /open.source|contributor|team|collaborat/i.test(String(bio))) {
+    collaboration += 15;
+  }
+  if (blog) collaboration += 5;
+  collaboration = clampNumber(Math.round(collaboration), 5, 100);
+
+  // BOLDNESS (0-100)
+  let boldness = 35;
+  boldness += Math.min(30, Math.round(Math.log10(safeTotalStars + 1) * 15));
+  if (safeRecentCommits > 15) boldness += 15;
+  if (safeTopLangs[0]?.lang === "Rust" || safeTopLangs[0]?.lang === "C") boldness += 15;
+  if (safeTopLangs[0]?.lang === "Assembly") boldness += 20;
+  boldness = clampNumber(Math.round(boldness), 5, 100);
+
+  // DEPTH (0-100)
+  let depth = 35;
+  if (safeTopLangs[0]?.pct >= 60) depth += 20;
+  depth += Math.min(20, Math.round(safeAccountAge * 3.5));
+  const maxSingleRepoStars = Math.max(
+    ...safeRepos.map((repo) => Number(repo?.stargazers_count || 0)),
+    0,
+  );
+  depth += Math.min(20, Math.round(Math.log10(maxSingleRepoStars + 1) * 10));
+  if (safeCommitMessages.length > 0) {
+    const avgMsgLen = safeCommitMessages.reduce((sum, message) => sum + message.length, 0) / safeCommitMessages.length;
+    depth += Math.min(10, Math.round(avgMsgLen / 10));
+  }
+  depth = clampNumber(Math.round(depth), 5, 100);
+
+  // VELOCITY (0-100)
+  let velocity = 30;
+  const reposPerYear = safeAccountAge > 0 ? (safeTotalRepos / safeAccountAge) : safeTotalRepos;
+  velocity += Math.min(30, Math.round(reposPerYear * 3));
+  velocity += Math.min(30, Math.round(safeRecentCommits * 2));
+  if (safeWeekendRatio > 0.3) velocity += 10;
+  velocity = clampNumber(Math.round(velocity), 5, 100);
+
+  return {
+    creativity,
+    discipline,
+    collaboration,
+    boldness,
+    depth,
+    velocity,
+  };
+}
+
+function constrainAiTraitRefinement(baseTraits, aiTraits, maxDelta = 8) {
+  const safeBase = baseTraits && typeof baseTraits === "object" ? baseTraits : {};
+  const safeAi = aiTraits && typeof aiTraits === "object" ? aiTraits : {};
+  const safeDelta = Math.max(0, Number(maxDelta || 0));
+
+  return TRAIT_KEYS.reduce((result, key) => {
+    const baseValue = clampNumber(Math.round(Number(safeBase[key] ?? 50)), 5, 100);
+    const aiValueRaw = Number(safeAi[key]);
+
+    if (!Number.isFinite(aiValueRaw)) {
+      result[key] = baseValue;
+      return result;
+    }
+
+    const aiValue = clampNumber(Math.round(aiValueRaw), 0, 100);
+    const bounded = clampNumber(aiValue, baseValue - safeDelta, baseValue + safeDelta);
+    result[key] = clampNumber(Math.round(bounded), 5, 100);
+    return result;
+  }, {});
+}
+
 function getCurrentContributionStreak(contributions) {
   const safe = Array.isArray(contributions)
     ? contributions.map((entry) => ({
@@ -2291,9 +2418,66 @@ function normalizeAnalysisPayload(payload, fallbackUsername) {
       : [],
   };
 
+  const normalizedCommitMessages = (() => {
+    const directMessages = Array.isArray(githubPayload.recent_commit_messages)
+      ? githubPayload.recent_commit_messages
+      : [];
+
+    if (directMessages.length > 0) {
+      return directMessages
+        .map((message) => normalizeCommitMessage(message))
+        .filter(Boolean);
+    }
+
+    return normalizedEvents
+      .flatMap((event) => (Array.isArray(event?.payload?.commits) ? event.payload.commits : []))
+      .map((commit) => normalizeCommitMessage(commit?.message))
+      .filter(Boolean);
+  })();
+
+  const totalRepos = Math.max(Number(normalizedUser.public_repos || 0), normalizedRepos.length);
+  const accountAge = normalizedUser.created_at
+    ? ((Date.now() - new Date(normalizedUser.created_at).getTime()) / (1000 * 60 * 60 * 24 * 365))
+    : 0;
+  const weekendCommits = Number(githubPayload?.weekend_vs_weekday?.weekend_commits || 0);
+  const weekdayCommits = Number(githubPayload?.weekend_vs_weekday?.weekday_commits || 0);
+  const weekendRatio = (weekendCommits + weekdayCommits) > 0
+    ? (weekendCommits / (weekendCommits + weekdayCommits))
+    : 0;
+  const recentCommits = Number(
+    githubPayload.recentCommits
+      ?? githubPayload.recent_commits_30d
+      ?? githubPayload.recent_commit_messages?.length
+      ?? normalizedCommitMessages.length
+      ?? 0,
+  );
+
+  const baseTraits = calculateBaseTraits({
+    totalStars: Number(totalStars || 0),
+    totalRepos,
+    followers: Number(normalizedUser.followers || 0),
+    following: Number(normalizedUser.following || 0),
+    accountAge,
+    recentCommits,
+    topLangs,
+    avgCommitHour: Number(githubPayload.avg_commit_hour ?? 12),
+    weekendRatio,
+    commitMessages: normalizedCommitMessages,
+    commitHourDist: Array.isArray(githubPayload.commit_hour_distribution) ? githubPayload.commit_hour_distribution : [],
+    bio: String(normalizedUser.bio || ""),
+    blog: String(normalizedUser.blog || ""),
+    repos: normalizedRepos,
+  });
+
+  const normalizedAiData = {
+    ...aiPayload,
+    traits: constrainAiTraitRefinement(baseTraits, aiPayload?.traits, 8),
+    baseTraits,
+  };
+
   return {
     github: normalizedGithub,
-    aiData: aiPayload,
+    aiData: normalizedAiData,
     devScore: calcDevScore(normalizedUser, normalizedRepos),
     langs: topLangs,
     username: normalizedUser.login || fallbackUsername,
@@ -2674,22 +2858,158 @@ function StatCard({ icon, label, value, delay, sub, enterIndex = 0, ticker = fal
 }
 
 function TraitsRadar({ traits }) {
-  if (!traits) return null;
+  const gradientToken = useId().replace(/:/g, "");
+  if (!traits || typeof traits !== "object") return null;
+
   const data = [
-    { trait: "Creativity", value: traits.creativity || 50 },
-    { trait: "Discipline", value: traits.discipline || 50 },
-    { trait: "Collab", value: traits.collaboration || 50 },
-    { trait: "Boldness", value: traits.boldness || 50 },
-    { trait: "Depth", value: traits.depth || 50 },
+    { key: "creativity", trait: "Creativity", value: clampNumber(Number(traits.creativity ?? 50), 0, 100) },
+    { key: "discipline", trait: "Discipline", value: clampNumber(Number(traits.discipline ?? 50), 0, 100) },
+    { key: "collaboration", trait: "Collaboration", value: clampNumber(Number(traits.collaboration ?? 50), 0, 100) },
+    { key: "boldness", trait: "Boldness", value: clampNumber(Number(traits.boldness ?? 50), 0, 100) },
+    { key: "depth", trait: "Depth", value: clampNumber(Number(traits.depth ?? 50), 0, 100) },
+    { key: "velocity", trait: "Velocity", value: clampNumber(Number(traits.velocity ?? 50), 0, 100) },
   ];
+
+  const dominantTrait = data.reduce(
+    (winner, item) => (item.value > winner.value ? item : winner),
+    data[0],
+  );
+
+  const dominantPalette = {
+    creativity: "#b347ea",
+    discipline: "#00dcff",
+    collaboration: "#00dcff",
+    boldness: "#ffd770",
+    depth: "#00dcff",
+    velocity: "#39ff14",
+  };
+
+  const dominantColor = dominantPalette[dominantTrait?.key] || "#00dcff";
+  const chartWidth = 260;
+  const chartHeight = 220;
+  const chartCx = 130;
+  const chartCy = 108;
+  const chartOuterRadius = 74;
+
+  const axisVectors = data.map((item, index) => {
+    const angleDeg = -90 + ((index * 360) / data.length);
+    const angleRad = (angleDeg * Math.PI) / 180;
+
+    return {
+      key: item.key,
+      angleDeg,
+      angleRad,
+      x: chartCx + Math.cos(angleRad) * chartOuterRadius,
+      y: chartCy + Math.sin(angleRad) * chartOuterRadius,
+    };
+  });
+
+  const dominantAxis = axisVectors.find((axis) => axis.key === dominantTrait?.key) || axisVectors[0];
+  const gradientId = `traits-radar-gradient-${gradientToken}`;
+  const gradientX2 = chartCx + Math.cos(dominantAxis.angleRad) * chartOuterRadius;
+  const gradientY2 = chartCy + Math.sin(dominantAxis.angleRad) * chartOuterRadius;
+
+  const valueLabelPoints = data.map((item, index) => {
+    const axis = axisVectors[index];
+    const radius = (chartOuterRadius * item.value) / 100;
+    const insideRadius = Math.max(10, radius - 8);
+    return {
+      key: item.key,
+      value: Math.round(item.value),
+      angleDeg: axis.angleDeg,
+      x: chartCx + Math.cos(axis.angleRad) * insideRadius,
+      y: chartCy + Math.sin(axis.angleRad) * insideRadius,
+    };
+  });
+
+  const renderAngleTick = ({ x, y, payload, textAnchor, index }) => {
+    const datum = data[index] || data.find((item) => item.trait === payload?.value);
+    const hoverText = `${datum?.trait || payload?.value}: ${Math.round(Number(datum?.value ?? 0))}`;
+
+    return (
+      <g transform={`translate(${x},${y})`}>
+        <text
+          x={0}
+          y={0}
+          dy={3}
+          textAnchor={textAnchor || "middle"}
+          fill="rgba(0,220,255,0.62)"
+          fontFamily="Share Tech Mono,monospace"
+          fontSize={9}
+        >
+          {payload?.value}
+          <title>{hoverText}</title>
+        </text>
+      </g>
+    );
+  };
+
   return (
-    <ResponsiveContainer width="100%" height={200}>
-      <RadarChart data={data} cx="50%" cy="50%" outerRadius="64%" margin={{ top: 8, right: 26, bottom: 8, left: 26 }}>
+    <div style={{ width: "100%", display: "flex", justifyContent: "center" }}>
+      <RadarChart
+        data={data}
+        width={chartWidth}
+        height={chartHeight}
+        cx={chartCx}
+        cy={chartCy}
+        outerRadius={chartOuterRadius}
+        margin={{ top: 8, right: 12, bottom: 8, left: 12 }}
+      >
+        <defs>
+          <linearGradient id={gradientId} x1={chartCx} y1={chartCy} x2={gradientX2} y2={gradientY2} gradientUnits="userSpaceOnUse">
+            <stop offset="0%" stopColor={dominantColor} stopOpacity={0.08} />
+            <stop offset="100%" stopColor={dominantColor} stopOpacity={0.42} />
+          </linearGradient>
+        </defs>
+
         <PolarGrid stroke="rgba(0,220,255,0.1)" />
-        <PolarAngleAxis dataKey="trait" tick={{ fill: "rgba(0,220,255,0.45)", fontSize: 9, fontFamily: "Share Tech Mono,monospace" }} />
-        <Radar dataKey="value" stroke="#00dcff" fill="#00dcff" fillOpacity={0.12} strokeWidth={1.5} dot={{ fill: "#00dcff", r: 3 }} />
+
+        {axisVectors.map((axis) => (
+          <line
+            key={`axis-${axis.key}`}
+            x1={chartCx}
+            y1={chartCy}
+            x2={axis.x}
+            y2={axis.y}
+            stroke={axis.key === dominantTrait.key ? "rgba(255,255,255,0.5)" : "rgba(0,220,255,0.14)"}
+            strokeWidth={axis.key === dominantTrait.key ? 1.8 : 1}
+          />
+        ))}
+
+        <PolarAngleAxis
+          dataKey="trait"
+          tick={renderAngleTick}
+          tickLine={false}
+        />
+        <PolarRadiusAxis domain={[0, 100]} tick={false} axisLine={false} />
+
+        <Radar
+          dataKey="value"
+          stroke={dominantColor}
+          fill={`url(#${gradientId})`}
+          fillOpacity={1}
+          strokeWidth={1.7}
+          dot={{ fill: dominantColor, r: 2.4 }}
+          isAnimationActive={false}
+        />
+
+        {valueLabelPoints.map((point) => (
+          <text
+            key={`radar-value-${point.key}`}
+            x={point.x}
+            y={point.y}
+            fill="rgba(255,255,255,0.95)"
+            fontFamily="Share Tech Mono,monospace"
+            fontSize={9}
+            textAnchor="middle"
+            dominantBaseline="middle"
+            transform={`rotate(${point.angleDeg} ${point.x} ${point.y})`}
+          >
+            {point.value}
+          </text>
+        ))}
       </RadarChart>
-    </ResponsiveContainer>
+    </div>
   );
 }
 

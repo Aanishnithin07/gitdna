@@ -1,5 +1,6 @@
 import hashlib
 import json
+import math
 import os
 import re
 from collections import Counter
@@ -1167,6 +1168,136 @@ def _build_fast_facts(metrics: dict[str, Any]) -> list[str]:
     ]
 
 
+def _calculate_base_traits(metrics: dict[str, Any], github_data: dict[str, Any]) -> dict[str, int]:
+    total_stars = max(0, _to_int(metrics.get("total_stars"), 0))
+    repos_payload = github_data.get("repos") if isinstance(github_data.get("repos"), list) else []
+    total_repos = max(0, _to_int(metrics.get("public_repos"), 0), len(repos_payload))
+    followers = max(0, _to_int(metrics.get("followers"), 0))
+
+    user_payload = github_data.get("user") if isinstance(github_data.get("user"), dict) else {}
+    following = max(0, _to_int(user_payload.get("following"), 0))
+    account_age = max(0.0, _to_float(metrics.get("account_age_years"), 0.0) or 0.0)
+    recent_commits = max(0, _to_int(metrics.get("recent_commits_30d"), 0))
+
+    top_languages_raw = metrics.get("top_languages") if isinstance(metrics.get("top_languages"), list) else []
+    top_langs = []
+    for item in top_languages_raw:
+        if not isinstance(item, dict):
+            continue
+        language = str(item.get("language") or item.get("lang") or "").strip()
+        if not language or language.lower() == "unknown":
+            continue
+        pct = _to_float(item.get("percentage"), None)
+        if pct is None:
+            pct = _to_float(item.get("pct"), 0.0) or 0.0
+        top_langs.append({"lang": language, "pct": float(pct)})
+
+    language_count = max(0, _to_int(metrics.get("language_diversity"), 0))
+    if language_count == 0:
+        language_count = len(top_langs)
+
+    avg_commit_hour = _to_float(metrics.get("avg_commit_hour"), 12.0)
+    if avg_commit_hour is None:
+        avg_commit_hour = 12.0
+
+    weekend_commits = max(0, _to_int(metrics.get("weekend_commits"), 0))
+    weekday_commits = max(0, _to_int(metrics.get("weekday_commits"), 0))
+    weekend_ratio = 0.0
+    if (weekend_commits + weekday_commits) > 0:
+        weekend_ratio = weekend_commits / (weekend_commits + weekday_commits)
+
+    commit_messages = metrics.get("last_commit_messages") if isinstance(metrics.get("last_commit_messages"), list) else []
+    normalized_messages = [str(message).strip() for message in commit_messages if str(message).strip()]
+
+    bio = str(user_payload.get("bio") or "")
+    blog = str(user_payload.get("blog") or "")
+
+    # CREATIVITY (0-100)
+    creativity = 40
+    creativity += min(25, language_count * 5)
+    stars_per_repo = (total_stars / total_repos) if total_repos > 0 else 0.0
+    creativity += min(20, round(stars_per_repo * 2))
+    if avg_commit_hour >= 20 or avg_commit_hour <= 5:
+        creativity += 10
+    if weekend_ratio > 0.2:
+        creativity += 5
+    creativity = _clamp_int(creativity, 5, 100)
+
+    # DISCIPLINE (0-100)
+    discipline = 40
+    if normalized_messages:
+        conventional_count = sum(
+            1
+            for message in normalized_messages
+            if re.match(r"^(feat|fix|docs|refactor|chore|perf|test|style|build|ci):", message, re.IGNORECASE)
+        )
+        discipline += min(30, round((conventional_count / len(normalized_messages)) * 30))
+    discipline += min(20, round(account_age * 4))
+    if recent_commits > 10:
+        discipline += 10
+    discipline = _clamp_int(discipline, 5, 100)
+
+    # COLLABORATION (0-100)
+    collaboration = 30
+    collaboration += min(25, round((followers ** 0.5) * 3))
+    follow_ratio = min(2.0, (followers / following)) if following > 0 else 0.0
+    collaboration += min(15, round(follow_ratio * 8))
+    if bio and re.search(r"open.source|contributor|team|collaborat", bio, re.IGNORECASE):
+        collaboration += 15
+    if blog.strip():
+        collaboration += 5
+    collaboration = _clamp_int(collaboration, 5, 100)
+
+    # BOLDNESS (0-100)
+    boldness = 35
+    boldness += min(30, round((math.log10(total_stars + 1)) * 15))
+    if recent_commits > 15:
+        boldness += 15
+    primary_language = top_langs[0]["lang"] if top_langs else ""
+    if primary_language in {"Rust", "C"}:
+        boldness += 15
+    if primary_language == "Assembly":
+        boldness += 20
+    boldness = _clamp_int(boldness, 5, 100)
+
+    # DEPTH (0-100)
+    depth = 35
+    primary_pct = float(top_langs[0]["pct"]) if top_langs else 0.0
+    if primary_pct >= 60:
+        depth += 20
+    depth += min(20, round(account_age * 3.5))
+    max_single_repo_stars = 0
+    for repo in repos_payload:
+        if not isinstance(repo, dict):
+            continue
+        repo_stars = max(0, _to_int(repo.get("stargazers_count") or repo.get("stars"), 0))
+        if repo_stars > max_single_repo_stars:
+            max_single_repo_stars = repo_stars
+    depth += min(20, round((math.log10(max_single_repo_stars + 1)) * 10))
+    if normalized_messages:
+        avg_msg_len = sum(len(message) for message in normalized_messages) / len(normalized_messages)
+        depth += min(10, round(avg_msg_len / 10))
+    depth = _clamp_int(depth, 5, 100)
+
+    # VELOCITY (0-100)
+    velocity = 30
+    repos_per_year = (total_repos / account_age) if account_age > 0 else total_repos
+    velocity += min(30, round(repos_per_year * 3))
+    velocity += min(30, round(recent_commits * 2))
+    if weekend_ratio > 0.3:
+        velocity += 10
+    velocity = _clamp_int(velocity, 5, 100)
+
+    return {
+        "creativity": creativity,
+        "discipline": discipline,
+        "collaboration": collaboration,
+        "boldness": boldness,
+        "depth": depth,
+        "velocity": velocity,
+    }
+
+
 def _fallback_analysis(github_data: dict[str, Any]) -> dict[str, Any]:
     metrics = _extract_metrics(github_data)
     username = metrics["username"]
@@ -1186,17 +1317,8 @@ def _fallback_analysis(github_data: dict[str, Any]) -> dict[str, Any]:
     lazy_ratio = metrics["commit_message_lazy_ratio"]
     lexical_diversity = metrics["commit_message_lexical_diversity"]
 
-    stars_per_repo = stars / max(repos, 1)
-    followers_per_repo = followers / max(repos, 1)
-    activity_factor = min(commits_30d, 120) / 120
-    active_ratio_90d = active_90d / max(1, repos)
-
-    creativity = _clamp_int(30 + stars_per_repo * 8 + metrics["language_diversity"] * 4 + metrics["night_commit_ratio"] * 22)
-    discipline = _clamp_int(26 + activity_factor * 46 + active_ratio_90d * 28 - lazy_ratio * 16)
-    collaboration = _clamp_int(22 + min(followers, 1500) / 19 + followers_per_repo * 11 + metrics["fork_repo_count"] * 0.7)
-    boldness = _clamp_int(25 + min(stars, 3000) / 32 + min(repos, 150) * 0.16 + (8 if metrics["language_diversity"] >= 6 else 0))
-    depth = _clamp_int(30 + stars_per_repo * 9 + min(age_years, 15) * 2.4 + (8 if lexical_diversity >= 0.55 else 0))
-    velocity = _clamp_int(20 + activity_factor * 58 + active_ratio_90d * 18 - max(0, stale_180d - active_90d) * 0.2)
+    base_traits = _calculate_base_traits(metrics, github_data)
+    collaboration = base_traits["collaboration"]
 
     top_lang = metrics["top_languages"][0] if metrics["top_languages"] else {"language": "Unknown", "percentage": 0.0}
     avg_hour_display = int(avg_hour) if avg_hour is not None else 12
@@ -1236,12 +1358,12 @@ def _fallback_analysis(github_data: dict[str, Any]) -> dict[str, Any]:
             "score": collaboration,
         },
         "traits": {
-            "creativity": creativity,
-            "discipline": discipline,
-            "collaboration": collaboration,
-            "boldness": boldness,
-            "depth": depth,
-            "velocity": velocity,
+            "creativity": base_traits["creativity"],
+            "discipline": base_traits["discipline"],
+            "collaboration": base_traits["collaboration"],
+            "boldness": base_traits["boldness"],
+            "depth": base_traits["depth"],
+            "velocity": base_traits["velocity"],
         },
         "fastFacts": _build_fast_facts(metrics),
         "dnaSequence": dna_sequence,
@@ -1349,7 +1471,10 @@ def _normalize_result(parsed: dict[str, Any], fallback: dict[str, Any]) -> dict[
         for trait in ("creativity", "discipline", "collaboration", "boldness", "depth", "velocity"):
             score = _to_float(parsed_traits.get(trait), None)
             if score is not None:
-                result["traits"][trait] = _clamp_int(score)
+                ai_score = _clamp_int(score)
+                base_score = _to_int(result["traits"].get(trait), 50)
+                bounded_score = max(base_score - 8, min(base_score + 8, ai_score))
+                result["traits"][trait] = _clamp_int(bounded_score)
 
     fast_facts = parsed.get("fastFacts")
     if isinstance(fast_facts, list):
@@ -1361,7 +1486,7 @@ def _normalize_result(parsed: dict[str, Any], fallback: dict[str, Any]) -> dict[
     return result
 
 
-def _build_user_prompt(metrics: dict[str, Any]) -> str:
+def _build_user_prompt(metrics: dict[str, Any], base_traits: dict[str, int]) -> str:
     top_langs = ", ".join(
         f"{item['language']} ({item['percentage']}%)" for item in metrics["top_languages"][:3]
     )
@@ -1421,6 +1546,17 @@ Important behavior constraints:
 - Avoid repeating stock phrases like "Silent Builder" or "Asynchronous Builder" unless data strongly requires it.
 - Every sentence must include at least one concrete metric from this payload.
 
+Trait adjustment rules:
+The traits have been pre-calculated from the raw data:
+ creativity={base_traits['creativity']}, discipline={base_traits['discipline']},
+ collaboration={base_traits['collaboration']}, boldness={base_traits['boldness']},
+ depth={base_traits['depth']}, velocity={base_traits['velocity']}
+
+You MAY adjust each trait by a maximum of +/-8 points based on qualitative signals in
+the commit messages and bio. Do not change any trait by more than 8.
+Your adjustments must be justified by the text data.
+Return the adjusted values in the traits object.
+
 Respond with this exact JSON schema and no extra keys:
 {{
   "devClass": "creative RPG-style archetype, 3-5 words",
@@ -1467,13 +1603,14 @@ async def analyze_developer(github_data: dict) -> dict:
 
     try:
         metrics = _extract_metrics(github_data)
+        base_traits = _calculate_base_traits(metrics, github_data)
         response = await client.chat.completions.create(
             model=MODEL_NAME,
-            temperature=0.55,
+            temperature=0.1,
             max_tokens=1200,
             messages=[
                 {"role": "system", "content": SYSTEM_PROMPT},
-                {"role": "user", "content": _build_user_prompt(metrics)},
+                {"role": "user", "content": _build_user_prompt(metrics, base_traits)},
             ],
         )
 
