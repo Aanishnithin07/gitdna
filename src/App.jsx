@@ -5515,6 +5515,8 @@ const NEWSPAPER_PORTAL_STYLES = `
 .np-masthead-row{display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;position:relative;z-index:1}
 .np-edition{font-family:'Share Tech Mono',monospace;font-size:.64rem;letter-spacing:.14em;color:#5b3f24}
 .np-date{font-family:'Share Tech Mono',monospace;font-size:.62rem;letter-spacing:.12em;color:#5b3f24}
+.np-corner-close{margin-left:auto;display:inline-flex;align-items:center;justify-content:center;width:29px;height:29px;border-radius:999px;border:1px solid rgba(124,55,55,.64);background:linear-gradient(135deg,rgba(87,30,30,.92),rgba(124,37,37,.92));color:#ffe3e3;font-family:'Share Tech Mono',monospace;font-size:.9rem;line-height:1;cursor:pointer;box-shadow:0 2px 8px rgba(69,25,25,.35)}
+.np-corner-close:hover{transform:translateY(-1px);filter:brightness(1.07)}
 .np-masthead{margin-top:8px;text-align:center;font-family:'Baskerville','Palatino Linotype','Book Antiqua',serif;font-size:clamp(2rem,7vw,3.35rem);font-weight:700;letter-spacing:.1em;line-height:1;color:#2d1a0b;position:relative;z-index:1}
 .np-rule{height:2px;background:linear-gradient(90deg,transparent,rgba(74,49,28,.75),transparent);margin:10px 0 9px;position:relative;z-index:1}
 .np-ticker{font-family:'Share Tech Mono',monospace;font-size:.68rem;letter-spacing:.08em;color:#5f4125;border-top:1px solid rgba(84,56,30,.35);border-bottom:1px solid rgba(84,56,30,.35);padding:7px 0;position:relative;z-index:1}
@@ -5524,8 +5526,10 @@ const NEWSPAPER_PORTAL_STYLES = `
 .np-toolbar{margin-top:10px;display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;position:relative;z-index:1}
 .np-refresh-stamp{font-family:'Share Tech Mono',monospace;font-size:.54rem;letter-spacing:.12em;color:#6b4828;text-transform:uppercase}
 .np-toolbar-actions{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
-.np-toolbar .gd-btn{padding:6px 10px;font-size:.54rem;letter-spacing:.1em}
-.np-toolbar .np-close-btn{border-color:rgba(255,120,120,.45);color:#ff9f9f;background:linear-gradient(135deg,rgba(255,70,70,.17),rgba(90,14,14,.3))}
+.np-toolbar .gd-btn{padding:7px 12px;font-size:.56rem;letter-spacing:.1em;border:1px solid rgba(88,64,39,.65);background:linear-gradient(135deg,#2f1f11,#5a3a20);color:#f8ecd9;box-shadow:0 2px 8px rgba(53,29,9,.25)}
+.np-toolbar .gd-btn:hover{transform:translateY(-1px)}
+.np-toolbar .np-share-btn{border-color:rgba(68,131,170,.72);background:linear-gradient(135deg,#102738,#24547b);color:#d8f1ff}
+.np-toolbar .np-close-btn{border-color:rgba(171,72,72,.72);background:linear-gradient(135deg,#3a1515,#6a1f1f);color:#ffdede}
 .np-page-window{margin-top:10px;overflow:hidden;border:1px solid rgba(92,64,33,.3);border-radius:6px;background:rgba(255,250,240,.3);position:relative;z-index:1;perspective:1700px;transform-style:preserve-3d}
 .np-page-window::before{content:'';position:absolute;inset:0;opacity:0;pointer-events:none;mix-blend-mode:multiply;background:radial-gradient(circle at 50% 50%,rgba(40,24,8,.28),transparent 70%)}
 .np-page-window::after{content:'';position:absolute;inset:-8% -30% -8% auto;width:58%;opacity:0;pointer-events:none;background:linear-gradient(108deg,rgba(255,255,255,0) 0%,rgba(255,255,255,.28) 26%,rgba(104,72,41,.24) 54%,rgba(0,0,0,0) 100%)}
@@ -5582,6 +5586,7 @@ const NEWSPAPER_PORTAL_STYLES = `
 .np-control-btn.np-next{border-color:rgba(140,255,202,.45);background:linear-gradient(135deg,rgba(140,255,202,.16),rgba(9,66,53,.48));color:#c7ffe7}
 .np-control-btn.np-refresh{border-color:rgba(255,173,92,.5);background:linear-gradient(135deg,rgba(255,173,92,.2),rgba(85,43,11,.53));color:#ffd9b4}
 .np-control-btn.np-print{border-color:rgba(192,167,255,.48);background:linear-gradient(135deg,rgba(192,167,255,.18),rgba(35,22,73,.54));color:#ece0ff}
+.np-control-btn.np-close-dock{grid-column:1 / -1;max-width:290px;justify-self:center;border-color:rgba(255,121,121,.58);background:linear-gradient(135deg,rgba(255,121,121,.24),rgba(104,27,27,.62));color:#ffe0e0}
 .np-control-btn:disabled{opacity:.45;cursor:not-allowed}
 @media (max-width:900px){
   .np-paper{padding:16px 14px 20px}
@@ -5592,8 +5597,10 @@ const NEWSPAPER_PORTAL_STYLES = `
   .np-story{font-size:.9rem}
   .np-page{padding:11px 10px 8px}
   .np-toolbar{flex-direction:column;align-items:flex-start}
+  .np-corner-close{width:30px;height:30px}
   .np-bottom-bar{grid-template-columns:repeat(2,minmax(0,1fr));width:min(96vw,460px);padding:8px;border-radius:12px;bottom:10px}
   .np-control-btn{padding:9px 10px}
+  .np-control-btn.np-close-dock{max-width:none;width:100%}
 }
 @keyframes np-shimmer{0%{background-position:200% 0}100%{background-position:-120% 0}}
 @keyframes np-paper-in{from{opacity:0;transform:translateY(24px) scale(.97)}to{opacity:1;transform:translateY(0) scale(1)}}
@@ -6004,6 +6011,15 @@ function GitHubNewspaperPortal({ username, profilePayload, getEdition, onClose }
           <div className="np-masthead-row">
             <span className="np-edition">{resolvedEdition.editionLabel}</span>
             <span className="np-date">{resolvedEdition.dateLine}</span>
+            <button
+              className="np-corner-close"
+              onClick={handleClose}
+              aria-label="Close newspaper"
+              title="Close newspaper"
+              type="button"
+            >
+              ×
+            </button>
           </div>
 
           <h1 className="np-masthead">{resolvedEdition.masthead}</h1>
@@ -6033,7 +6049,7 @@ function GitHubNewspaperPortal({ username, profilePayload, getEdition, onClose }
                   {isRefreshing ? "REFRESHING TODAY'S EDITION..." : lastUpdatedLabel}
                 </span>
                 <div className="np-toolbar-actions">
-                  <button className="gd-btn" onClick={handleShare} disabled={isLoading || isRefreshing}>
+                  <button className="gd-btn np-share-btn" onClick={handleShare} disabled={isLoading || isRefreshing}>
                     {shareCopied ? "CLIP COPIED" : "SHARE CLIP"}
                   </button>
                   <button className="gd-btn np-close-btn" onClick={handleClose}>EXIT PRESSROOM</button>
@@ -6069,6 +6085,9 @@ function GitHubNewspaperPortal({ username, profilePayload, getEdition, onClose }
         </button>
         <button className="gd-btn np-control-btn np-next" onClick={handleNextPage} disabled={isLoading || isRefreshing || !canGoNext}>
           NEXT SPREAD ▶
+        </button>
+        <button className="gd-btn np-control-btn np-close-dock" onClick={handleClose} type="button">
+          ✕ CLOSE NEWSPAPER
         </button>
       </div>
     </div>,
