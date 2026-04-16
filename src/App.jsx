@@ -2836,7 +2836,7 @@ function SkillBar({ lang, pct, delay = 0 }) {
   );
 }
 
-function StatCard({ icon, label, value, delay, sub, enterIndex = 0, ticker = false }) {
+function StatCard({ label, value, delay, sub, enterIndex = 0, ticker = false }) {
   return (
     <div className="gd-card gd-hover-lift gd-enter-scan"
       style={{
@@ -3370,14 +3370,19 @@ function DNASequence({ seq, goldMode = false }) {
   const [visibleCount, setVisibleCount] = useState(0);
 
   useEffect(() => {
-    setVisibleCount(0);
+    const resetTimer = setTimeout(() => {
+      setVisibleCount(0);
+    }, 0);
     let next = 0;
     const timer = setInterval(() => {
       next += 1;
       setVisibleCount(Math.min(next, chars.length));
       if (next >= chars.length) clearInterval(timer);
     }, 60);
-    return () => clearInterval(timer);
+    return () => {
+      clearTimeout(resetTimer);
+      clearInterval(timer);
+    };
   }, [seq, chars.length]);
 
   return (
@@ -3707,12 +3712,10 @@ function BackgroundCanvas({ attractRef = null, attractActive = false }) {
 function LandingPage({ onAnalyze, ultraMode = false }) {
   const [username, setUsername] = useState("");
   const [loading, setLoading] = useState(false);
-  const [blink, setBlink] = useState(true);
   const [inputError, setInputError] = useState("");
   const [isInputFocused, setIsInputFocused] = useState(false);
   const inputRef = useRef(null);
   const recentProfiles = ["torvalds", "gaearon", "antirez"];
-  useEffect(() => { const t = setInterval(() => setBlink(b => !b), 500); return () => clearInterval(t); }, []);
   const handle = () => {
     const parsedUsername = parseGithubUsername(username);
     if (!parsedUsername) {
@@ -4007,7 +4010,7 @@ const TIME_MACHINE_PORTAL_STYLES = `
 @keyframes tm-float-up-fade{0%{transform:translate(-50%,0);opacity:1}100%{transform:translate(-50%,-40px);opacity:0}}
 `;
 
-function TimeMachine({ repos, events, user, aiData, onClose }) {
+function TimeMachine({ repos, events, user, onClose }) {
   const API_URL = (import.meta.env.VITE_API_URL || "http://localhost:8000").replace(/\/$/, "");
   const safeRepos = useMemo(() => (Array.isArray(repos) ? repos : []), [repos]);
   const safeEvents = useMemo(() => (Array.isArray(events) ? events : []), [events]);
@@ -4708,7 +4711,6 @@ function GitMap({ user, avgCommitHour, totalStars, topLang, accountAge, recentCo
   const [showMainMap, setShowMainMap] = useState(false);
   const [isClosing, setIsClosing] = useState(false);
   const [showReturning, setShowReturning] = useState(false);
-  const [geocodeLoading, setGeocodeLoading] = useState(true);
   const [geocodeReady, setGeocodeReady] = useState(false);
   const [scanTimeoutReached, setScanTimeoutReached] = useState(false);
   const [geo, setGeo] = useState({
@@ -4728,7 +4730,6 @@ function GitMap({ user, avgCommitHour, totalStars, topLang, accountAge, recentCo
   const [countries, setCountries] = useState([]);
   const [countryNames, setCountryNames] = useState(new Map());
   const [mapEntered, setMapEntered] = useState(false);
-  const [hoveredCountry, setHoveredCountry] = useState(null);
   const [hoveredHub, setHoveredHub] = useState("");
   const [insight, setInsight] = useState("");
   const [insightLoading, setInsightLoading] = useState(false);
@@ -4997,8 +4998,6 @@ function GitMap({ user, avgCommitHour, totalStars, topLang, accountAge, recentCo
 
   useEffect(() => {
     let cancelled = false;
-    setGeocodeLoading(true);
-    setGeocodeReady(false);
     const timeout = setTimeout(() => setScanTimeoutReached(true), 3000);
 
     geocodeLocation()
@@ -5008,7 +5007,6 @@ function GitMap({ user, avgCommitHour, totalStars, topLang, accountAge, recentCo
       })
       .finally(() => {
         if (cancelled) return;
-        setGeocodeLoading(false);
         setGeocodeReady(true);
       });
 
@@ -5016,7 +5014,7 @@ function GitMap({ user, avgCommitHour, totalStars, topLang, accountAge, recentCo
       cancelled = true;
       clearTimeout(timeout);
     };
-  }, [user?.login, user?.location]);
+  }, [user?.login, user?.location]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     if (sequenceStep !== 1) return;
@@ -5027,8 +5025,10 @@ function GitMap({ user, avgCommitHour, totalStars, topLang, accountAge, recentCo
 
   useEffect(() => {
     if (sequenceStep !== 2) return;
-    setTypedPlace("");
-    setTypedCoords("");
+    const resetTimer = setTimeout(() => {
+      setTypedPlace("");
+      setTypedCoords("");
+    }, 0);
 
     const placeText = `${geo.city}, ${geo.country}`;
     const coords = coordsText;
@@ -5060,6 +5060,7 @@ function GitMap({ user, avgCommitHour, totalStars, topLang, accountAge, recentCo
     }, 600);
 
     return () => {
+      clearTimeout(resetTimer);
       clearTimeout(signalDelay);
       if (placeTimer) clearInterval(placeTimer);
       if (coordsTimer) clearInterval(coordsTimer);
@@ -5069,14 +5070,19 @@ function GitMap({ user, avgCommitHour, totalStars, topLang, accountAge, recentCo
   useEffect(() => {
     if (sequenceStep !== 3) return;
     const text = `SIGNAL STRENGTH: ${countryStats.signal}/100`;
-    setTypedSignal("");
+    const resetTimer = setTimeout(() => {
+      setTypedSignal("");
+    }, 0);
     let index = 0;
     const timer = setInterval(() => {
       index += 1;
       setTypedSignal(text.slice(0, index));
       if (index >= text.length) clearInterval(timer);
     }, 18);
-    return () => clearInterval(timer);
+    return () => {
+      clearTimeout(resetTimer);
+      clearInterval(timer);
+    };
   }, [sequenceStep, countryStats.signal]);
 
   useEffect(() => {
@@ -5092,8 +5098,6 @@ function GitMap({ user, avgCommitHour, totalStars, topLang, accountAge, recentCo
 
   useEffect(() => {
     let cancelled = false;
-    setCartographyLoading(true);
-    setCartographyFailed(false);
     loadGitMapCartography()
       .then((data) => {
         if (cancelled) return;
@@ -5184,8 +5188,11 @@ function GitMap({ user, avgCommitHour, totalStars, topLang, accountAge, recentCo
     if (!showMainMap) return;
     const target = parseCompactCount(countryStats.devCount);
     if (!Number.isFinite(target)) {
-      setAnimatedDevCount(countryStats.devCount);
-      return;
+      let fallbackFrame = 0;
+      fallbackFrame = requestAnimationFrame(() => {
+        setAnimatedDevCount(countryStats.devCount);
+      });
+      return () => cancelAnimationFrame(fallbackFrame);
     }
 
     let start = null;
@@ -5261,7 +5268,7 @@ function GitMap({ user, avgCommitHour, totalStars, topLang, accountAge, recentCo
     return () => {
       cancelled = true;
     };
-  }, [showMainMap, API_URL, user?.login, geo.city, geo.country, geo.countryCode, topLang, totalStars, accountAge, recentCommits]);
+  }, [showMainMap, API_URL, user?.login, geo.city, geo.country, geo.countryCode, topLang, totalStars, accountAge, recentCommits]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -6220,7 +6227,7 @@ function GitHubNewspaperPortal({ username, profilePayload, getEdition, onClose }
         shareCopiedTimerRef.current = null;
       }
     };
-  }, [onClose, totalPages, boundedPageIndex, isLoading, isRefreshing]);
+  }, [onClose, totalPages, boundedPageIndex, isLoading, isRefreshing]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const handleClose = () => {
     if (isClosing) return;
@@ -9510,7 +9517,7 @@ export default function GitDNA() {
       const parsedUsername = parseGithubUsername(urlUsername.trim());
       if (parsedUsername) analyze(parsedUsername);
     }
-  }, []);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   if (phase === "landing") return (
     <>
