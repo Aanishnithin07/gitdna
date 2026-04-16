@@ -1327,6 +1327,18 @@ function buildNewspaperFallback(profilePayload = {}, usernameHint = "developer")
     : {};
   const unlockedCount = Number(achievements.unlockedCount || 0);
   const totalCount = Number(achievements.totalCount || 0);
+  const repoList = Array.isArray(github.repos) ? [...github.repos] : [];
+  const topRepo = repoList.sort((left, right) => {
+    const leftStars = Number(left?.stargazers_count || left?.stars || 0);
+    const rightStars = Number(right?.stargazers_count || right?.stars || 0);
+    if (leftStars !== rightStars) return rightStars - leftStars;
+
+    const leftForks = Number(left?.forks_count || left?.forks || 0);
+    const rightForks = Number(right?.forks_count || right?.forks || 0);
+    return rightForks - leftForks;
+  })[0] || null;
+  const topRepoName = String(topRepo?.name || "No standout repo yet");
+  const topRepoStars = Number(topRepo?.stargazers_count || topRepo?.stars || 0);
 
   return {
     masthead: "GITHUB NEWSPAPER",
@@ -1348,6 +1360,26 @@ function buildNewspaperFallback(profilePayload = {}, usernameHint = "developer")
       `Achievement Vault: ${unlockedCount}/${totalCount}`,
       `Account Age: ${accountAgeYears.toFixed(2)} years`,
     ],
+    hotWire: [
+      `Velocity Desk: ${commits30d.toLocaleString()} commits landed in the last 30 days.`,
+      `Language Heat: ${topLanguage}${topLanguagePct > 0 ? ` controls ${topLanguagePct.toFixed(2)}% of visible language share.` : " remains the current stack anchor."}`,
+      `Community Pulse: ${followers.toLocaleString()} followers currently track @${username}.`,
+      `Repository Tracker: ${repos.toLocaleString()} public repositories are live in this profile.`,
+    ],
+    marketWatch: [
+      `Top repository by stars: ${topRepoName}${topRepoStars > 0 ? ` (${topRepoStars.toLocaleString()} stars)` : ""}.`,
+      `Achievement unlock rate: ${unlockedCount}/${totalCount} cards opened in the vault.`,
+      `Signal blend: ${stars.toLocaleString()} stars, ${followers.toLocaleString()} followers, ${commits30d.toLocaleString()} commits in 30 days.`,
+    ],
+    timeline: [
+      `Account tenure now stands at ${accountAgeYears.toFixed(2)} years.`,
+      `${commits30d.toLocaleString()} commits in 30 days indicate sustained shipping momentum.`,
+      `${repos.toLocaleString()} repositories and ${stars.toLocaleString()} total stars define the current footprint.`,
+    ],
+    opinionDeck: [
+      `At ${devScore}/100, this profile shows strong output pressure with room to compound through clearer commit storytelling.`,
+      `Execution speed is visible; long-term leverage comes from documentation discipline and maintainable handoffs.`,
+    ],
     pullQuote: `${commits30d.toLocaleString()} commits in 30 days means roadmap gravity is moving toward this developer's execution lane.`,
     footerNote: "Printed by GitDNA Press | Built from public GitHub telemetry",
   };
@@ -1362,6 +1394,10 @@ function normalizeNewspaperPayload(rawPayload, fallbackPayload) {
   const normalized = {
     ...fallback,
     sidebarBullets: Array.isArray(fallback.sidebarBullets) ? [...fallback.sidebarBullets] : [],
+    hotWire: Array.isArray(fallback.hotWire) ? [...fallback.hotWire] : [],
+    marketWatch: Array.isArray(fallback.marketWatch) ? [...fallback.marketWatch] : [],
+    timeline: Array.isArray(fallback.timeline) ? [...fallback.timeline] : [],
+    opinionDeck: Array.isArray(fallback.opinionDeck) ? [...fallback.opinionDeck] : [],
   };
 
   const textKeys = [
@@ -1399,7 +1435,252 @@ function normalizeNewspaperPayload(rawPayload, fallbackPayload) {
     }
   }
 
+  const listKeys = ["hotWire", "marketWatch", "timeline", "opinionDeck"];
+  for (const key of listKeys) {
+    if (!Array.isArray(source[key])) continue;
+    const cleanLines = source[key]
+      .map((item) => String(item || "").replace(/\s+/g, " ").trim())
+      .filter(Boolean)
+      .slice(0, 8);
+    if (cleanLines.length >= 2) {
+      normalized[key] = cleanLines;
+    }
+  }
+
   return normalized;
+}
+
+function sanitizeNewspaperLines(lines, minItems = 0, maxItems = 8) {
+  const cleaned = Array.isArray(lines)
+    ? lines
+      .map((line) => String(line || "").replace(/\s+/g, " ").trim())
+      .filter(Boolean)
+      .slice(0, maxItems)
+    : [];
+
+  if (cleaned.length < minItems) return [];
+  return cleaned;
+}
+
+function formatNewspaperDateLabel(value, withYear = false) {
+  const date = new Date(value || "");
+  if (!Number.isFinite(date.getTime())) {
+    return "Unknown date";
+  }
+
+  return date.toLocaleDateString(undefined, withYear
+    ? { month: "short", day: "2-digit", year: "numeric" }
+    : { month: "short", day: "2-digit" });
+}
+
+function buildNewspaperPages(editionPayload, profilePayload = {}) {
+  const safeProfile = profilePayload && typeof profilePayload === "object" ? profilePayload : {};
+  const github = safeProfile.github && typeof safeProfile.github === "object" ? safeProfile.github : {};
+  const user = github.user && typeof github.user === "object" ? github.user : {};
+  const username = String(safeProfile.username || user.login || "developer");
+  const repos = Array.isArray(github.repos) ? github.repos : [];
+  const events = Array.isArray(github.events) ? github.events : [];
+  const contributions = Array.isArray(github.contributions) ? github.contributions : [];
+  const achievements = safeProfile.achievements && typeof safeProfile.achievements === "object"
+    ? safeProfile.achievements
+    : {};
+  const unlockedCount = Number(achievements.unlockedCount || 0);
+  const totalCount = Number(achievements.totalCount || 0);
+  const devScore = Number(safeProfile.devScore || 0);
+  const totalStars = Number(github.totalStars || github.total_stars || 0);
+  const followerCount = Number(user.followers || 0);
+  const publicRepos = Number(user.public_repos || repos.length || 0);
+  const commits30d = Number(github.recentCommits || github.recent_commits_30d || github.recent_commits_last_30_days || 0);
+
+  const langsFromProfile = Array.isArray(safeProfile.langs) ? safeProfile.langs : [];
+  const langsFromGithub = Array.isArray(github.top_languages)
+    ? github.top_languages.map((item) => ({
+        lang: String(item?.language || item?.lang || "Unknown"),
+        pct: Number(item?.percentage ?? item?.pct ?? 0),
+      }))
+    : [];
+  const langs = (langsFromProfile.length > 0 ? langsFromProfile : langsFromGithub)
+    .map((item) => ({
+      lang: String(item?.lang || item?.language || "Unknown"),
+      pct: Number(item?.pct ?? item?.percentage ?? 0),
+    }))
+    .filter((item) => item.lang)
+    .slice(0, 6);
+
+  const topRepos = [...repos]
+    .sort((left, right) => {
+      const leftStars = Number(left?.stargazers_count || left?.stars || 0);
+      const rightStars = Number(right?.stargazers_count || right?.stars || 0);
+      if (leftStars !== rightStars) return rightStars - leftStars;
+
+      const leftForks = Number(left?.forks_count || left?.forks || 0);
+      const rightForks = Number(right?.forks_count || right?.forks || 0);
+      if (leftForks !== rightForks) return rightForks - leftForks;
+
+      const leftPushed = new Date(left?.pushed_at || left?.updated_at || 0).getTime();
+      const rightPushed = new Date(right?.pushed_at || right?.updated_at || 0).getTime();
+      return rightPushed - leftPushed;
+    })
+    .slice(0, 5)
+    .map((repo, index) => ({
+      id: String(repo?.id || `${repo?.name || "repo"}-${index}`),
+      name: String(repo?.name || `repo-${index + 1}`),
+      stars: Number(repo?.stargazers_count || repo?.stars || 0),
+      forks: Number(repo?.forks_count || repo?.forks || 0),
+      updated: formatNewspaperDateLabel(repo?.pushed_at || repo?.updated_at, true),
+    }));
+
+  const now = Date.now();
+  const fourteenDaysMs = 14 * 24 * 60 * 60 * 1000;
+  const thirtyDaysMs = 30 * 24 * 60 * 60 * 1000;
+
+  let pushEvents14d = 0;
+  let commits14d = 0;
+  let pullRequestEvents14d = 0;
+  let issueEvents14d = 0;
+
+  for (const event of events) {
+    const createdAt = new Date(event?.created_at || "").getTime();
+    if (!Number.isFinite(createdAt)) continue;
+    if (now - createdAt > fourteenDaysMs) continue;
+
+    const eventType = String(event?.type || "");
+    if (eventType === "PushEvent") {
+      pushEvents14d += 1;
+      const commitCount = Array.isArray(event?.payload?.commits) ? event.payload.commits.length : 0;
+      commits14d += Math.max(1, commitCount);
+    }
+    if (eventType === "PullRequestEvent") pullRequestEvents14d += 1;
+    if (eventType === "IssuesEvent") issueEvents14d += 1;
+  }
+
+  const activeRepos30d = repos.filter((repo) => {
+    const pushedAt = new Date(repo?.pushed_at || repo?.updated_at || "").getTime();
+    return Number.isFinite(pushedAt) && now - pushedAt <= thirtyDaysMs;
+  }).length;
+
+  const currentStreak = getCurrentContributionStreak(contributions);
+  const commitDrop = detectCommitSpikeDrop(events);
+
+  const rawEdition = editionPayload && typeof editionPayload === "object"
+    ? editionPayload
+    : buildNewspaperFallback(safeProfile, username);
+
+  const hotWire = sanitizeNewspaperLines(rawEdition.hotWire, 0, 8);
+  const marketWatch = sanitizeNewspaperLines(rawEdition.marketWatch, 0, 8);
+  const timeline = sanitizeNewspaperLines(rawEdition.timeline, 0, 8);
+  const opinionDeck = sanitizeNewspaperLines(rawEdition.opinionDeck, 0, 8);
+
+  const timelineSource = [];
+  if (user.created_at) {
+    timelineSource.push(`Account opened on ${formatNewspaperDateLabel(user.created_at, true)}.`);
+  }
+
+  const firstActiveDay = contributions.find((entry) => Number(entry?.count || 0) > 0)?.date;
+  const lastActiveDay = [...contributions].reverse().find((entry) => Number(entry?.count || 0) > 0)?.date;
+  if (firstActiveDay) {
+    timelineSource.push(`Earliest visible contribution in the current archive: ${formatNewspaperDateLabel(firstActiveDay, true)}.`);
+  }
+  if (lastActiveDay) {
+    timelineSource.push(`Latest visible contribution marker: ${formatNewspaperDateLabel(lastActiveDay, true)}.`);
+  }
+  if (topRepos[0]) {
+    timelineSource.push(`Top repository today is ${topRepos[0].name} with ${topRepos[0].stars.toLocaleString()} stars.`);
+  }
+  if (commits30d > 0) {
+    timelineSource.push(`The last 30 days produced ${commits30d.toLocaleString()} commits.`);
+  }
+
+  const accountAgeYears = (() => {
+    const createdAt = new Date(user.created_at || "").getTime();
+    if (!Number.isFinite(createdAt)) return 0;
+    return Math.max(0, (Date.now() - createdAt) / (1000 * 60 * 60 * 24 * 365.25));
+  })();
+
+  const effectiveHotWire = hotWire.length > 0
+    ? hotWire
+    : [
+      `Breaking Desk: ${commits14d.toLocaleString()} commits detected across ${pushEvents14d.toLocaleString()} push events in the last 14 days.`,
+      `Live Repo Pulse: ${activeRepos30d.toLocaleString()} repositories received updates in the last 30 days.`,
+      `Collab Counter: ${pullRequestEvents14d.toLocaleString()} pull request events and ${issueEvents14d.toLocaleString()} issue events landed over two weeks.`,
+      commitDrop.detected
+        ? `Volatility Alert: monthly push output shows a ${commitDrop.dropPct}% post-spike drop.`
+        : "Volatility Alert: no severe post-spike collapse detected in recent monthly commit flow.",
+    ];
+
+  const effectiveMarketWatch = marketWatch.length > 0
+    ? marketWatch
+    : [
+      topRepos[0]
+        ? `Top repo board: ${topRepos[0].name} leads with ${topRepos[0].stars.toLocaleString()} stars and ${topRepos[0].forks.toLocaleString()} forks.`
+        : "Top repo board: no public repositories are available for ranking yet.",
+      langs[0]
+        ? `Language market leader: ${langs[0].lang} at ${langs[0].pct.toFixed(1)}% share.`
+        : "Language market leader: stack distribution is still warming up.",
+      `Achievement vault status: ${unlockedCount.toLocaleString()}/${totalCount.toLocaleString()} unlocked.`,
+      `Audience density: ${followerCount.toLocaleString()} followers tracking ${publicRepos.toLocaleString()} public repos.`,
+    ];
+
+  const effectiveTimeline = timeline.length > 0
+    ? timeline
+    : timelineSource.slice(0, 6);
+
+  const effectiveOpinionDeck = opinionDeck.length > 0
+    ? opinionDeck
+    : [
+      rawEdition.editorial,
+      `At ${devScore}/100 dev score, this profile combines execution pressure with long-cycle maintainability potential.`,
+      `The output surface currently spans ${publicRepos.toLocaleString()} repositories, ${totalStars.toLocaleString()} stars, and ${followerCount.toLocaleString()} followers.`,
+      `Sustained momentum over ${accountAgeYears.toFixed(2)} years suggests a builder with repeatable operating rhythm.`,
+    ];
+
+  return [
+    {
+      id: "front-page",
+      kind: "front",
+      label: "Front Page",
+      kicker: "Main Edition",
+      title: rawEdition.headline,
+    },
+    {
+      id: "hot-wire",
+      kind: "hot",
+      label: "Hot Wire",
+      kicker: "Live Desk",
+      title: "Hot Recent News on GitHub",
+      lead: `Real-time desk for @${username}: active stream of pushes, pull requests, issues, and shipping bursts from visible public telemetry.`,
+      cards: effectiveHotWire,
+      sideStats: [
+        `Push Events (14d): ${pushEvents14d.toLocaleString()}`,
+        `Commits (14d): ${commits14d.toLocaleString()}`,
+        `Active Repos (30d): ${activeRepos30d.toLocaleString()}`,
+        `Current Streak: ${currentStreak.toLocaleString()} days`,
+      ],
+      bulletin: commitDrop.detected
+        ? `Post-spike dip detected: ${commitDrop.dropPct}% drop in monthly commit volume after a surge.`
+        : "No significant post-spike crash detected. Delivery rhythm currently reads stable.",
+    },
+    {
+      id: "repo-market",
+      kind: "market",
+      label: "Repo Market",
+      kicker: "Data Exchange",
+      title: "Repository Market + Language Board",
+      repoRows: topRepos,
+      languageRows: langs,
+      marketWatch: effectiveMarketWatch,
+    },
+    {
+      id: "editorial-board",
+      kind: "editorial",
+      label: "Editorial",
+      kicker: "Opinion + Timeline",
+      title: "Editorial Board & Timeline",
+      opinionDeck: effectiveOpinionDeck,
+      timeline: effectiveTimeline,
+      quote: rawEdition.pullQuote,
+    },
+  ];
 }
 
 function clampNumber(value, min, max) {
@@ -5174,7 +5455,7 @@ function TradingCard({
 }
 
 const NEWSPAPER_PORTAL_STYLES = `
-.np-overlay{position:fixed;inset:0;z-index:9999;background:radial-gradient(circle at 20% 0%,rgba(0,220,255,.18),transparent 45%),radial-gradient(circle at 88% 100%,rgba(255,179,0,.12),transparent 40%),#05070c;overflow:auto;padding:26px 14px 120px}
+.np-overlay{position:fixed;inset:0;z-index:9999;background:radial-gradient(circle at 20% 0%,rgba(0,220,255,.18),transparent 45%),radial-gradient(circle at 88% 100%,rgba(255,179,0,.12),transparent 40%),#05070c;overflow:auto;padding:26px 14px 132px}
 .np-overlay.np-closing{animation:np-fade-out .22s ease forwards}
 .np-shell{position:relative;max-width:980px;margin:0 auto}
 .np-paper{position:relative;background:linear-gradient(180deg,#f5ecd6 0%,#efe3c8 52%,#e8d8b8 100%);color:#25170c;border:1px solid rgba(92,64,33,.5);border-radius:6px;padding:22px 24px 28px;box-shadow:0 22px 60px rgba(0,0,0,.55),0 0 0 1px rgba(255,255,255,.2) inset;animation:np-paper-in .35s cubic-bezier(.2,.8,.2,1)}
@@ -5186,7 +5467,13 @@ const NEWSPAPER_PORTAL_STYLES = `
 .np-masthead{margin-top:8px;text-align:center;font-family:'Baskerville','Palatino Linotype','Book Antiqua',serif;font-size:clamp(2rem,7vw,3.35rem);font-weight:700;letter-spacing:.1em;line-height:1;color:#2d1a0b;position:relative;z-index:1}
 .np-rule{height:2px;background:linear-gradient(90deg,transparent,rgba(74,49,28,.75),transparent);margin:10px 0 9px;position:relative;z-index:1}
 .np-ticker{font-family:'Share Tech Mono',monospace;font-size:.68rem;letter-spacing:.08em;color:#5f4125;border-top:1px solid rgba(84,56,30,.35);border-bottom:1px solid rgba(84,56,30,.35);padding:7px 0;position:relative;z-index:1}
-.np-grid{display:grid;grid-template-columns:minmax(0,2fr) minmax(230px,1fr);gap:24px;margin-top:16px;position:relative;z-index:1}
+.np-page-header{margin-top:15px;display:flex;align-items:center;justify-content:space-between;gap:10px;position:relative;z-index:1}
+.np-page-kicker{font-family:'Share Tech Mono',monospace;font-size:.6rem;letter-spacing:.14em;color:#5f4125;text-transform:uppercase}
+.np-page-count{font-family:'Share Tech Mono',monospace;font-size:.58rem;letter-spacing:.14em;color:#765130}
+.np-page-window{margin-top:10px;overflow:hidden;border:1px solid rgba(92,64,33,.3);border-radius:6px;background:rgba(255,250,240,.3);position:relative;z-index:1}
+.np-page-track{display:flex;width:100%;transition:transform .64s cubic-bezier(.22,.91,.24,.99);will-change:transform}
+.np-page{min-width:100%;padding:14px 14px 10px;box-sizing:border-box}
+.np-grid{display:grid;grid-template-columns:minmax(0,2fr) minmax(230px,1fr);gap:24px;position:relative;z-index:1}
 .np-main-column{display:flex;flex-direction:column;gap:14px}
 .np-headline{font-family:'Baskerville','Palatino Linotype','Book Antiqua',serif;font-size:clamp(1.5rem,4.2vw,2.5rem);line-height:1.13;letter-spacing:.01em;color:#1f1208}
 .np-subheadline{font-family:'Rajdhani',sans-serif;font-size:1rem;line-height:1.45;color:#3f2916;font-weight:500}
@@ -5200,6 +5487,22 @@ const NEWSPAPER_PORTAL_STYLES = `
 .np-sidebar-list{list-style:none;display:flex;flex-direction:column;gap:6px}
 .np-sidebar-list li{font-family:'Rajdhani',sans-serif;font-size:.84rem;color:#2e1d10;line-height:1.4}
 .np-editorial{font-family:'Georgia',serif;font-size:.9rem;line-height:1.62;color:#2f2011}
+.np-hot-grid{display:grid;grid-template-columns:minmax(0,2fr) minmax(240px,1fr);gap:18px}
+.np-hot-cards{display:grid;grid-template-columns:minmax(0,1fr);gap:10px}
+.np-hot-card{border:1px solid rgba(92,64,33,.34);background:rgba(255,249,236,.45);border-radius:5px;padding:9px 10px}
+.np-hot-tag{display:inline-flex;font-family:'Share Tech Mono',monospace;font-size:.53rem;letter-spacing:.12em;color:#704c2d;margin-bottom:6px}
+.np-market-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}
+.np-repo-board{display:flex;flex-direction:column;gap:7px}
+.np-repo-row,.np-lang-row{display:flex;align-items:center;justify-content:space-between;gap:10px;border-bottom:1px dashed rgba(92,64,33,.24);padding-bottom:6px}
+.np-repo-row:last-child,.np-lang-row:last-child{border-bottom:none;padding-bottom:0}
+.np-repo-name,.np-lang-name{font-family:'Rajdhani',sans-serif;font-size:.86rem;color:#2b1c0d;line-height:1.35}
+.np-repo-meta,.np-lang-meta{font-family:'Share Tech Mono',monospace;font-size:.56rem;letter-spacing:.08em;color:#6b4828;text-align:right;white-space:nowrap}
+.np-small-note{font-family:'Rajdhani',sans-serif;font-size:.82rem;color:#2d1f12;line-height:1.5}
+.np-opinion-stack{display:flex;flex-direction:column;gap:10px}
+.np-opinion-card{border:1px solid rgba(92,64,33,.32);background:rgba(255,249,236,.4);border-radius:5px;padding:9px 10px}
+.np-timeline{display:flex;flex-direction:column;gap:8px;list-style:none;padding:0;margin:0}
+.np-timeline li{position:relative;padding-left:14px;font-family:'Rajdhani',sans-serif;font-size:.84rem;color:#2d1e10;line-height:1.45}
+.np-timeline li::before{content:'';position:absolute;left:0;top:.45em;width:6px;height:6px;border-radius:50%;background:#7f542f}
 .np-footer{margin-top:18px;padding-top:11px;border-top:1px solid rgba(92,64,33,.4);font-family:'Share Tech Mono',monospace;font-size:.62rem;letter-spacing:.11em;color:#5f4125;text-align:center;position:relative;z-index:1}
 .np-loading-wrap{display:flex;flex-direction:column;gap:12px;margin-top:15px;position:relative;z-index:1}
 .np-loading-title{font-family:'Share Tech Mono',monospace;font-size:.72rem;letter-spacing:.2em;color:#5f4125}
@@ -5208,15 +5511,25 @@ const NEWSPAPER_PORTAL_STYLES = `
 .np-skeleton.mid{width:64%}
 .np-skeleton.long{width:100%}
 .np-load-error{margin-top:10px;font-family:'Share Tech Mono',monospace;font-size:.6rem;letter-spacing:.08em;color:#7a1e1e;background:rgba(122,30,30,.08);border:1px solid rgba(122,30,30,.28);padding:6px 8px;border-radius:4px}
-.np-bottom-bar{position:fixed;left:50%;bottom:18px;transform:translateX(-50%);z-index:10001;display:flex;align-items:center;justify-content:center;gap:8px;flex-wrap:wrap;padding:10px 12px;border-radius:999px;border:1px solid rgba(0,220,255,.34);background:rgba(5,10,18,.93);box-shadow:0 0 18px rgba(0,220,255,.24)}
+.np-bottom-bar{position:fixed;left:50%;bottom:18px;transform:translateX(-50%);z-index:10001;display:flex;align-items:center;justify-content:center;gap:10px;flex-wrap:wrap;padding:10px 12px;border-radius:18px;border:1px solid rgba(0,220,255,.34);background:rgba(5,10,18,.93);box-shadow:0 0 18px rgba(0,220,255,.24);max-width:min(96vw,980px)}
+.np-page-controls,.np-action-controls{display:flex;align-items:center;gap:8px;flex-wrap:wrap;justify-content:center}
 .np-bottom-bar .gd-btn{padding:8px 13px;font-size:.6rem;letter-spacing:.1em}
 .np-bottom-bar .np-close-btn{border-color:rgba(255,120,120,.5);color:#ff9f9f;background:linear-gradient(135deg,rgba(255,70,70,.17),rgba(90,14,14,.3))}
+.np-page-dots{display:flex;align-items:center;gap:6px}
+.np-page-dot{width:24px;height:24px;border-radius:50%;border:1px solid rgba(0,220,255,.4);background:rgba(5,16,28,.8);color:rgba(0,220,255,.75);font-family:'Share Tech Mono',monospace;font-size:.54rem;cursor:pointer;transition:transform .15s ease,background .2s ease,color .2s ease,border-color .2s ease}
+.np-page-dot:hover{transform:translateY(-1px);background:rgba(0,220,255,.16)}
+.np-page-dot.active{background:rgba(0,220,255,.3);color:#d6fbff;border-color:rgba(0,220,255,.7)}
+.np-page-dot:disabled{opacity:.45;cursor:not-allowed;transform:none}
 @media (max-width:900px){
   .np-paper{padding:16px 14px 20px}
-  .np-grid{grid-template-columns:minmax(0,1fr);gap:14px}
+  .np-grid,.np-hot-grid{grid-template-columns:minmax(0,1fr);gap:14px}
+  .np-market-grid{grid-template-columns:minmax(0,1fr)}
   .np-headline{font-size:clamp(1.36rem,6.1vw,2.12rem)}
   .np-subheadline{font-size:.92rem}
   .np-story{font-size:.9rem}
+  .np-page{padding:11px 10px 8px}
+  .np-bottom-bar{padding:10px;border-radius:14px;bottom:10px}
+  .np-page-dot{width:22px;height:22px}
 }
 @keyframes np-shimmer{0%{background-position:200% 0}100%{background-position:-120% 0}}
 @keyframes np-paper-in{from{opacity:0;transform:translateY(24px) scale(.97)}to{opacity:1;transform:translateY(0) scale(1)}}
@@ -5231,6 +5544,7 @@ function GitHubNewspaperPortal({ username, profilePayload, getEdition, onClose }
   const [shareCopied, setShareCopied] = useState(false);
   const [isClosing, setIsClosing] = useState(false);
   const [loadError, setLoadError] = useState("");
+  const [activePageIndex, setActivePageIndex] = useState(0);
 
   const fallbackEdition = useMemo(
     () => buildNewspaperFallback(profilePayload, username),
@@ -5243,10 +5557,43 @@ function GitHubNewspaperPortal({ username, profilePayload, getEdition, onClose }
     [edition, fallbackEdition],
   );
 
+  const pages = useMemo(
+    () => buildNewspaperPages(resolvedEdition, profilePayload),
+    [resolvedEdition, profilePayload],
+  );
+
+  const totalPages = Math.max(1, pages.length);
+  const boundedPageIndex = clampNumber(activePageIndex, 0, totalPages - 1);
+  const activePage = pages[boundedPageIndex] || pages[0] || {
+    id: "front-page",
+    kind: "front",
+    label: "Front Page",
+    kicker: "Main Edition",
+    title: resolvedEdition.headline,
+  };
+  const canGoPrev = boundedPageIndex > 0;
+  const canGoNext = boundedPageIndex < totalPages - 1;
+
+  const goToPage = (nextPage) => {
+    if (isLoading) return;
+    setActivePageIndex(clampNumber(nextPage, 0, totalPages - 1));
+  };
+
+  const handlePrevPage = () => {
+    if (!canGoPrev || isLoading) return;
+    setActivePageIndex((prev) => Math.max(0, prev - 1));
+  };
+
+  const handleNextPage = () => {
+    if (!canGoNext || isLoading) return;
+    setActivePageIndex((prev) => Math.min(totalPages - 1, prev + 1));
+  };
+
   useEffect(() => {
     let cancelled = false;
     setIsLoading(true);
     setLoadError("");
+    setActivePageIndex(0);
 
     const run = async () => {
       try {
@@ -5280,9 +5627,22 @@ function GitHubNewspaperPortal({ username, profilePayload, getEdition, onClose }
     document.body.style.overflow = "hidden";
 
     const onKeyDown = (event) => {
-      if (event.key !== "Escape") return;
-      setIsClosing(true);
-      closeTimerRef.current = setTimeout(() => onClose?.(), 180);
+      if (event.key === "Escape") {
+        setIsClosing(true);
+        closeTimerRef.current = setTimeout(() => onClose?.(), 180);
+        return;
+      }
+
+      if (event.key === "ArrowRight") {
+        event.preventDefault();
+        setActivePageIndex((prev) => Math.min(totalPages - 1, prev + 1));
+        return;
+      }
+
+      if (event.key === "ArrowLeft") {
+        event.preventDefault();
+        setActivePageIndex((prev) => Math.max(0, prev - 1));
+      }
     };
 
     window.addEventListener("keydown", onKeyDown);
@@ -5295,7 +5655,7 @@ function GitHubNewspaperPortal({ username, profilePayload, getEdition, onClose }
         closeTimerRef.current = null;
       }
     };
-  }, [onClose]);
+  }, [onClose, totalPages]);
 
   const handleClose = () => {
     if (isClosing) return;
@@ -5320,7 +5680,7 @@ function GitHubNewspaperPortal({ username, profilePayload, getEdition, onClose }
 
       const filenameBase = String(username || "developer").replace(/[^a-zA-Z0-9_-]/g, "") || "developer";
       const link = document.createElement("a");
-      link.download = `github-newspaper-${filenameBase}.png`;
+      link.download = `github-newspaper-${filenameBase}-page-${boundedPageIndex + 1}.png`;
       link.href = canvas.toDataURL("image/png");
       link.click();
     } catch {
@@ -5331,7 +5691,7 @@ function GitHubNewspaperPortal({ username, profilePayload, getEdition, onClose }
   };
 
   const handleShare = async () => {
-    const summary = `${resolvedEdition.masthead}\n${resolvedEdition.headline}\n${resolvedEdition.subheadline}\n${resolvedEdition.footerNote}`;
+    const summary = `${resolvedEdition.masthead} • ${resolvedEdition.editionLabel}\nPAGE ${boundedPageIndex + 1}/${totalPages} — ${activePage.label}\n${activePage.title || resolvedEdition.headline}\n${resolvedEdition.footerNote}`;
 
     try {
       if (navigator?.clipboard?.writeText) {
@@ -5342,6 +5702,159 @@ function GitHubNewspaperPortal({ username, profilePayload, getEdition, onClose }
     } catch {
       // Ignore clipboard failures.
     }
+  };
+
+  const renderPageContent = (page) => {
+    if (page.kind === "front") {
+      return (
+        <section className="np-grid">
+          <main className="np-main-column">
+            <h2 className="np-headline">{resolvedEdition.headline}</h2>
+            <p className="np-subheadline">{resolvedEdition.subheadline}</p>
+            <p className="np-story">{resolvedEdition.leadStory}</p>
+
+            <blockquote className="np-quote">"{resolvedEdition.pullQuote}"</blockquote>
+
+            <section className="np-secondary">
+              <h3 className="np-secondary-title">{resolvedEdition.secondaryTitle}</h3>
+              <p className="np-story">{resolvedEdition.secondaryStory}</p>
+            </section>
+          </main>
+
+          <aside className="np-sidebar">
+            <section className="np-sidebar-card">
+              <h4 className="np-sidebar-title">{resolvedEdition.sidebarTitle}</h4>
+              <ul className="np-sidebar-list">
+                {resolvedEdition.sidebarBullets.map((line, index) => (
+                  <li key={`np-line-${index}`}>• {line}</li>
+                ))}
+              </ul>
+            </section>
+
+            <section className="np-sidebar-card">
+              <h4 className="np-sidebar-title">{resolvedEdition.editorialTitle}</h4>
+              <p className="np-editorial">{resolvedEdition.editorial}</p>
+            </section>
+          </aside>
+        </section>
+      );
+    }
+
+    if (page.kind === "hot") {
+      return (
+        <section className="np-hot-grid">
+          <main className="np-main-column">
+            <h2 className="np-headline">{page.title}</h2>
+            <p className="np-subheadline">{page.lead}</p>
+
+            <div className="np-hot-cards">
+              {(Array.isArray(page.cards) ? page.cards : []).map((line, index) => (
+                <article key={`np-hot-line-${index}`} className="np-hot-card">
+                  <span className="np-hot-tag">HOT DESK {String(index + 1).padStart(2, "0")}</span>
+                  <p className="np-story">{line}</p>
+                </article>
+              ))}
+            </div>
+
+            <blockquote className="np-quote">"{page.bulletin}"</blockquote>
+          </main>
+
+          <aside className="np-sidebar">
+            <section className="np-sidebar-card">
+              <h4 className="np-sidebar-title">ACTIVITY TALLY</h4>
+              <ul className="np-sidebar-list">
+                {(Array.isArray(page.sideStats) ? page.sideStats : []).map((line, index) => (
+                  <li key={`np-hot-stat-${index}`}>• {line}</li>
+                ))}
+              </ul>
+            </section>
+
+            <section className="np-sidebar-card">
+              <h4 className="np-sidebar-title">WIRE NOTE</h4>
+              <p className="np-editorial">Signals update as public telemetry changes. Reload the edition for a fresh desk snapshot.</p>
+            </section>
+          </aside>
+        </section>
+      );
+    }
+
+    if (page.kind === "market") {
+      return (
+        <section className="np-grid">
+          <main className="np-main-column">
+            <h2 className="np-headline">{page.title}</h2>
+            <p className="np-subheadline">Top repos and language balance reveal where engineering energy is concentrated right now.</p>
+
+            <div className="np-market-grid">
+              <section className="np-sidebar-card np-repo-board">
+                <h4 className="np-sidebar-title">TOP REPOSITORIES</h4>
+                {(Array.isArray(page.repoRows) && page.repoRows.length > 0) ? page.repoRows.map((repo) => (
+                  <div key={`np-repo-${repo.id}`} className="np-repo-row">
+                    <span className="np-repo-name">{repo.name}</span>
+                    <span className="np-repo-meta">{repo.stars.toLocaleString()}★ · {repo.forks.toLocaleString()} forks · {repo.updated}</span>
+                  </div>
+                )) : (
+                  <div className="np-small-note">No repositories available yet.</div>
+                )}
+              </section>
+
+              <section className="np-sidebar-card np-repo-board">
+                <h4 className="np-sidebar-title">LANGUAGE BOARD</h4>
+                {(Array.isArray(page.languageRows) && page.languageRows.length > 0) ? page.languageRows.map((entry, index) => (
+                  <div key={`np-lang-${entry.lang}-${index}`} className="np-lang-row">
+                    <span className="np-lang-name">{entry.lang}</span>
+                    <span className="np-lang-meta">{Number(entry.pct || 0).toFixed(1)}%</span>
+                  </div>
+                )) : (
+                  <div className="np-small-note">Language telemetry is currently unavailable.</div>
+                )}
+              </section>
+            </div>
+          </main>
+
+          <aside className="np-sidebar">
+            <section className="np-sidebar-card">
+              <h4 className="np-sidebar-title">MARKET WATCH</h4>
+              <ul className="np-sidebar-list">
+                {(Array.isArray(page.marketWatch) ? page.marketWatch : []).map((line, index) => (
+                  <li key={`np-market-line-${index}`}>• {line}</li>
+                ))}
+              </ul>
+            </section>
+          </aside>
+        </section>
+      );
+    }
+
+    return (
+      <section className="np-grid">
+        <main className="np-main-column">
+          <h2 className="np-headline">{page.title}</h2>
+          <p className="np-subheadline">Opinion desk blends qualitative signals with long-horizon timeline markers.</p>
+
+          <div className="np-opinion-stack">
+            {(Array.isArray(page.opinionDeck) ? page.opinionDeck : []).map((line, index) => (
+              <article key={`np-opinion-${index}`} className="np-opinion-card">
+                <p className="np-story">{line}</p>
+              </article>
+            ))}
+          </div>
+
+          <blockquote className="np-quote">"{page.quote}"</blockquote>
+        </main>
+
+        <aside className="np-sidebar">
+          <section className="np-sidebar-card">
+            <h4 className="np-sidebar-title">TIMELINE DESK</h4>
+            <ol className="np-timeline">
+              {(Array.isArray(page.timeline) ? page.timeline : []).map((line, index) => (
+                <li key={`np-timeline-${index}`}>{line}</li>
+              ))}
+            </ol>
+          </section>
+        </aside>
+      </section>
+    );
   };
 
   if (typeof document === "undefined") return null;
@@ -5373,36 +5886,22 @@ function GitHubNewspaperPortal({ username, profilePayload, getEdition, onClose }
               <div className="np-skeleton long" />
             </div>
           ) : (
-            <section className="np-grid">
-              <main className="np-main-column">
-                <h2 className="np-headline">{resolvedEdition.headline}</h2>
-                <p className="np-subheadline">{resolvedEdition.subheadline}</p>
-                <p className="np-story">{resolvedEdition.leadStory}</p>
+            <>
+              <div className="np-page-header">
+                <span className="np-page-kicker">{activePage.kicker}</span>
+                <span className="np-page-count">PAGE {boundedPageIndex + 1} OF {totalPages}</span>
+              </div>
 
-                <blockquote className="np-quote">"{resolvedEdition.pullQuote}"</blockquote>
-
-                <section className="np-secondary">
-                  <h3 className="np-secondary-title">{resolvedEdition.secondaryTitle}</h3>
-                  <p className="np-story">{resolvedEdition.secondaryStory}</p>
-                </section>
-              </main>
-
-              <aside className="np-sidebar">
-                <section className="np-sidebar-card">
-                  <h4 className="np-sidebar-title">{resolvedEdition.sidebarTitle}</h4>
-                  <ul className="np-sidebar-list">
-                    {resolvedEdition.sidebarBullets.map((line, index) => (
-                      <li key={`np-line-${index}`}>• {line}</li>
-                    ))}
-                  </ul>
-                </section>
-
-                <section className="np-sidebar-card">
-                  <h4 className="np-sidebar-title">{resolvedEdition.editorialTitle}</h4>
-                  <p className="np-editorial">{resolvedEdition.editorial}</p>
-                </section>
-              </aside>
-            </section>
+              <section className="np-page-window">
+                <div className="np-page-track" style={{ transform: `translateX(-${boundedPageIndex * 100}%)` }}>
+                  {pages.map((page) => (
+                    <section key={page.id} className="np-page" aria-hidden={page.id !== activePage.id}>
+                      {renderPageContent(page)}
+                    </section>
+                  ))}
+                </div>
+              </section>
+            </>
           )}
 
           {loadError && <div className="np-load-error">{loadError}</div>}
@@ -5411,13 +5910,35 @@ function GitHubNewspaperPortal({ username, profilePayload, getEdition, onClose }
       </div>
 
       <div className="np-bottom-bar">
-        <button className="gd-btn" onClick={handleDownload} disabled={isDownloading}>
-          {isDownloading ? "PRINTING..." : "DOWNLOAD FRONT PAGE"}
-        </button>
-        <button className="gd-btn" onClick={handleShare}>
-          {shareCopied ? "COPIED" : "SHARE EDITION"}
-        </button>
-        <button className="gd-btn np-close-btn" onClick={handleClose}>CLOSE NEWSPAPER</button>
+        <div className="np-page-controls">
+          <button className="gd-btn" onClick={handlePrevPage} disabled={isLoading || !canGoPrev}>◀ PREV PAGE</button>
+          <div className="np-page-dots">
+            {pages.map((page, index) => (
+              <button
+                key={`np-page-dot-${page.id}`}
+                className={`np-page-dot${index === boundedPageIndex ? " active" : ""}`}
+                onClick={() => goToPage(index)}
+                disabled={isLoading}
+                aria-label={`Open ${page.label}`}
+                title={page.label}
+                type="button"
+              >
+                {index + 1}
+              </button>
+            ))}
+          </div>
+          <button className="gd-btn" onClick={handleNextPage} disabled={isLoading || !canGoNext}>NEXT PAGE ▶</button>
+        </div>
+
+        <div className="np-action-controls">
+          <button className="gd-btn" onClick={handleDownload} disabled={isDownloading}>
+            {isDownloading ? "PRINTING..." : "DOWNLOAD PAGE"}
+          </button>
+          <button className="gd-btn" onClick={handleShare}>
+            {shareCopied ? "COPIED" : "SHARE EDITION"}
+          </button>
+          <button className="gd-btn np-close-btn" onClick={handleClose}>CLOSE NEWSPAPER</button>
+        </div>
       </div>
     </div>,
     document.body,
