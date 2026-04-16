@@ -64,6 +64,23 @@ const GITMAP_INSIGHT_CACHE = new Map();
 const COMMIT_LINGUISTICS_CACHE = new Map();
 const NEWSPAPER_AI_CACHE = new Map();
 
+function getLocalDayKey(value = Date.now()) {
+  const date = new Date(value);
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
+function getReadableLocalDate(value = Date.now()) {
+  const date = new Date(value);
+  return date.toLocaleDateString(undefined, {
+    month: "short",
+    day: "2-digit",
+    year: "numeric",
+  });
+}
+
 const CITY_COORDS = {
   bangalore: [12.9716, 77.5946],
   mumbai: [19.076, 72.8777],
@@ -1533,21 +1550,40 @@ function buildNewspaperPages(editionPayload, profilePayload = {}) {
   const now = Date.now();
   const fourteenDaysMs = 14 * 24 * 60 * 60 * 1000;
   const thirtyDaysMs = 30 * 24 * 60 * 60 * 1000;
+  const todayStart = new Date();
+  todayStart.setHours(0, 0, 0, 0);
+  const todayStartMs = todayStart.getTime();
+  const todayLabel = getReadableLocalDate(todayStartMs);
 
   let pushEvents14d = 0;
   let commits14d = 0;
   let pullRequestEvents14d = 0;
   let issueEvents14d = 0;
+  let pushEventsToday = 0;
+  let commitsToday = 0;
+  let pullRequestEventsToday = 0;
+  let issueEventsToday = 0;
 
   for (const event of events) {
     const createdAt = new Date(event?.created_at || "").getTime();
     if (!Number.isFinite(createdAt)) continue;
-    if (now - createdAt > fourteenDaysMs) continue;
 
     const eventType = String(event?.type || "");
+    const commitCount = Array.isArray(event?.payload?.commits) ? event.payload.commits.length : 0;
+
+    if (createdAt >= todayStartMs) {
+      if (eventType === "PushEvent") {
+        pushEventsToday += 1;
+        commitsToday += Math.max(1, commitCount);
+      }
+      if (eventType === "PullRequestEvent") pullRequestEventsToday += 1;
+      if (eventType === "IssuesEvent") issueEventsToday += 1;
+    }
+
+    if (now - createdAt > fourteenDaysMs) continue;
+
     if (eventType === "PushEvent") {
       pushEvents14d += 1;
-      const commitCount = Array.isArray(event?.payload?.commits) ? event.payload.commits.length : 0;
       commits14d += Math.max(1, commitCount);
     }
     if (eventType === "PullRequestEvent") pullRequestEvents14d += 1;
@@ -1557,6 +1593,11 @@ function buildNewspaperPages(editionPayload, profilePayload = {}) {
   const activeRepos30d = repos.filter((repo) => {
     const pushedAt = new Date(repo?.pushed_at || repo?.updated_at || "").getTime();
     return Number.isFinite(pushedAt) && now - pushedAt <= thirtyDaysMs;
+  }).length;
+
+  const updatedReposToday = repos.filter((repo) => {
+    const pushedAt = new Date(repo?.pushed_at || repo?.updated_at || "").getTime();
+    return Number.isFinite(pushedAt) && pushedAt >= todayStartMs;
   }).length;
 
   const currentStreak = getCurrentContributionStreak(contributions);
@@ -1597,16 +1638,23 @@ function buildNewspaperPages(editionPayload, profilePayload = {}) {
     return Math.max(0, (Date.now() - createdAt) / (1000 * 60 * 60 * 24 * 365.25));
   })();
 
-  const effectiveHotWire = hotWire.length > 0
-    ? hotWire
-    : [
-      `Breaking Desk: ${commits14d.toLocaleString()} commits detected across ${pushEvents14d.toLocaleString()} push events in the last 14 days.`,
-      `Live Repo Pulse: ${activeRepos30d.toLocaleString()} repositories received updates in the last 30 days.`,
-      `Collab Counter: ${pullRequestEvents14d.toLocaleString()} pull request events and ${issueEvents14d.toLocaleString()} issue events landed over two weeks.`,
-      commitDrop.detected
-        ? `Volatility Alert: monthly push output shows a ${commitDrop.dropPct}% post-spike drop.`
-        : "Volatility Alert: no severe post-spike collapse detected in recent monthly commit flow.",
-    ];
+  const dailyHotLines = [
+    `Today (${todayLabel}) desk: ${pushEventsToday.toLocaleString()} push events, ${pullRequestEventsToday.toLocaleString()} PR events, and ${issueEventsToday.toLocaleString()} issue events are visible so far.`,
+    `Today code pulse: ${commitsToday.toLocaleString()} commit actions and ${updatedReposToday.toLocaleString()} repositories updated since local midnight.`,
+  ];
+
+  const fallbackHotLines = [
+    `Breaking Desk: ${commits14d.toLocaleString()} commits detected across ${pushEvents14d.toLocaleString()} push events in the last 14 days.`,
+    `Live Repo Pulse: ${activeRepos30d.toLocaleString()} repositories received updates in the last 30 days.`,
+    `Collab Counter: ${pullRequestEvents14d.toLocaleString()} pull request events and ${issueEvents14d.toLocaleString()} issue events landed over two weeks.`,
+    commitDrop.detected
+      ? `Volatility Alert: monthly push output shows a ${commitDrop.dropPct}% post-spike drop.`
+      : "Volatility Alert: no severe post-spike collapse detected in recent monthly commit flow.",
+  ];
+
+  const effectiveHotWire = [...dailyHotLines, ...(hotWire.length > 0 ? hotWire : fallbackHotLines)]
+    .filter(Boolean)
+    .slice(0, 8);
 
   const effectiveMarketWatch = marketWatch.length > 0
     ? marketWatch
@@ -1647,15 +1695,18 @@ function buildNewspaperPages(editionPayload, profilePayload = {}) {
       kind: "hot",
       label: "Hot Wire",
       kicker: "Live Desk",
-      title: "Hot Recent News on GitHub",
+      title: `Hot Recent News on GitHub • ${todayLabel}`,
       lead: `Real-time desk for @${username}: active stream of pushes, pull requests, issues, and shipping bursts from visible public telemetry.`,
       cards: effectiveHotWire,
       sideStats: [
+        `Today Pushes: ${pushEventsToday.toLocaleString()}`,
+        `Today Commits: ${commitsToday.toLocaleString()}`,
+        `Repos Updated Today: ${updatedReposToday.toLocaleString()}`,
         `Push Events (14d): ${pushEvents14d.toLocaleString()}`,
         `Commits (14d): ${commits14d.toLocaleString()}`,
         `Active Repos (30d): ${activeRepos30d.toLocaleString()}`,
         `Current Streak: ${currentStreak.toLocaleString()} days`,
-      ],
+      ].slice(0, 6),
       bulletin: commitDrop.detected
         ? `Post-spike dip detected: ${commitDrop.dropPct}% drop in monthly commit volume after a surge.`
         : "No significant post-spike crash detected. Delivery rhythm currently reads stable.",
@@ -5470,8 +5521,20 @@ const NEWSPAPER_PORTAL_STYLES = `
 .np-page-header{margin-top:15px;display:flex;align-items:center;justify-content:space-between;gap:10px;position:relative;z-index:1}
 .np-page-kicker{font-family:'Share Tech Mono',monospace;font-size:.6rem;letter-spacing:.14em;color:#5f4125;text-transform:uppercase}
 .np-page-count{font-family:'Share Tech Mono',monospace;font-size:.58rem;letter-spacing:.14em;color:#765130}
-.np-page-window{margin-top:10px;overflow:hidden;border:1px solid rgba(92,64,33,.3);border-radius:6px;background:rgba(255,250,240,.3);position:relative;z-index:1}
-.np-page-track{display:flex;width:100%;transition:transform .64s cubic-bezier(.22,.91,.24,.99);will-change:transform}
+.np-toolbar{margin-top:10px;display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;position:relative;z-index:1}
+.np-refresh-stamp{font-family:'Share Tech Mono',monospace;font-size:.54rem;letter-spacing:.12em;color:#6b4828;text-transform:uppercase}
+.np-toolbar-actions{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.np-toolbar .gd-btn{padding:6px 10px;font-size:.54rem;letter-spacing:.1em}
+.np-toolbar .np-close-btn{border-color:rgba(255,120,120,.45);color:#ff9f9f;background:linear-gradient(135deg,rgba(255,70,70,.17),rgba(90,14,14,.3))}
+.np-page-window{margin-top:10px;overflow:hidden;border:1px solid rgba(92,64,33,.3);border-radius:6px;background:rgba(255,250,240,.3);position:relative;z-index:1;perspective:1700px;transform-style:preserve-3d}
+.np-page-window::before{content:'';position:absolute;inset:0;opacity:0;pointer-events:none;mix-blend-mode:multiply;background:radial-gradient(circle at 50% 50%,rgba(40,24,8,.28),transparent 70%)}
+.np-page-window::after{content:'';position:absolute;inset:-8% -30% -8% auto;width:58%;opacity:0;pointer-events:none;background:linear-gradient(108deg,rgba(255,255,255,0) 0%,rgba(255,255,255,.28) 26%,rgba(104,72,41,.24) 54%,rgba(0,0,0,0) 100%)}
+.np-page-window.np-turn-next{transform-origin:left center;animation:np-book-turn-next .62s cubic-bezier(.2,.74,.24,1)}
+.np-page-window.np-turn-prev{transform-origin:right center;animation:np-book-turn-prev .62s cubic-bezier(.2,.74,.24,1)}
+.np-page-window.np-turning::before{animation:np-turn-shadow .62s ease}
+.np-page-window.np-turn-next::after{animation:np-curl-next .62s cubic-bezier(.2,.74,.24,1)}
+.np-page-window.np-turn-prev::after{left:-30%;right:auto;background:linear-gradient(252deg,rgba(255,255,255,0) 0%,rgba(255,255,255,.28) 26%,rgba(104,72,41,.24) 54%,rgba(0,0,0,0) 100%);animation:np-curl-prev .62s cubic-bezier(.2,.74,.24,1)}
+.np-page-track{display:flex;width:100%;transition:transform .66s cubic-bezier(.2,.82,.25,1);will-change:transform}
 .np-page{min-width:100%;padding:14px 14px 10px;box-sizing:border-box}
 .np-grid{display:grid;grid-template-columns:minmax(0,2fr) minmax(230px,1fr);gap:24px;position:relative;z-index:1}
 .np-main-column{display:flex;flex-direction:column;gap:14px}
@@ -5511,15 +5574,15 @@ const NEWSPAPER_PORTAL_STYLES = `
 .np-skeleton.mid{width:64%}
 .np-skeleton.long{width:100%}
 .np-load-error{margin-top:10px;font-family:'Share Tech Mono',monospace;font-size:.6rem;letter-spacing:.08em;color:#7a1e1e;background:rgba(122,30,30,.08);border:1px solid rgba(122,30,30,.28);padding:6px 8px;border-radius:4px}
-.np-bottom-bar{position:fixed;left:50%;bottom:18px;transform:translateX(-50%);z-index:10001;display:flex;align-items:center;justify-content:center;gap:10px;flex-wrap:wrap;padding:10px 12px;border-radius:18px;border:1px solid rgba(0,220,255,.34);background:rgba(5,10,18,.93);box-shadow:0 0 18px rgba(0,220,255,.24);max-width:min(96vw,980px)}
-.np-page-controls,.np-action-controls{display:flex;align-items:center;gap:8px;flex-wrap:wrap;justify-content:center}
-.np-bottom-bar .gd-btn{padding:8px 13px;font-size:.6rem;letter-spacing:.1em}
-.np-bottom-bar .np-close-btn{border-color:rgba(255,120,120,.5);color:#ff9f9f;background:linear-gradient(135deg,rgba(255,70,70,.17),rgba(90,14,14,.3))}
-.np-page-dots{display:flex;align-items:center;gap:6px}
-.np-page-dot{width:24px;height:24px;border-radius:50%;border:1px solid rgba(0,220,255,.4);background:rgba(5,16,28,.8);color:rgba(0,220,255,.75);font-family:'Share Tech Mono',monospace;font-size:.54rem;cursor:pointer;transition:transform .15s ease,background .2s ease,color .2s ease,border-color .2s ease}
-.np-page-dot:hover{transform:translateY(-1px);background:rgba(0,220,255,.16)}
-.np-page-dot.active{background:rgba(0,220,255,.3);color:#d6fbff;border-color:rgba(0,220,255,.7)}
-.np-page-dot:disabled{opacity:.45;cursor:not-allowed;transform:none}
+.np-bottom-bar{position:fixed;left:50%;bottom:18px;transform:translateX(-50%);z-index:10001;display:grid;grid-template-columns:repeat(4,minmax(130px,1fr));gap:8px;width:min(96vw,760px);padding:9px;border-radius:14px;border:1px solid rgba(0,220,255,.35);background:linear-gradient(180deg,rgba(6,16,28,.95),rgba(4,10,18,.95));box-shadow:0 0 22px rgba(0,220,255,.24)}
+.np-control-btn{position:relative;overflow:hidden;padding:10px 12px;font-size:.58rem;letter-spacing:.1em;border-radius:10px;border:1px solid rgba(0,220,255,.35);background:linear-gradient(135deg,rgba(0,220,255,.13),rgba(17,40,66,.52));color:#c8f5ff}
+.np-control-btn::after{content:'';position:absolute;inset:0;background:linear-gradient(100deg,transparent 30%,rgba(255,255,255,.2) 50%,transparent 70%);opacity:0;transform:translateX(-120%)}
+.np-control-btn:hover::after{opacity:.55;animation:np-control-sweep .55s linear}
+.np-control-btn.np-prev{border-color:rgba(255,213,140,.45);background:linear-gradient(135deg,rgba(255,213,140,.15),rgba(68,39,12,.5));color:#ffe6ba}
+.np-control-btn.np-next{border-color:rgba(140,255,202,.45);background:linear-gradient(135deg,rgba(140,255,202,.16),rgba(9,66,53,.48));color:#c7ffe7}
+.np-control-btn.np-refresh{border-color:rgba(255,173,92,.5);background:linear-gradient(135deg,rgba(255,173,92,.2),rgba(85,43,11,.53));color:#ffd9b4}
+.np-control-btn.np-print{border-color:rgba(192,167,255,.48);background:linear-gradient(135deg,rgba(192,167,255,.18),rgba(35,22,73,.54));color:#ece0ff}
+.np-control-btn:disabled{opacity:.45;cursor:not-allowed}
 @media (max-width:900px){
   .np-paper{padding:16px 14px 20px}
   .np-grid,.np-hot-grid{grid-template-columns:minmax(0,1fr);gap:14px}
@@ -5528,23 +5591,35 @@ const NEWSPAPER_PORTAL_STYLES = `
   .np-subheadline{font-size:.92rem}
   .np-story{font-size:.9rem}
   .np-page{padding:11px 10px 8px}
-  .np-bottom-bar{padding:10px;border-radius:14px;bottom:10px}
-  .np-page-dot{width:22px;height:22px}
+  .np-toolbar{flex-direction:column;align-items:flex-start}
+  .np-bottom-bar{grid-template-columns:repeat(2,minmax(0,1fr));width:min(96vw,460px);padding:8px;border-radius:12px;bottom:10px}
+  .np-control-btn{padding:9px 10px}
 }
 @keyframes np-shimmer{0%{background-position:200% 0}100%{background-position:-120% 0}}
 @keyframes np-paper-in{from{opacity:0;transform:translateY(24px) scale(.97)}to{opacity:1;transform:translateY(0) scale(1)}}
 @keyframes np-fade-out{from{opacity:1}to{opacity:0}}
+@keyframes np-book-turn-next{0%{transform:rotateY(0deg)}45%{transform:rotateY(-7deg)}100%{transform:rotateY(0deg)}}
+@keyframes np-book-turn-prev{0%{transform:rotateY(0deg)}45%{transform:rotateY(7deg)}100%{transform:rotateY(0deg)}}
+@keyframes np-turn-shadow{0%{opacity:0}40%{opacity:.45}100%{opacity:0}}
+@keyframes np-curl-next{0%{opacity:0;transform:translateX(35%) skewY(0deg)}45%{opacity:.62}100%{opacity:0;transform:translateX(-10%) skewY(-4deg)}}
+@keyframes np-curl-prev{0%{opacity:0;transform:translateX(-35%) skewY(0deg)}45%{opacity:.62}100%{opacity:0;transform:translateX(10%) skewY(4deg)}}
+@keyframes np-control-sweep{0%{transform:translateX(-120%)}100%{transform:translateX(120%)}}
 `;
 
 function GitHubNewspaperPortal({ username, profilePayload, getEdition, onClose }) {
   const paperRef = useRef(null);
   const closeTimerRef = useRef(null);
+  const turnTimerRef = useRef(null);
+  const shareCopiedTimerRef = useRef(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [isRefreshing, setIsRefreshing] = useState(false);
   const [isDownloading, setIsDownloading] = useState(false);
   const [shareCopied, setShareCopied] = useState(false);
   const [isClosing, setIsClosing] = useState(false);
   const [loadError, setLoadError] = useState("");
   const [activePageIndex, setActivePageIndex] = useState(0);
+  const [turnDirection, setTurnDirection] = useState("");
+  const [lastUpdatedLabel, setLastUpdatedLabel] = useState(() => `LAST UPDATE ${getReadableLocalDate()}`);
 
   const fallbackEdition = useMemo(
     () => buildNewspaperFallback(profilePayload, username),
@@ -5574,19 +5649,35 @@ function GitHubNewspaperPortal({ username, profilePayload, getEdition, onClose }
   const canGoPrev = boundedPageIndex > 0;
   const canGoNext = boundedPageIndex < totalPages - 1;
 
+  const triggerPageTurn = (direction) => {
+    if (turnTimerRef.current) {
+      clearTimeout(turnTimerRef.current);
+      turnTimerRef.current = null;
+    }
+
+    setTurnDirection(direction);
+    turnTimerRef.current = setTimeout(() => {
+      setTurnDirection("");
+      turnTimerRef.current = null;
+    }, 620);
+  };
+
   const goToPage = (nextPage) => {
-    if (isLoading) return;
-    setActivePageIndex(clampNumber(nextPage, 0, totalPages - 1));
+    if (isLoading || isRefreshing) return;
+    const targetPage = clampNumber(nextPage, 0, totalPages - 1);
+    if (targetPage === boundedPageIndex) return;
+    triggerPageTurn(targetPage > boundedPageIndex ? "next" : "prev");
+    setActivePageIndex(targetPage);
   };
 
   const handlePrevPage = () => {
-    if (!canGoPrev || isLoading) return;
-    setActivePageIndex((prev) => Math.max(0, prev - 1));
+    if (!canGoPrev || isLoading || isRefreshing) return;
+    goToPage(boundedPageIndex - 1);
   };
 
   const handleNextPage = () => {
-    if (!canGoNext || isLoading) return;
-    setActivePageIndex((prev) => Math.min(totalPages - 1, prev + 1));
+    if (!canGoNext || isLoading || isRefreshing) return;
+    goToPage(boundedPageIndex + 1);
   };
 
   useEffect(() => {
@@ -5598,10 +5689,11 @@ function GitHubNewspaperPortal({ username, profilePayload, getEdition, onClose }
     const run = async () => {
       try {
         const generated = typeof getEdition === "function"
-          ? await getEdition(profilePayload)
+          ? await getEdition(profilePayload, { forceRefresh: false })
           : fallbackEdition;
         if (!cancelled) {
           setEdition(normalizeNewspaperPayload(generated, fallbackEdition));
+          setLastUpdatedLabel(`LAST UPDATE ${getReadableLocalDate()}`);
         }
       } catch (error) {
         if (!cancelled) {
@@ -5628,6 +5720,9 @@ function GitHubNewspaperPortal({ username, profilePayload, getEdition, onClose }
 
     const onKeyDown = (event) => {
       if (event.key === "Escape") {
+        if (closeTimerRef.current) {
+          clearTimeout(closeTimerRef.current);
+        }
         setIsClosing(true);
         closeTimerRef.current = setTimeout(() => onClose?.(), 180);
         return;
@@ -5635,13 +5730,17 @@ function GitHubNewspaperPortal({ username, profilePayload, getEdition, onClose }
 
       if (event.key === "ArrowRight") {
         event.preventDefault();
-        setActivePageIndex((prev) => Math.min(totalPages - 1, prev + 1));
+        if (!isLoading && !isRefreshing) {
+          goToPage(boundedPageIndex + 1);
+        }
         return;
       }
 
       if (event.key === "ArrowLeft") {
         event.preventDefault();
-        setActivePageIndex((prev) => Math.max(0, prev - 1));
+        if (!isLoading && !isRefreshing) {
+          goToPage(boundedPageIndex - 1);
+        }
       }
     };
 
@@ -5654,13 +5753,44 @@ function GitHubNewspaperPortal({ username, profilePayload, getEdition, onClose }
         clearTimeout(closeTimerRef.current);
         closeTimerRef.current = null;
       }
+      if (turnTimerRef.current) {
+        clearTimeout(turnTimerRef.current);
+        turnTimerRef.current = null;
+      }
+      if (shareCopiedTimerRef.current) {
+        clearTimeout(shareCopiedTimerRef.current);
+        shareCopiedTimerRef.current = null;
+      }
     };
-  }, [onClose, totalPages]);
+  }, [onClose, totalPages, boundedPageIndex, isLoading, isRefreshing]);
 
   const handleClose = () => {
     if (isClosing) return;
+    if (closeTimerRef.current) {
+      clearTimeout(closeTimerRef.current);
+    }
     setIsClosing(true);
     closeTimerRef.current = setTimeout(() => onClose?.(), 180);
+  };
+
+  const handleRefreshToday = async () => {
+    if (isLoading || isRefreshing) return;
+
+    setIsRefreshing(true);
+    setLoadError("");
+
+    try {
+      const generated = typeof getEdition === "function"
+        ? await getEdition(profilePayload, { forceRefresh: true })
+        : fallbackEdition;
+      const normalized = normalizeNewspaperPayload(generated, fallbackEdition);
+      setEdition(normalized);
+      setLastUpdatedLabel(`LAST UPDATE ${getReadableLocalDate()}`);
+    } catch (error) {
+      setLoadError(error?.message || "Daily refresh failed.");
+    } finally {
+      setIsRefreshing(false);
+    }
   };
 
   const handleDownload = async () => {
@@ -5698,7 +5828,13 @@ function GitHubNewspaperPortal({ username, profilePayload, getEdition, onClose }
         await navigator.clipboard.writeText(summary);
       }
       setShareCopied(true);
-      setTimeout(() => setShareCopied(false), 1500);
+      if (shareCopiedTimerRef.current) {
+        clearTimeout(shareCopiedTimerRef.current);
+      }
+      shareCopiedTimerRef.current = setTimeout(() => {
+        setShareCopied(false);
+        shareCopiedTimerRef.current = null;
+      }, 1500);
     } catch {
       // Ignore clipboard failures.
     }
@@ -5892,7 +6028,19 @@ function GitHubNewspaperPortal({ username, profilePayload, getEdition, onClose }
                 <span className="np-page-count">PAGE {boundedPageIndex + 1} OF {totalPages}</span>
               </div>
 
-              <section className="np-page-window">
+              <div className="np-toolbar">
+                <span className="np-refresh-stamp">
+                  {isRefreshing ? "REFRESHING TODAY'S EDITION..." : lastUpdatedLabel}
+                </span>
+                <div className="np-toolbar-actions">
+                  <button className="gd-btn" onClick={handleShare} disabled={isLoading || isRefreshing}>
+                    {shareCopied ? "CLIP COPIED" : "SHARE CLIP"}
+                  </button>
+                  <button className="gd-btn np-close-btn" onClick={handleClose}>EXIT PRESSROOM</button>
+                </div>
+              </div>
+
+              <section className={`np-page-window${turnDirection ? ` np-turning np-turn-${turnDirection}` : ""}`}>
                 <div className="np-page-track" style={{ transform: `translateX(-${boundedPageIndex * 100}%)` }}>
                   {pages.map((page) => (
                     <section key={page.id} className="np-page" aria-hidden={page.id !== activePage.id}>
@@ -5910,35 +6058,18 @@ function GitHubNewspaperPortal({ username, profilePayload, getEdition, onClose }
       </div>
 
       <div className="np-bottom-bar">
-        <div className="np-page-controls">
-          <button className="gd-btn" onClick={handlePrevPage} disabled={isLoading || !canGoPrev}>◀ PREV PAGE</button>
-          <div className="np-page-dots">
-            {pages.map((page, index) => (
-              <button
-                key={`np-page-dot-${page.id}`}
-                className={`np-page-dot${index === boundedPageIndex ? " active" : ""}`}
-                onClick={() => goToPage(index)}
-                disabled={isLoading}
-                aria-label={`Open ${page.label}`}
-                title={page.label}
-                type="button"
-              >
-                {index + 1}
-              </button>
-            ))}
-          </div>
-          <button className="gd-btn" onClick={handleNextPage} disabled={isLoading || !canGoNext}>NEXT PAGE ▶</button>
-        </div>
-
-        <div className="np-action-controls">
-          <button className="gd-btn" onClick={handleDownload} disabled={isDownloading}>
-            {isDownloading ? "PRINTING..." : "DOWNLOAD PAGE"}
-          </button>
-          <button className="gd-btn" onClick={handleShare}>
-            {shareCopied ? "COPIED" : "SHARE EDITION"}
-          </button>
-          <button className="gd-btn np-close-btn" onClick={handleClose}>CLOSE NEWSPAPER</button>
-        </div>
+        <button className="gd-btn np-control-btn np-prev" onClick={handlePrevPage} disabled={isLoading || isRefreshing || !canGoPrev}>
+          ◀ PREV SPREAD
+        </button>
+        <button className="gd-btn np-control-btn np-refresh" onClick={handleRefreshToday} disabled={isLoading || isRefreshing}>
+          {isRefreshing ? "⟳ UPDATING WIRE..." : "⟳ REFRESH TODAY"}
+        </button>
+        <button className="gd-btn np-control-btn np-print" onClick={handleDownload} disabled={isDownloading || isLoading || isRefreshing}>
+          {isDownloading ? "PRINTING PAGE..." : "🖨 PRINT PAGE"}
+        </button>
+        <button className="gd-btn np-control-btn np-next" onClick={handleNextPage} disabled={isLoading || isRefreshing || !canGoNext}>
+          NEXT SPREAD ▶
+        </button>
       </div>
     </div>,
     document.body,
@@ -6372,26 +6503,49 @@ function Dashboard({
     unlockedAchievements,
   ]);
 
-  async function getNewspaperEdition() {
+  async function getNewspaperEdition(requestedPayload = newspaperPayload, options = {}) {
+    const safeRequestedPayload = requestedPayload && typeof requestedPayload === "object"
+      ? requestedPayload
+      : newspaperPayload;
+    const forceRefresh = Boolean(options?.forceRefresh);
     const cacheKey = String(user.login || username || "unknown").toLowerCase();
-    const cached = newspaperCacheRef.current.get(cacheKey);
-    if (cached) {
-      return cached;
+    const todayKey = getLocalDayKey();
+    const fallbackEdition = buildNewspaperFallback(safeRequestedPayload, user.login || username || "developer");
+
+    const cachedRaw = newspaperCacheRef.current.get(cacheKey);
+    const cachedEntry = cachedRaw && typeof cachedRaw === "object" && cachedRaw.edition
+      ? cachedRaw
+      : null;
+
+    if (!forceRefresh && cachedEntry?.dayKey === todayKey) {
+      return cachedEntry.edition;
     }
 
     if (typeof onGenerateNewspaper !== "function") {
-      const fallback = buildNewspaperFallback(newspaperPayload, user.login || username || "developer");
-      newspaperCacheRef.current.set(cacheKey, fallback);
-      return fallback;
+      const normalizedFallback = normalizeNewspaperPayload(fallbackEdition, fallbackEdition);
+      newspaperCacheRef.current.set(cacheKey, {
+        dayKey: todayKey,
+        fetchedAt: Date.now(),
+        edition: normalizedFallback,
+      });
+      return normalizedFallback;
     }
 
-    const generated = await onGenerateNewspaper(newspaperPayload);
-    const normalized = normalizeNewspaperPayload(
-      generated,
-      buildNewspaperFallback(newspaperPayload, user.login || username || "developer"),
-    );
-    newspaperCacheRef.current.set(cacheKey, normalized);
-    return normalized;
+    try {
+      const generated = await onGenerateNewspaper(safeRequestedPayload);
+      const normalized = normalizeNewspaperPayload(generated, fallbackEdition);
+      newspaperCacheRef.current.set(cacheKey, {
+        dayKey: todayKey,
+        fetchedAt: Date.now(),
+        edition: normalized,
+      });
+      return normalized;
+    } catch (error) {
+      if (cachedEntry?.edition) {
+        return cachedEntry.edition;
+      }
+      throw error;
+    }
   }
 
   const triggerDashboardWake = () => {
