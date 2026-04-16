@@ -88,6 +88,10 @@ class GitHubAnalyzer:
                 continue
 
             created_at = event.get("created_at")
+            repo_name = ""
+            repo_payload = event.get("repo") if isinstance(event.get("repo"), dict) else {}
+            if isinstance(repo_payload.get("name"), str):
+                repo_name = repo_payload.get("name", "")
             payload = event.get("payload") or {}
             for commit in payload.get("commits") or []:
                 raw_message = (commit.get("message") or "").strip()
@@ -97,6 +101,8 @@ class GitHubAnalyzer:
                     {
                         "message": raw_message.splitlines()[0][:160],
                         "timestamp": created_at or "",
+                        "repo": repo_name,
+                        "sha": str(commit.get("sha") or "")[:40],
                     }
                 )
 
@@ -112,16 +118,24 @@ class GitHubAnalyzer:
                 continue
 
             raw_payload = event.get("payload") if isinstance(event.get("payload"), dict) else {}
+            raw_repo = event.get("repo") if isinstance(event.get("repo"), dict) else {}
+            repo_name = raw_repo.get("name") if isinstance(raw_repo.get("name"), str) else ""
             commits = []
             for commit in raw_payload.get("commits") or []:
                 message = (commit or {}).get("message") if isinstance(commit, dict) else None
                 if isinstance(message, str) and message.strip():
-                    commits.append({"message": message.strip()[:160]})
+                    commits.append(
+                        {
+                            "message": message.strip()[:160],
+                            "sha": str((commit or {}).get("sha") or "")[:40],
+                        }
+                    )
 
             events.append(
                 {
                     "type": event_type,
                     "created_at": created_at,
+                    "repo": {"name": repo_name},
                     "payload": {"commits": commits},
                 }
             )

@@ -719,63 +719,109 @@ function extractTopLangs(repos) {
 }
 
 function extractCommitData(events) {
-  const messages = [], hours = [];
-  events.forEach(e => {
-    if (e.type === "PushEvent" && e.payload?.commits) {
-      e.payload.commits.forEach(c => {
-        if (c.message) messages.push(c.message.split("\n")[0].slice(0, 80));
-      });
-      const h = new Date(e.created_at).getUTCHours();
-      hours.push(h);
+  const messages = [];
+  const hours = [];
+  const repoActivity = {};
+
+  const safeEvents = Array.isArray(events) ? events : [];
+  const pushEventCount = safeEvents.filter((event) => event?.type === "PushEvent").length;
+
+  console.log("[GitDNA] Events received:", safeEvents.length);
+  console.log("[GitDNA] Push events:", pushEventCount);
+
+  if (!Array.isArray(events)) {
+    console.log("[GitDNA] Messages extracted:", 0);
+    return { messages: [], messageTexts: [], hours: [], repoActivity: {} };
+  }
+
+  safeEvents.forEach((event) => {
+    if (event?.type !== "PushEvent") return;
+
+    if (event?.created_at) {
+      const hour = new Date(event.created_at).getUTCHours();
+      if (Number.isInteger(hour) && hour >= 0 && hour <= 23) {
+        hours.push(hour);
+      }
     }
+
+    const repoName = String(event?.repo?.name || "")
+      .split("/")
+      .filter(Boolean)[1] || "unknown";
+
+    const commits = event?.payload?.commits;
+    if (!Array.isArray(commits)) return;
+
+    commits.forEach((commit) => {
+      const msg = commit?.message;
+      if (!msg || typeof msg !== "string") return;
+
+      const firstLine = msg.split("\n")[0].trim();
+      if (firstLine.length === 0) return;
+
+      const rawSha = typeof commit?.sha === "string" ? commit.sha : "";
+      messages.push({
+        message: firstLine,
+        repo: repoName,
+        timestamp: event?.created_at || "",
+        sha: rawSha ? rawSha.slice(0, 7) : "???????",
+      });
+
+      repoActivity[repoName] = (repoActivity[repoName] || 0) + 1;
+    });
   });
-  return { messages: messages.slice(0, 20), hours };
+
+  const uniqueMessages = [];
+  const seen = new Set();
+  for (const entry of messages) {
+    const key = `${String(entry.repo || "unknown").toLowerCase()}::${String(entry.message || "").toLowerCase()}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    uniqueMessages.push(entry);
+    if (uniqueMessages.length >= 30) break;
+  }
+
+  console.log("[GitDNA] Messages extracted:", uniqueMessages.length);
+
+  return {
+    messages: uniqueMessages,
+    messageTexts: uniqueMessages.map((entry) => entry.message),
+    hours,
+    repoActivity,
+  };
 }
 
 const COMMIT_GRADE_META = {
   "A+": {
-    grade: "A+",
-    points: 10,
     badgeColor: "#ffd770",
     badgeBg: "rgba(255,215,112,0.15)",
     badgeBorder: "rgba(255,215,112,0.48)",
     rowTint: "rgba(255,215,112,0.06)",
   },
   A: {
-    grade: "A",
-    points: 8,
-    badgeColor: "#b8ff9f",
-    badgeBg: "rgba(123,255,100,0.14)",
-    badgeBorder: "rgba(123,255,100,0.42)",
-    rowTint: "rgba(57,255,20,0.06)",
+    badgeColor: "rgba(255,215,112,0.82)",
+    badgeBg: "rgba(255,215,112,0.12)",
+    badgeBorder: "rgba(255,215,112,0.34)",
+    rowTint: "rgba(255,215,112,0.05)",
   },
   B: {
-    grade: "B",
-    points: 6,
     badgeColor: "#8deeff",
     badgeBg: "rgba(0,220,255,0.15)",
     badgeBorder: "rgba(0,220,255,0.42)",
     rowTint: "rgba(0,220,255,0.06)",
   },
   C: {
-    grade: "C",
-    points: 4,
-    badgeColor: "#cfadff",
-    badgeBg: "rgba(179,71,234,0.16)",
-    badgeBorder: "rgba(179,71,234,0.44)",
-    rowTint: "rgba(179,71,234,0.07)",
+    badgeColor: "#ffc978",
+    badgeBg: "rgba(255,201,120,0.16)",
+    badgeBorder: "rgba(255,201,120,0.42)",
+    rowTint: "rgba(255,201,120,0.07)",
   },
   D: {
-    grade: "D",
-    points: 2,
-    badgeColor: "#ffc98f",
-    badgeBg: "rgba(255,159,67,0.16)",
-    badgeBorder: "rgba(255,159,67,0.45)",
-    rowTint: "rgba(255,159,67,0.07)",
+    badgeColor: "#ffab66",
+    badgeBg: "rgba(255,171,102,0.16)",
+    badgeBorder: "rgba(255,171,102,0.45)",
+    rowTint: "rgba(255,171,102,0.07)",
   },
   F: {
-    grade: "F",
-    points: 0,
     badgeColor: "#ff9d9d",
     badgeBg: "rgba(255,88,88,0.17)",
     badgeBorder: "rgba(255,88,88,0.48)",
@@ -783,12 +829,7 @@ const COMMIT_GRADE_META = {
   },
 };
 
-const COMMIT_LITERAL_BANS = new Set(["fix", ".", "asdf"]);
-const COMMIT_CONVENTIONAL_SCOPE_RE = /^(feat|fix|chore|refactor|docs)\([a-z0-9._/-]+\):\s+.+/i;
-const COMMIT_CONVENTIONAL_RE = /^(feat|fix|chore|refactor|docs):\s+.+/i;
-const COMMIT_ACTION_VERB_RE = /\b(add|fix|refactor|remove|improve|optimi[sz]e|implement|update|migrate|rename|clean|document|test|handle|support|create|prevent)\b/i;
-const COMMIT_VAGUE_SHORT_RE = /^(fix|update|test|change|misc|tmp|temp|work|stuff|quick)\b/i;
-const COMMIT_TOOLTIP_TEXT = "THIS COMMIT MESSAGE SHOULD BE ILLEGAL IN 42 COUNTRIES.";
+const COMMIT_RENDER_LIMIT = 15;
 
 const ACHIEVEMENT_RARITY_COLORS = {
   COMMON: "rgba(136,136,136,1)",
@@ -1246,47 +1287,68 @@ function normalizeCommitMessage(message) {
   return String(message || "").replace(/\s+/g, " ").trim();
 }
 
-function gradeCommitMessage(rawMessage) {
-  const message = normalizeCommitMessage(rawMessage);
-  const lowered = message.toLowerCase();
-  const words = message ? message.split(" ").filter(Boolean).length : 0;
-  const chars = message.length;
-  const isLiteralBan = COMMIT_LITERAL_BANS.has(lowered);
-
-  let bucket = "D";
-  if (!message || isLiteralBan || words <= 1) {
-    bucket = "F";
-  } else if (COMMIT_CONVENTIONAL_SCOPE_RE.test(message) && chars >= 18) {
-    bucket = "A+";
-  } else if (COMMIT_CONVENTIONAL_RE.test(message)) {
-    bucket = "A";
-  } else if (chars >= 40 && chars <= 72 && COMMIT_ACTION_VERB_RE.test(lowered)) {
-    bucket = "B";
-  } else if (chars >= 15 && chars < 40 && COMMIT_ACTION_VERB_RE.test(lowered)) {
-    bucket = "C";
-  } else if (chars < 15 && COMMIT_VAGUE_SHORT_RE.test(lowered)) {
-    bucket = "D";
-  } else if (chars >= 15 && COMMIT_ACTION_VERB_RE.test(lowered)) {
-    bucket = "C";
+function gradeCommitMessage(msg) {
+  if (!msg || msg.trim().length === 0) {
+    return { grade: "F", points: 0, reason: "Empty message" };
   }
 
-  const meta = COMMIT_GRADE_META[bucket] || COMMIT_GRADE_META.D;
-  return {
-    ...meta,
-    message: message || "(empty commit message)",
-    preview: truncateText(message || "(empty commit message)", 50),
-    showCallout: isLiteralBan,
-  };
+  const m = msg.trim();
+  const len = m.length;
+
+  const fPatterns = [
+    /^(fix|wip|update|test|temp|tmp|asdf|qwerty|aaa|xxx|commit|done|ok|yes|no|.)$/i,
+    /^\.+$/,
+    /^[^a-zA-Z]*$/,
+  ];
+  if (fPatterns.some((pattern) => pattern.test(m)) || len < 3) {
+    return { grade: "F", points: 0, reason: "Meaningless commit" };
+  }
+
+  const aPlus = /^(feat|fix|docs|style|refactor|perf|test|chore|build|ci|revert)(\([a-z0-9-]+\))?: .{10,}/i;
+  if (aPlus.test(m) && len >= 20) {
+    return { grade: "A+", points: 10, reason: "Conventional commit with scope" };
+  }
+
+  const aGrade = /^(feat|fix|docs|style|refactor|perf|test|chore|build|ci|revert): .{8,}/i;
+  if (aGrade.test(m)) {
+    return { grade: "A", points: 8, reason: "Conventional commit format" };
+  }
+
+  const hasVerb = /\b(add|remove|update|create|delete|fix|improve|refactor|implement|change|rename|move|merge|resolve|handle|replace|optimize|clean|simplify|extract|modify)\b/i.test(m);
+  if (len >= 30 && hasVerb) {
+    return { grade: "B", points: 6, reason: "Descriptive with action verb" };
+  }
+  if (len >= 40) {
+    return { grade: "B", points: 6, reason: "Detailed description" };
+  }
+
+  if (len >= 15 && hasVerb) {
+    return { grade: "C", points: 4, reason: "Has verb and some context" };
+  }
+  if (len >= 20) {
+    return { grade: "C", points: 4, reason: "Moderately descriptive" };
+  }
+
+  if (len >= 8) {
+    return { grade: "D", points: 2, reason: "Too brief" };
+  }
+
+  return { grade: "F", points: 0, reason: "Too short to be meaningful" };
+}
+
+function calcOverallQuality(gradedMessages) {
+  if (!Array.isArray(gradedMessages) || gradedMessages.length === 0) return 0;
+  const totalPoints = gradedMessages.reduce((sum, row) => sum + Number(row?.points || 0), 0);
+  const maxPossible = gradedMessages.length * 10;
+  return Math.round((totalPoints / maxPossible) * 100);
 }
 
 function getCommitQualityTier(scorePercent) {
   const score = Number(scorePercent || 0);
-  if (score >= 92) return { label: "ELITE MESSAGE DISCIPLINE", color: "#ffd770" };
-  if (score >= 82) return { label: "HIGH CLARITY SHIPPER", color: "#aaff9f" };
-  if (score >= 68) return { label: "SOLID COMMIT HYGIENE", color: "#8deeff" };
-  if (score >= 52) return { label: "PATCHY SIGNAL", color: "#cfadff" };
-  if (score >= 35) return { label: "VAGUE LOG TENDENCY", color: "#ffc98f" };
-  return { label: "CHAOS COMMIT STREAM", color: "#ff9d9d" };
+  if (score >= 90) return { label: "CONVENTIONAL COMMITS MASTER", color: "#ffd770" };
+  if (score >= 70) return { label: "COMMUNICATIVE DEVELOPER", color: "#8deeff" };
+  if (score >= 50) return { label: "ROOM FOR CLARITY", color: "#ffc978" };
+  return { label: "YOUR FUTURE SELF WILL NOT THANK YOU", color: "#ff9d9d" };
 }
 
 function fallbackCommitLinguisticsInsight(username, messages) {
@@ -1806,7 +1868,7 @@ function buildBurnoutAnalysis({ github, user, repos, events, contributions }) {
 
   const commitMessages = Array.isArray(safeGithub.recent_commit_messages) && safeGithub.recent_commit_messages.length > 0
     ? safeGithub.recent_commit_messages.map((msg) => String(msg || ""))
-    : fallbackCommitData.messages;
+    : fallbackCommitData.messageTexts;
 
   const hourDistribution = Array.isArray(safeGithub.commit_hour_distribution) && safeGithub.commit_hour_distribution.length === 24
     ? safeGithub.commit_hour_distribution.map((entry) => Number(entry || 0))
@@ -2176,24 +2238,42 @@ function normalizeAnalysisPayload(payload, fallbackUsername) {
           ? event.payload.commits
               .map((commit) => ({
                 message: typeof commit?.message === "string" ? commit.message : "",
+                sha: typeof commit?.sha === "string" ? commit.sha : "",
               }))
               .filter((commit) => commit.message)
           : [];
 
+        const repoName = typeof event?.repo?.name === "string"
+          ? event.repo.name
+          : `${normalizedUser.login || fallbackUsername}/unknown`;
+
         return {
           type: typeof event?.type === "string" ? event.type : "",
           created_at: typeof event?.created_at === "string" ? event.created_at : "",
+          repo: { name: repoName },
           payload: { commits },
         };
       }).filter((event) => event.type && event.created_at)
     : (Array.isArray(githubPayload.recent_commit_timestamps)
-        ? githubPayload.recent_commit_timestamps
+        ? (() => {
+            const fallbackMessages = Array.isArray(githubPayload.recent_commit_messages)
+              ? githubPayload.recent_commit_messages.map((message) => normalizeCommitMessage(message))
+              : [];
+
+            return githubPayload.recent_commit_timestamps
             .filter((timestamp) => typeof timestamp === "string" && timestamp)
-            .map((timestamp) => ({
+            .map((timestamp, index) => {
+              const message = fallbackMessages[index] || "";
+              return {
               type: "PushEvent",
               created_at: timestamp,
-              payload: { commits: [{ message: "commit" }] },
-            }))
+              repo: { name: `${normalizedUser.login || fallbackUsername}/unknown` },
+              payload: {
+                commits: message ? [{ message, sha: "" }] : [],
+              },
+              };
+            });
+          })()
         : []);
 
   const normalizedGithub = {
@@ -2298,6 +2378,57 @@ async function withContributionSeries(bundle) {
       contributions,
     },
   };
+}
+
+async function fetchReadmeFallbackCommitSample(username, repos) {
+  const safeUsername = String(username || "").trim();
+  if (!safeUsername || !Array.isArray(repos) || repos.length === 0) return null;
+
+  const repoCandidates = [...repos]
+    .filter((repo) => repo && typeof repo.name === "string" && repo.name.trim())
+    .sort((left, right) => {
+      const leftPushed = new Date(left?.pushed_at || left?.updated_at || 0).getTime();
+      const rightPushed = new Date(right?.pushed_at || right?.updated_at || 0).getTime();
+      return rightPushed - leftPushed;
+    });
+
+  const readmeCandidates = ["README.md", "README.MD", "readme.md", "README"];
+
+  for (const repo of repoCandidates.slice(0, 6)) {
+    const repoName = String(repo?.name || "").trim();
+    if (!repoName) continue;
+
+    for (const readmePath of readmeCandidates) {
+      const apiUrl = `https://api.github.com/repos/${encodeURIComponent(safeUsername)}/${encodeURIComponent(repoName)}/commits?path=${encodeURIComponent(readmePath)}&per_page=1`;
+
+      try {
+        const response = await fetch(apiUrl, {
+          headers: {
+            Accept: "application/vnd.github+json",
+          },
+        });
+        if (!response.ok) continue;
+
+        const payload = await response.json();
+        const firstCommit = Array.isArray(payload) ? payload[0] : null;
+        const messageLine = normalizeCommitMessage(String(firstCommit?.commit?.message || "").split("\n")[0]);
+        if (!messageLine) continue;
+
+        const sha = String(firstCommit?.sha || "").slice(0, 7) || "???????";
+        const timestamp = String(firstCommit?.commit?.author?.date || repo?.pushed_at || "");
+        return {
+          message: messageLine,
+          repo: repoName,
+          timestamp,
+          sha,
+        };
+      } catch {
+        // Ignore network failures; this is a best-effort fallback.
+      }
+    }
+  }
+
+  return null;
 }
 
 function formatContributionDate(date) {
@@ -6175,6 +6306,9 @@ function Dashboard({
   const [showCommitAnalyzer, setShowCommitAnalyzer] = useState(false);
   const [commitInsight, setCommitInsight] = useState("");
   const [commitInsightLoading, setCommitInsightLoading] = useState(false);
+  const [showAllCommitRows, setShowAllCommitRows] = useState(false);
+  const [commitFallbackSample, setCommitFallbackSample] = useState(null);
+  const [commitFallbackLoading, setCommitFallbackLoading] = useState(false);
   const [achievementFilter, setAchievementFilter] = useState("ALL");
   const [achievementRevealReady, setAchievementRevealReady] = useState(false);
   const [achievementShareCopied, setAchievementShareCopied] = useState(false);
@@ -6280,48 +6414,92 @@ function Dashboard({
 
   const commitData = useMemo(() => extractCommitData(events), [events]);
 
-  const commitMessages = useMemo(() => {
+  const commitRows = useMemo(() => {
+    const fromEvents = Array.isArray(commitData?.messages) ? commitData.messages : [];
     const fromGithub = Array.isArray(github?.recent_commit_messages)
-      ? github.recent_commit_messages
+      ? github.recent_commit_messages.map((rawMessage, index) => ({
+          message: normalizeCommitMessage(rawMessage),
+          repo: "recent-feed",
+          timestamp: "",
+          sha: `gh${index + 1}`,
+        }))
       : [];
-    const merged = [...fromGithub, ...commitData.messages]
-      .map((msg) => normalizeCommitMessage(msg))
-      .filter(Boolean);
 
-    const uniqueMessages = [];
+    const mergedEntries = [...fromEvents, ...fromGithub]
+      .map((entry) => ({
+        message: normalizeCommitMessage(entry?.message),
+        repo: normalizeCommitMessage(entry?.repo) || "unknown",
+        timestamp: String(entry?.timestamp || ""),
+        sha: String(entry?.sha || "").slice(0, 7) || "???????",
+      }))
+      .filter((entry) => entry.message);
+
+    const uniqueEntries = [];
     const seen = new Set();
-    for (const message of merged) {
-      const dedupeKey = message.toLowerCase();
-      if (seen.has(dedupeKey)) continue;
-      seen.add(dedupeKey);
-      uniqueMessages.push(message);
-      if (uniqueMessages.length >= 20) break;
+    for (const entry of mergedEntries) {
+      const key = `${entry.repo.toLowerCase()}::${entry.message.toLowerCase()}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      uniqueEntries.push(entry);
+      if (uniqueEntries.length >= 45) break;
     }
 
-    return uniqueMessages;
-  }, [github?.recent_commit_messages, commitData.messages]);
+    return uniqueEntries.map((entry) => {
+      const result = gradeCommitMessage(entry.message);
+      const palette = COMMIT_GRADE_META[result.grade] || COMMIT_GRADE_META.D;
 
-  const commitRows = useMemo(
-    () => commitMessages.map((message) => gradeCommitMessage(message)),
-    [commitMessages],
+      return {
+        ...entry,
+        ...result,
+        preview: truncateText(entry.message, 70),
+        badgeColor: palette.badgeColor,
+        badgeBg: palette.badgeBg,
+        badgeBorder: palette.badgeBorder,
+        rowTint: palette.rowTint,
+      };
+    });
+  }, [commitData?.messages, github?.recent_commit_messages]);
+
+  const commitMessageInputs = useMemo(
+    () => commitRows.map((row) => row.message).filter(Boolean).slice(0, 20),
+    [commitRows],
   );
 
-  const commitScorePercent = useMemo(() => {
-    if (commitRows.length === 0) return 0;
-    const totalPoints = commitRows.reduce((sum, row) => sum + row.points, 0);
-    return Math.round((totalPoints / (commitRows.length * 10)) * 100);
-  }, [commitRows]);
+  const commitScorePercent = useMemo(
+    () => calcOverallQuality(commitRows),
+    [commitRows],
+  );
 
   const commitTier = useMemo(
     () => getCommitQualityTier(commitScorePercent),
     [commitScorePercent],
   );
 
+  const commitRowsToRender = useMemo(
+    () => (showAllCommitRows ? commitRows : commitRows.slice(0, COMMIT_RENDER_LIMIT)),
+    [commitRows, showAllCommitRows],
+  );
+
+  const hiddenCommitRowCount = Math.max(0, commitRows.length - COMMIT_RENDER_LIMIT);
+
+  const commitBestWorst = useMemo(() => {
+    if (commitRows.length < 2) {
+      return { best: null, worst: null, hasContrast: false };
+    }
+
+    const sorted = [...commitRows].sort((left, right) => right.points - left.points);
+    const best = sorted[0] || null;
+    const worst = sorted[sorted.length - 1] || null;
+    const hasContrast = Boolean(best && worst && best.points !== worst.points);
+
+    return { best, worst, hasContrast };
+  }, [commitRows]);
+
   const commitInsightKey = useMemo(() => {
     const identity = String(user.login || username || "unknown").toLowerCase();
-    const signature = commitMessages.map((message) => message.toLowerCase()).join("|");
+    const signature = commitMessageInputs.map((message) => message.toLowerCase()).join("|");
     return `${identity}::${signature}`;
-  }, [commitMessages, user.login, username]);
+  }, [commitMessageInputs, user.login, username]);
 
   const achievementData = useMemo(() => {
     const safeHourDist = Array.isArray(github?.commit_hour_distribution) && github.commit_hour_distribution.length === 24
@@ -6763,9 +6941,9 @@ function Dashboard({
 
   useEffect(() => {
     let cancelled = false;
-    const fallbackInsight = fallbackCommitLinguisticsInsight(user.login || username || "developer", commitMessages);
+    const fallbackInsight = fallbackCommitLinguisticsInsight(user.login || username || "developer", commitMessageInputs);
 
-    if (commitMessages.length === 0) {
+    if (commitMessageInputs.length === 0) {
       setCommitInsightLoading(false);
       setCommitInsight(fallbackInsight);
       return () => {
@@ -6792,7 +6970,7 @@ function Dashboard({
           headers: { "Content-Type": "application/json", Accept: "application/json" },
           body: JSON.stringify({
             username: user.login || username || "developer",
-            commitMessages,
+            commitMessages: commitMessageInputs,
           }),
           signal: abortController.signal,
         });
@@ -6823,7 +7001,51 @@ function Dashboard({
       cancelled = true;
       abortController.abort();
     };
-  }, [API_URL, commitInsightKey, commitMessages, user.login, username]);
+  }, [API_URL, commitInsightKey, commitMessageInputs, user.login, username]);
+
+  useEffect(() => {
+    if (!showCommitAnalyzer) {
+      setShowAllCommitRows(false);
+    }
+  }, [showCommitAnalyzer]);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    if (!showCommitAnalyzer || commitRows.length > 0) {
+      setCommitFallbackLoading(false);
+      setCommitFallbackSample(null);
+      return () => {
+        cancelled = true;
+      };
+    }
+
+    const login = String(user.login || username || "").trim();
+    if (!login) {
+      setCommitFallbackLoading(false);
+      setCommitFallbackSample(null);
+      return () => {
+        cancelled = true;
+      };
+    }
+
+    setCommitFallbackLoading(true);
+    fetchReadmeFallbackCommitSample(login, repos)
+      .then((sample) => {
+        if (cancelled) return;
+        setCommitFallbackSample(sample || null);
+        setCommitFallbackLoading(false);
+      })
+      .catch(() => {
+        if (cancelled) return;
+        setCommitFallbackSample(null);
+        setCommitFallbackLoading(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [showCommitAnalyzer, commitRows.length, repos, user.login, username]);
 
   async function copyProfileLink() {
     try {
@@ -7293,33 +7515,64 @@ function Dashboard({
 
             {showCommitAnalyzer && (
               <div style={{ marginTop: 12 }}>
-                <div className="gd-commit-score-pill" style={{ marginBottom: 10 }}>
-                  <span style={{ fontFamily: "Share Tech Mono,monospace", fontSize: "0.58rem", letterSpacing: "0.12em", color: "rgba(0,220,255,0.6)" }}>
-                    OVERALL QUALITY
-                  </span>
-                  <span className="orb" style={{ fontSize: "1.1rem", color: "#e9fbff", letterSpacing: "0.05em" }}>
-                    {commitScorePercent}%
-                  </span>
-                  <span
-                    className="gd-commit-tier"
-                    style={{
-                      color: commitTier.color,
-                      borderColor: commitTier.color,
-                      background: `${commitTier.color}22`,
-                    }}
-                  >
-                    {commitTier.label}
-                  </span>
-                </div>
+                {commitRows.length > 0 ? (
+                  <div className="gd-commit-score-pill" style={{ marginBottom: 10 }}>
+                    <span style={{ fontFamily: "Share Tech Mono,monospace", fontSize: "0.58rem", letterSpacing: "0.12em", color: "rgba(0,220,255,0.6)" }}>
+                      OVERALL QUALITY
+                    </span>
+                    <span className="orb" style={{ fontSize: "1.1rem", color: "#e9fbff", letterSpacing: "0.05em" }}>
+                      {commitScorePercent}%
+                    </span>
+                    <span
+                      className="gd-commit-tier"
+                      style={{
+                        color: commitTier.color,
+                        borderColor: commitTier.color,
+                        background: `${commitTier.color}22`,
+                      }}
+                    >
+                      {commitTier.label}
+                    </span>
+                  </div>
+                ) : (
+                  <div style={{ marginBottom: 10, border: "1px solid rgba(255,157,157,0.35)", borderRadius: 8, background: "rgba(38,10,10,0.58)", padding: "10px 12px" }}>
+                    <div style={{ fontFamily: "Share Tech Mono,monospace", fontSize: "0.58rem", letterSpacing: "0.12em", color: "rgba(255,171,171,0.88)", marginBottom: 6 }}>
+                      INSUFFICIENT EVENT DATA
+                    </div>
+                    <div style={{ fontSize: "0.8rem", lineHeight: 1.5, color: "rgba(255,224,224,0.82)" }}>
+                      GitHub Events API returned too little commit activity to calculate a reliable quality score. No score is shown until enough commit messages are available.
+                    </div>
+
+                    {commitFallbackLoading && (
+                      <div style={{ marginTop: 8, fontSize: "0.78rem", color: "rgba(200,232,255,0.78)" }}>
+                        Checking latest README commit as backup sample...
+                      </div>
+                    )}
+
+                    {!commitFallbackLoading && commitFallbackSample?.message && (
+                      <div style={{ marginTop: 8, border: "1px solid rgba(0,220,255,0.26)", borderRadius: 8, background: "rgba(6,16,30,0.72)", padding: "8px 10px" }}>
+                        <div style={{ fontFamily: "Share Tech Mono,monospace", fontSize: "0.55rem", letterSpacing: "0.11em", color: "rgba(0,220,255,0.66)", marginBottom: 5 }}>
+                          README BACKUP SAMPLE
+                        </div>
+                        <div style={{ fontSize: "0.76rem", color: "rgba(190,230,255,0.72)", marginBottom: 4 }}>
+                          {commitFallbackSample.repo} • {commitFallbackSample.sha}
+                        </div>
+                        <div style={{ fontSize: "0.82rem", color: "rgba(220,241,255,0.9)", lineHeight: 1.45 }}>
+                          {commitFallbackSample.message}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )}
 
                 <div style={{ fontFamily: "Share Tech Mono,monospace", fontSize: "0.6rem", letterSpacing: "0.14em", color: "rgba(0,220,255,0.5)", marginBottom: 8 }}>
                   COMMIT LINGUISTICS REPORT
                 </div>
 
                 <div className="gd-commit-rows">
-                  {commitRows.length > 0 ? commitRows.map((row, index) => (
+                  {commitRows.length > 0 ? commitRowsToRender.map((row, index) => (
                     <div
-                      key={`commit-quality-${index}`}
+                      key={`commit-quality-${row.repo}-${row.sha}-${index}`}
                       className="gd-commit-row"
                       style={{ borderColor: row.badgeBorder, background: row.rowTint }}
                     >
@@ -7339,25 +7592,60 @@ function Dashboard({
                         </span>
                       </div>
 
-                      <div style={{ flex: 1, minWidth: 0, display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8 }}>
-                        <span style={{ fontSize: "0.81rem", color: "rgba(220,241,255,0.9)", lineHeight: 1.45 }}>
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <div style={{ fontFamily: "Share Tech Mono,monospace", fontSize: "0.56rem", color: "rgba(0,220,255,0.62)", letterSpacing: "0.08em", marginBottom: 3 }}>
+                          {row.repo} • {row.sha}
+                        </div>
+                        <div style={{ fontSize: "0.81rem", color: "rgba(220,241,255,0.9)", lineHeight: 1.45 }}>
                           {row.preview}
-                        </span>
-
-                        {row.showCallout && (
-                          <span className="gd-commit-eye-tip" aria-label={COMMIT_TOOLTIP_TEXT}>
-                            <span className="gd-commit-eye" role="img" aria-hidden="true">👁</span>
-                            <span className="gd-commit-eye-bubble">{COMMIT_TOOLTIP_TEXT}</span>
-                          </span>
-                        )}
+                        </div>
                       </div>
                     </div>
                   )) : (
                     <div style={{ border: "1px solid rgba(0,220,255,0.2)", borderRadius: 8, padding: "10px 11px", color: "rgba(200,232,255,0.65)", fontSize: "0.8rem" }}>
-                      No recent commit messages found for analysis.
+                      No commit rows available yet.
                     </div>
                   )}
                 </div>
+
+                {hiddenCommitRowCount > 0 && (
+                  <div style={{ marginTop: 8 }}>
+                    <button
+                      className="gd-btn"
+                      onClick={() => setShowAllCommitRows((prev) => !prev)}
+                    >
+                      {showAllCommitRows ? "SHOW LESS" : `SHOW ALL ${commitRows.length}`}
+                    </button>
+                  </div>
+                )}
+
+                {commitBestWorst.hasContrast && (
+                  <div style={{ marginTop: 10, display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: 8 }}>
+                    <div style={{ border: "1px solid rgba(57,255,20,0.3)", borderRadius: 8, background: "rgba(8,26,10,0.62)", padding: "9px 10px" }}>
+                      <div style={{ fontFamily: "Share Tech Mono,monospace", fontSize: "0.54rem", letterSpacing: "0.1em", color: "rgba(177,255,170,0.82)", marginBottom: 4 }}>
+                        BEST COMMIT
+                      </div>
+                      <div style={{ fontSize: "0.76rem", color: "rgba(177,255,170,0.85)", marginBottom: 3 }}>
+                        {commitBestWorst.best.grade} • {commitBestWorst.best.points}/10 • {commitBestWorst.best.repo}
+                      </div>
+                      <div style={{ fontSize: "0.8rem", color: "rgba(225,255,222,0.92)", lineHeight: 1.4 }}>
+                        {commitBestWorst.best.preview}
+                      </div>
+                    </div>
+
+                    <div style={{ border: "1px solid rgba(255,122,0,0.35)", borderRadius: 8, background: "rgba(35,14,8,0.66)", padding: "9px 10px" }}>
+                      <div style={{ fontFamily: "Share Tech Mono,monospace", fontSize: "0.54rem", letterSpacing: "0.1em", color: "rgba(255,197,160,0.85)", marginBottom: 4 }}>
+                        WORST COMMIT
+                      </div>
+                      <div style={{ fontSize: "0.76rem", color: "rgba(255,197,160,0.84)", marginBottom: 3 }}>
+                        {commitBestWorst.worst.grade} • {commitBestWorst.worst.points}/10 • {commitBestWorst.worst.repo}
+                      </div>
+                      <div style={{ fontSize: "0.8rem", color: "rgba(255,228,210,0.92)", lineHeight: 1.4 }}>
+                        {commitBestWorst.worst.preview}
+                      </div>
+                    </div>
+                  </div>
+                )}
 
                 <div style={{ marginTop: 10, border: "1px solid rgba(179,71,234,0.3)", borderRadius: 8, background: "rgba(15,7,26,0.7)", padding: "10px 12px" }}>
                   <div style={{ fontFamily: "Share Tech Mono,monospace", fontSize: "0.58rem", letterSpacing: "0.12em", color: "rgba(179,71,234,0.72)", marginBottom: 6 }}>
