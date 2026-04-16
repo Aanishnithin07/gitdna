@@ -84,6 +84,10 @@ class CommitLinguisticsPayload(BaseModel):
     commitMessages: list[str]
 
 
+class NewspaperPayload(BaseModel):
+    profile: dict[str, Any]
+
+
 def _cache_key(username: str) -> str:
     return username.strip().lower()
 
@@ -229,3 +233,17 @@ async def commit_linguistics_insight(request: Request, payload: CommitLinguistic
         raise HTTPException(status_code=502, detail="Commit linguistics insight generation failed.") from exc
 
     return {"insight": insight}
+
+
+@app.post("/api/newspaper")
+@limiter.limit("10/minute")
+async def generate_newspaper(request: Request, payload: NewspaperPayload) -> dict[str, Any]:
+    if not payload.profile:
+        raise HTTPException(status_code=400, detail="Profile payload is required for newspaper generation.")
+
+    try:
+        newspaper = await ai_engine.generate_newspaper_front_page(payload.profile)
+    except Exception as exc:  # pragma: no cover - defensive API boundary
+        raise HTTPException(status_code=502, detail="GitHub newspaper generation failed.") from exc
+
+    return {"newspaper": newspaper}

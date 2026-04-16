@@ -62,6 +62,7 @@ const TIME_MACHINE_AI_CACHE = new Map();
 const GITMAP_GEOCODE_CACHE = new Map();
 const GITMAP_INSIGHT_CACHE = new Map();
 const COMMIT_LINGUISTICS_CACHE = new Map();
+const NEWSPAPER_AI_CACHE = new Map();
 
 const CITY_COORDS = {
   bangalore: [12.9716, 77.5946],
@@ -1296,6 +1297,109 @@ function fallbackCommitLinguisticsInsight(username, messages) {
   }
 
   return `@${username} shows mixed commit language: enough actionable messages to keep momentum, but occasional vague lines that reduce traceability. The style reads like a builder balancing speed with clarity, and that balance improves quickly when each commit states action plus affected scope.`;
+}
+
+function buildNewspaperFallback(profilePayload = {}, usernameHint = "developer") {
+  const safeProfile = profilePayload && typeof profilePayload === "object" ? profilePayload : {};
+  const github = safeProfile.github && typeof safeProfile.github === "object" ? safeProfile.github : {};
+  const user = github.user && typeof github.user === "object" ? github.user : {};
+
+  const username = String(safeProfile.username || user.login || usernameHint || "developer");
+  const topLanguageEntry = Array.isArray(github.top_languages) ? github.top_languages[0] : null;
+  const topLanguage = String(topLanguageEntry?.language || topLanguageEntry?.lang || "Unknown");
+  const topLanguagePct = Number(topLanguageEntry?.percentage ?? topLanguageEntry?.pct ?? 0);
+  const stars = Number(github.total_stars || 0);
+  const repos = Number(user.public_repos || 0);
+  const followers = Number(user.followers || 0);
+  const commits30d = Number(github.recent_commits_30d || github.recent_commits_last_30_days || 0);
+  const devScore = Number(safeProfile.devScore || 0);
+  const createdAtMs = new Date(user.created_at || "").getTime();
+  const accountAgeYears = Number.isFinite(createdAtMs)
+    ? Math.max(0, (Date.now() - createdAtMs) / (1000 * 60 * 60 * 24 * 365.25))
+    : 0;
+  const aiData = safeProfile.aiData && typeof safeProfile.aiData === "object"
+    ? safeProfile.aiData
+    : (safeProfile.ai && typeof safeProfile.ai === "object" ? safeProfile.ai : {});
+  const workStyle = String(aiData?.chronotype?.workStyle || "Adaptive Rhythm Coder");
+  const devClass = String(aiData?.devClass || "Steady Commit Craftsman");
+  const achievements = safeProfile.achievements && typeof safeProfile.achievements === "object"
+    ? safeProfile.achievements
+    : {};
+  const unlockedCount = Number(achievements.unlockedCount || 0);
+  const totalCount = Number(achievements.totalCount || 0);
+
+  return {
+    masthead: "GITHUB NEWSPAPER",
+    editionLabel: `${username.toUpperCase()} EDITION`,
+    dateLine: new Date().toLocaleDateString(undefined, { month: "long", day: "2-digit", year: "numeric" }),
+    ticker: `LIVE METRICS | ${stars.toLocaleString()} stars | ${commits30d.toLocaleString()} commits in 30d | ${repos.toLocaleString()} repositories | ${followers.toLocaleString()} followers`,
+    headline: `@${username} ships at pace with ${commits30d.toLocaleString()} commits and ${stars.toLocaleString()} stars`,
+    subheadline: `${workStyle} rhythm plus ${repos.toLocaleString()} repositories keeps this profile in active delivery mode.`,
+    leadStory: `${username} now maps to the ${devClass} archetype, carrying ${stars.toLocaleString()} stars and ${followers.toLocaleString()} followers across ${repos.toLocaleString()} public repositories. Recent velocity sits at ${commits30d.toLocaleString()} commits in the last 30 days, signaling steady execution pressure rather than isolated bursts.`,
+    secondaryTitle: "Repository Watch",
+    secondaryStory: `Language gravity currently points to ${topLanguage}${topLanguagePct > 0 ? ` (${topLanguagePct.toFixed(2)}%)` : ""}, while the profile's output trend suggests sustained maintenance over one-off spikes.`,
+    editorialTitle: "Editorial: Build With Memory",
+    editorial: `A ${devScore}/100 development score shows strong output, but long-horizon impact still depends on maintainable communication discipline. Speed is visible; readability is the multiplier that compounds over years of active shipping.`,
+    sidebarTitle: "Data Desk",
+    sidebarBullets: [
+      `Dev Score: ${devScore}`,
+      `Followers: ${followers.toLocaleString()}`,
+      `Top Language: ${topLanguage}${topLanguagePct > 0 ? ` (${topLanguagePct.toFixed(2)}%)` : ""}`,
+      `Achievement Vault: ${unlockedCount}/${totalCount}`,
+      `Account Age: ${accountAgeYears.toFixed(2)} years`,
+    ],
+    pullQuote: `${commits30d.toLocaleString()} commits in 30 days means roadmap gravity is moving toward this developer's execution lane.`,
+    footerNote: "Printed by GitDNA Press | Built from public GitHub telemetry",
+  };
+}
+
+function normalizeNewspaperPayload(rawPayload, fallbackPayload) {
+  const fallback = fallbackPayload && typeof fallbackPayload === "object"
+    ? fallbackPayload
+    : buildNewspaperFallback({}, "developer");
+  const source = rawPayload && typeof rawPayload === "object" ? rawPayload : {};
+
+  const normalized = {
+    ...fallback,
+    sidebarBullets: Array.isArray(fallback.sidebarBullets) ? [...fallback.sidebarBullets] : [],
+  };
+
+  const textKeys = [
+    "masthead",
+    "editionLabel",
+    "dateLine",
+    "ticker",
+    "headline",
+    "subheadline",
+    "leadStory",
+    "secondaryTitle",
+    "secondaryStory",
+    "editorialTitle",
+    "editorial",
+    "sidebarTitle",
+    "pullQuote",
+    "footerNote",
+  ];
+
+  for (const key of textKeys) {
+    const value = source[key];
+    if (typeof value === "string" && value.trim()) {
+      normalized[key] = value.trim();
+    }
+  }
+
+  if (Array.isArray(source.sidebarBullets)) {
+    const cleanBullets = source.sidebarBullets
+      .map((item) => String(item || "").trim())
+      .filter(Boolean)
+      .slice(0, 6);
+
+    if (cleanBullets.length >= 3) {
+      normalized.sidebarBullets = cleanBullets;
+    }
+  }
+
+  return normalized;
 }
 
 function clampNumber(value, min, max) {
@@ -5069,6 +5173,257 @@ function TradingCard({
   );
 }
 
+const NEWSPAPER_PORTAL_STYLES = `
+.np-overlay{position:fixed;inset:0;z-index:9999;background:radial-gradient(circle at 20% 0%,rgba(0,220,255,.18),transparent 45%),radial-gradient(circle at 88% 100%,rgba(255,179,0,.12),transparent 40%),#05070c;overflow:auto;padding:26px 14px 120px}
+.np-overlay.np-closing{animation:np-fade-out .22s ease forwards}
+.np-shell{position:relative;max-width:980px;margin:0 auto}
+.np-paper{position:relative;background:linear-gradient(180deg,#f5ecd6 0%,#efe3c8 52%,#e8d8b8 100%);color:#25170c;border:1px solid rgba(92,64,33,.5);border-radius:6px;padding:22px 24px 28px;box-shadow:0 22px 60px rgba(0,0,0,.55),0 0 0 1px rgba(255,255,255,.2) inset;animation:np-paper-in .35s cubic-bezier(.2,.8,.2,1)}
+.np-paper::before{content:'';position:absolute;inset:0;border-radius:6px;background:radial-gradient(circle at 0% 100%,rgba(122,82,43,.14),transparent 48%),radial-gradient(circle at 100% 0%,rgba(122,82,43,.16),transparent 40%);pointer-events:none}
+.np-paper::after{content:'';position:absolute;inset:0;border-radius:6px;opacity:.12;background-image:repeating-linear-gradient(0deg,rgba(54,35,17,.18) 0px,rgba(54,35,17,.18) 1px,transparent 1px,transparent 3px);pointer-events:none}
+.np-masthead-row{display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;position:relative;z-index:1}
+.np-edition{font-family:'Share Tech Mono',monospace;font-size:.64rem;letter-spacing:.14em;color:#5b3f24}
+.np-date{font-family:'Share Tech Mono',monospace;font-size:.62rem;letter-spacing:.12em;color:#5b3f24}
+.np-masthead{margin-top:8px;text-align:center;font-family:'Baskerville','Palatino Linotype','Book Antiqua',serif;font-size:clamp(2rem,7vw,3.35rem);font-weight:700;letter-spacing:.1em;line-height:1;color:#2d1a0b;position:relative;z-index:1}
+.np-rule{height:2px;background:linear-gradient(90deg,transparent,rgba(74,49,28,.75),transparent);margin:10px 0 9px;position:relative;z-index:1}
+.np-ticker{font-family:'Share Tech Mono',monospace;font-size:.68rem;letter-spacing:.08em;color:#5f4125;border-top:1px solid rgba(84,56,30,.35);border-bottom:1px solid rgba(84,56,30,.35);padding:7px 0;position:relative;z-index:1}
+.np-grid{display:grid;grid-template-columns:minmax(0,2fr) minmax(230px,1fr);gap:24px;margin-top:16px;position:relative;z-index:1}
+.np-main-column{display:flex;flex-direction:column;gap:14px}
+.np-headline{font-family:'Baskerville','Palatino Linotype','Book Antiqua',serif;font-size:clamp(1.5rem,4.2vw,2.5rem);line-height:1.13;letter-spacing:.01em;color:#1f1208}
+.np-subheadline{font-family:'Rajdhani',sans-serif;font-size:1rem;line-height:1.45;color:#3f2916;font-weight:500}
+.np-story{font-family:'Georgia',serif;font-size:.96rem;line-height:1.75;color:#2b1c0d}
+.np-quote{margin:3px 0;border-left:3px solid rgba(92,64,33,.55);padding:6px 0 6px 10px;font-family:'Baskerville','Palatino Linotype','Book Antiqua',serif;font-style:italic;font-size:1rem;line-height:1.6;color:#3d2814}
+.np-secondary{border-top:1px solid rgba(92,64,33,.35);padding-top:12px}
+.np-secondary-title{font-family:'Baskerville','Palatino Linotype','Book Antiqua',serif;font-size:1.16rem;letter-spacing:.05em;color:#25170c;margin-bottom:6px}
+.np-sidebar{display:flex;flex-direction:column;gap:12px}
+.np-sidebar-card{border:1px solid rgba(92,64,33,.34);background:rgba(255,250,240,.4);padding:12px 11px;border-radius:4px}
+.np-sidebar-title{font-family:'Share Tech Mono',monospace;font-size:.62rem;letter-spacing:.14em;text-transform:uppercase;color:#5f4125;margin-bottom:7px}
+.np-sidebar-list{list-style:none;display:flex;flex-direction:column;gap:6px}
+.np-sidebar-list li{font-family:'Rajdhani',sans-serif;font-size:.84rem;color:#2e1d10;line-height:1.4}
+.np-editorial{font-family:'Georgia',serif;font-size:.9rem;line-height:1.62;color:#2f2011}
+.np-footer{margin-top:18px;padding-top:11px;border-top:1px solid rgba(92,64,33,.4);font-family:'Share Tech Mono',monospace;font-size:.62rem;letter-spacing:.11em;color:#5f4125;text-align:center;position:relative;z-index:1}
+.np-loading-wrap{display:flex;flex-direction:column;gap:12px;margin-top:15px;position:relative;z-index:1}
+.np-loading-title{font-family:'Share Tech Mono',monospace;font-size:.72rem;letter-spacing:.2em;color:#5f4125}
+.np-skeleton{height:11px;border-radius:4px;background:linear-gradient(90deg,rgba(120,87,52,.16),rgba(120,87,52,.31),rgba(120,87,52,.16));background-size:250% 100%;animation:np-shimmer 1.25s linear infinite}
+.np-skeleton.short{width:38%}
+.np-skeleton.mid{width:64%}
+.np-skeleton.long{width:100%}
+.np-load-error{margin-top:10px;font-family:'Share Tech Mono',monospace;font-size:.6rem;letter-spacing:.08em;color:#7a1e1e;background:rgba(122,30,30,.08);border:1px solid rgba(122,30,30,.28);padding:6px 8px;border-radius:4px}
+.np-bottom-bar{position:fixed;left:50%;bottom:18px;transform:translateX(-50%);z-index:10001;display:flex;align-items:center;justify-content:center;gap:8px;flex-wrap:wrap;padding:10px 12px;border-radius:999px;border:1px solid rgba(0,220,255,.34);background:rgba(5,10,18,.93);box-shadow:0 0 18px rgba(0,220,255,.24)}
+.np-bottom-bar .gd-btn{padding:8px 13px;font-size:.6rem;letter-spacing:.1em}
+.np-bottom-bar .np-close-btn{border-color:rgba(255,120,120,.5);color:#ff9f9f;background:linear-gradient(135deg,rgba(255,70,70,.17),rgba(90,14,14,.3))}
+@media (max-width:900px){
+  .np-paper{padding:16px 14px 20px}
+  .np-grid{grid-template-columns:minmax(0,1fr);gap:14px}
+  .np-headline{font-size:clamp(1.36rem,6.1vw,2.12rem)}
+  .np-subheadline{font-size:.92rem}
+  .np-story{font-size:.9rem}
+}
+@keyframes np-shimmer{0%{background-position:200% 0}100%{background-position:-120% 0}}
+@keyframes np-paper-in{from{opacity:0;transform:translateY(24px) scale(.97)}to{opacity:1;transform:translateY(0) scale(1)}}
+@keyframes np-fade-out{from{opacity:1}to{opacity:0}}
+`;
+
+function GitHubNewspaperPortal({ username, profilePayload, getEdition, onClose }) {
+  const paperRef = useRef(null);
+  const closeTimerRef = useRef(null);
+  const [isLoading, setIsLoading] = useState(true);
+  const [isDownloading, setIsDownloading] = useState(false);
+  const [shareCopied, setShareCopied] = useState(false);
+  const [isClosing, setIsClosing] = useState(false);
+  const [loadError, setLoadError] = useState("");
+
+  const fallbackEdition = useMemo(
+    () => buildNewspaperFallback(profilePayload, username),
+    [profilePayload, username],
+  );
+  const [edition, setEdition] = useState(fallbackEdition);
+
+  const resolvedEdition = useMemo(
+    () => normalizeNewspaperPayload(edition, fallbackEdition),
+    [edition, fallbackEdition],
+  );
+
+  useEffect(() => {
+    let cancelled = false;
+    setIsLoading(true);
+    setLoadError("");
+
+    const run = async () => {
+      try {
+        const generated = typeof getEdition === "function"
+          ? await getEdition(profilePayload)
+          : fallbackEdition;
+        if (!cancelled) {
+          setEdition(normalizeNewspaperPayload(generated, fallbackEdition));
+        }
+      } catch (error) {
+        if (!cancelled) {
+          setEdition(fallbackEdition);
+          setLoadError(error?.message || "Newspaper generation failed.");
+        }
+      } finally {
+        if (!cancelled) {
+          setIsLoading(false);
+        }
+      }
+    };
+
+    run();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [getEdition, profilePayload, fallbackEdition]);
+
+  useEffect(() => {
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+
+    const onKeyDown = (event) => {
+      if (event.key !== "Escape") return;
+      setIsClosing(true);
+      closeTimerRef.current = setTimeout(() => onClose?.(), 180);
+    };
+
+    window.addEventListener("keydown", onKeyDown);
+
+    return () => {
+      document.body.style.overflow = previousOverflow;
+      window.removeEventListener("keydown", onKeyDown);
+      if (closeTimerRef.current) {
+        clearTimeout(closeTimerRef.current);
+        closeTimerRef.current = null;
+      }
+    };
+  }, [onClose]);
+
+  const handleClose = () => {
+    if (isClosing) return;
+    setIsClosing(true);
+    closeTimerRef.current = setTimeout(() => onClose?.(), 180);
+  };
+
+  const handleDownload = async () => {
+    if (!paperRef.current || isDownloading) return;
+    setIsDownloading(true);
+
+    try {
+      await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+      const canvas = await html2canvas(paperRef.current, {
+        backgroundColor: "#efe3c8",
+        scale: Math.max(2, window.devicePixelRatio || 1),
+        useCORS: true,
+        allowTaint: false,
+        logging: false,
+        removeContainer: true,
+      });
+
+      const filenameBase = String(username || "developer").replace(/[^a-zA-Z0-9_-]/g, "") || "developer";
+      const link = document.createElement("a");
+      link.download = `github-newspaper-${filenameBase}.png`;
+      link.href = canvas.toDataURL("image/png");
+      link.click();
+    } catch {
+      // Keep flow resilient if capture fails in restricted browsers.
+    } finally {
+      setIsDownloading(false);
+    }
+  };
+
+  const handleShare = async () => {
+    const summary = `${resolvedEdition.masthead}\n${resolvedEdition.headline}\n${resolvedEdition.subheadline}\n${resolvedEdition.footerNote}`;
+
+    try {
+      if (navigator?.clipboard?.writeText) {
+        await navigator.clipboard.writeText(summary);
+      }
+      setShareCopied(true);
+      setTimeout(() => setShareCopied(false), 1500);
+    } catch {
+      // Ignore clipboard failures.
+    }
+  };
+
+  if (typeof document === "undefined") return null;
+
+  return createPortal(
+    <div className={`np-overlay${isClosing ? " np-closing" : ""}`}>
+      <style>{NEWSPAPER_PORTAL_STYLES}</style>
+
+      <div className="np-shell">
+        <article ref={paperRef} className="np-paper">
+          <div className="np-masthead-row">
+            <span className="np-edition">{resolvedEdition.editionLabel}</span>
+            <span className="np-date">{resolvedEdition.dateLine}</span>
+          </div>
+
+          <h1 className="np-masthead">{resolvedEdition.masthead}</h1>
+          <div className="np-rule" />
+          <div className="np-ticker">{resolvedEdition.ticker}</div>
+
+          {isLoading ? (
+            <div className="np-loading-wrap">
+              <div className="np-loading-title">THE PRESSES ARE RUNNING...</div>
+              <div className="np-skeleton long" />
+              <div className="np-skeleton mid" />
+              <div className="np-skeleton long" />
+              <div className="np-skeleton short" />
+              <div className="np-skeleton long" />
+              <div className="np-skeleton mid" />
+              <div className="np-skeleton long" />
+            </div>
+          ) : (
+            <section className="np-grid">
+              <main className="np-main-column">
+                <h2 className="np-headline">{resolvedEdition.headline}</h2>
+                <p className="np-subheadline">{resolvedEdition.subheadline}</p>
+                <p className="np-story">{resolvedEdition.leadStory}</p>
+
+                <blockquote className="np-quote">"{resolvedEdition.pullQuote}"</blockquote>
+
+                <section className="np-secondary">
+                  <h3 className="np-secondary-title">{resolvedEdition.secondaryTitle}</h3>
+                  <p className="np-story">{resolvedEdition.secondaryStory}</p>
+                </section>
+              </main>
+
+              <aside className="np-sidebar">
+                <section className="np-sidebar-card">
+                  <h4 className="np-sidebar-title">{resolvedEdition.sidebarTitle}</h4>
+                  <ul className="np-sidebar-list">
+                    {resolvedEdition.sidebarBullets.map((line, index) => (
+                      <li key={`np-line-${index}`}>• {line}</li>
+                    ))}
+                  </ul>
+                </section>
+
+                <section className="np-sidebar-card">
+                  <h4 className="np-sidebar-title">{resolvedEdition.editorialTitle}</h4>
+                  <p className="np-editorial">{resolvedEdition.editorial}</p>
+                </section>
+              </aside>
+            </section>
+          )}
+
+          {loadError && <div className="np-load-error">{loadError}</div>}
+          <div className="np-footer">{resolvedEdition.footerNote}</div>
+        </article>
+      </div>
+
+      <div className="np-bottom-bar">
+        <button className="gd-btn" onClick={handleDownload} disabled={isDownloading}>
+          {isDownloading ? "PRINTING..." : "DOWNLOAD FRONT PAGE"}
+        </button>
+        <button className="gd-btn" onClick={handleShare}>
+          {shareCopied ? "COPIED" : "SHARE EDITION"}
+        </button>
+        <button className="gd-btn np-close-btn" onClick={handleClose}>CLOSE NEWSPAPER</button>
+      </div>
+    </div>,
+    document.body,
+  );
+}
+
 function Dashboard({
   github,
   aiData,
@@ -5084,6 +5439,7 @@ function Dashboard({
   onNightOwlDismiss,
   ultraMode,
   onRoast,
+  onGenerateNewspaper,
 }) {
   const { user, totalStars, recentCommits, contributions, repos, events = [] } = github;
   const accountAgeYears = (Date.now() - new Date(user.created_at)) / (1000 * 60 * 60 * 24 * 365);
@@ -5120,6 +5476,7 @@ function Dashboard({
   const roastShareTimerRef = useRef(null);
   const achievementShareTimerRef = useRef(null);
   const dashboardWakeTimeoutRef = useRef(null);
+  const newspaperCacheRef = useRef(NEWSPAPER_AI_CACHE);
   const [isGeneratingCard, setIsGeneratingCard] = useState(false);
   const [showCardSaved, setShowCardSaved] = useState(false);
   const [showUnlockFlash, setShowUnlockFlash] = useState(true);
@@ -5141,6 +5498,7 @@ function Dashboard({
   const [showTimeMachine, setShowTimeMachine] = useState(false);
   const [showGitMap, setShowGitMap] = useState(false);
   const [showTradingCard, setShowTradingCard] = useState(false);
+  const [showNewspaper, setShowNewspaper] = useState(false);
   const [showAvatarPreview, setShowAvatarPreview] = useState(false);
   const [showDashboardWake, setShowDashboardWake] = useState(false);
   const [showCommitAnalyzer, setShowCommitAnalyzer] = useState(false);
@@ -5453,6 +5811,68 @@ function Dashboard({
   const achievementRingCircumference = 2 * Math.PI * achievementRingRadius;
   const achievementRingOffset = achievementRingCircumference * (1 - achievementProgress);
 
+  const newspaperPayload = useMemo(() => {
+    const rarest = rarestUnlockedAchievements.map((achievement) => ({
+      id: achievement.id,
+      name: achievement.name,
+      rarity: achievement.rarity,
+      description: achievement.description,
+    }));
+
+    const unlocked = unlockedAchievements.map((achievement) => ({
+      id: achievement.id,
+      name: achievement.name,
+      rarity: achievement.rarity,
+      description: achievement.description,
+    }));
+
+    return {
+      username: user.login || username || "unknown",
+      github,
+      aiData,
+      devScore,
+      langs,
+      achievements: {
+        unlockedCount: unlockedAchievementCount,
+        totalCount: ACHIEVEMENTS.length,
+        rarestUnlocked: rarest,
+        unlockedCards: unlocked,
+      },
+    };
+  }, [
+    user.login,
+    username,
+    github,
+    aiData,
+    devScore,
+    langs,
+    unlockedAchievementCount,
+    rarestUnlockedAchievements,
+    unlockedAchievements,
+  ]);
+
+  async function getNewspaperEdition() {
+    const cacheKey = String(user.login || username || "unknown").toLowerCase();
+    const cached = newspaperCacheRef.current.get(cacheKey);
+    if (cached) {
+      return cached;
+    }
+
+    if (typeof onGenerateNewspaper !== "function") {
+      const fallback = buildNewspaperFallback(newspaperPayload, user.login || username || "developer");
+      newspaperCacheRef.current.set(cacheKey, fallback);
+      return fallback;
+    }
+
+    const generated = await onGenerateNewspaper(newspaperPayload);
+    const normalized = normalizeNewspaperPayload(
+      generated,
+      buildNewspaperFallback(newspaperPayload, user.login || username || "developer"),
+    );
+    newspaperCacheRef.current.set(cacheKey, normalized);
+    return normalized;
+  }
+
   const triggerDashboardWake = () => {
     setShowDashboardWake(true);
     if (dashboardWakeTimeoutRef.current) {
@@ -5508,6 +5928,11 @@ function Dashboard({
 
   const handleCloseTradingCard = () => {
     setShowTradingCard(false);
+    triggerDashboardWake();
+  };
+
+  const handleCloseNewspaper = () => {
+    setShowNewspaper(false);
     triggerDashboardWake();
   };
 
@@ -6063,15 +6488,24 @@ function Dashboard({
           <div className="gd-card gd-enter-scan" style={{ padding: "11px 14px", marginBottom: 12, ...cardEntranceStyle(1) }}>
             <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, flexWrap: "wrap" }}>
               <span style={{ fontFamily: "Share Tech Mono,monospace", fontSize: "0.62rem", letterSpacing: "0.14em", color: "rgba(0,220,255,0.52)" }}>
-                COLLECTIBLE DEVELOPER CARD
+                COLLECTIBLE LAB + PRESSROOM
               </span>
-              <button
-                className="gd-btn"
-                onClick={() => setShowTradingCard(true)}
-                style={{ padding: "8px 14px", fontSize: "0.64rem" }}
-              >
-                🃏 GENERATE CARD
-              </button>
+              <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                <button
+                  className="gd-btn"
+                  onClick={() => setShowTradingCard(true)}
+                  style={{ padding: "8px 14px", fontSize: "0.64rem" }}
+                >
+                  🃏 GENERATE CARD
+                </button>
+                <button
+                  className="gd-btn"
+                  onClick={() => setShowNewspaper(true)}
+                  style={{ padding: "8px 14px", fontSize: "0.64rem" }}
+                >
+                  📰 GENERATE NEWSPAPER
+                </button>
+              </div>
             </div>
           </div>
 
@@ -6794,6 +7228,15 @@ function Dashboard({
         />
       )}
 
+      {showNewspaper && (
+        <GitHubNewspaperPortal
+          username={user.login || username || "developer"}
+          profilePayload={newspaperPayload}
+          getEdition={getNewspaperEdition}
+          onClose={handleCloseNewspaper}
+        />
+      )}
+
       {showLongSessionToast && (
         <div className="gd-toast" style={{ right: 14, bottom: 14, border: "1px solid rgba(0,220,255,0.45)", color: "#00dcff", background: "rgba(4,12,22,0.95)" }}>
           <div>Still analyzing? Share this profile →</div>
@@ -7337,6 +7780,34 @@ export default function GitDNA() {
     };
   };
 
+  const fetchNewspaperEdition = async (profilePayload) => {
+    const safePayload = profilePayload && typeof profilePayload === "object" ? profilePayload : {};
+    const fallbackEdition = buildNewspaperFallback(
+      safePayload,
+      String(safePayload.username || activeUsername || github?.user?.login || "developer"),
+    );
+
+    const res = await fetchFromBackend("/api/newspaper", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Accept: "application/json" },
+      body: JSON.stringify({ profile: safePayload }),
+    });
+
+    if (!res.ok) {
+      let detail = `Newspaper API error (${res.status})`;
+      try {
+        const errJson = await res.json();
+        detail = errJson?.detail || detail;
+      } catch {
+        // Keep default detail.
+      }
+      throw new Error(detail);
+    }
+
+    const payload = await res.json();
+    return normalizeNewspaperPayload(payload?.newspaper || payload, fallbackEdition);
+  };
+
   useEffect(() => {
     nightOwlShownRef.current = nightOwlShown;
   }, [nightOwlShown]);
@@ -7664,6 +8135,25 @@ export default function GitDNA() {
     });
   }
 
+  async function onGenerateNewspaperFromDashboard(profilePayload) {
+    const currentUsername = activeUsername || github?.user?.login;
+    if (!currentUsername || !github) {
+      throw new Error("Load a profile before generating the newspaper.");
+    }
+
+    const payload = profilePayload && typeof profilePayload === "object"
+      ? profilePayload
+      : {
+          username: currentUsername,
+          github,
+          aiData,
+          devScore,
+          langs,
+        };
+
+    return fetchNewspaperEdition(payload);
+  }
+
   function exitBattleView() {
     setBattleData(null);
     const fallbackUsername = activeUsername || github?.user?.login;
@@ -7811,6 +8301,7 @@ export default function GitDNA() {
           onNightOwlDismiss={() => setNightOwlToastVisible(false)}
           ultraMode={ultraMode}
           onRoast={onRoastFromDashboard}
+          onGenerateNewspaper={onGenerateNewspaperFromDashboard}
           onReset={() => {
             setPhase("landing");
             setLoadingSteps(LOADING_STEPS);

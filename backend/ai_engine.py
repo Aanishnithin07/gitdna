@@ -68,6 +68,13 @@ COMMIT_LINGUISTICS_SYSTEM_PROMPT = (
     "No markdown, no bullets, no emojis."
 )
 
+NEWSPAPER_SYSTEM_PROMPT = (
+    "You are the editor-in-chief of a dramatic but factual developer newspaper front page. "
+    "Write with newsroom energy, grounded in the profile metrics provided. "
+    "Do not use markdown. Do not invent impossible values. "
+    "Return ONLY valid JSON with the exact keys requested."
+)
+
 HARDCODED_LAZY_COMMIT_LINE = (
     "Your commit messages read like someone typing with their elbows. "
     "'fix', 'wip', 'update'? Git blame will find you."
@@ -545,6 +552,217 @@ def _normalize_roast_result(parsed: dict[str, Any], fallback: dict[str, Any], la
 
     result["roastLines"] = _add_lazy_commit_line_if_needed(result["roastLines"], lazy_ratio)
     return result
+
+
+def _extract_newspaper_context(profile_payload: dict[str, Any]) -> dict[str, Any]:
+    github_data = _extract_github_section(profile_payload)
+    metrics = _extract_metrics(github_data)
+
+    ai_section = profile_payload.get("ai")
+    if not isinstance(ai_section, dict):
+        ai_section = profile_payload.get("aiData")
+    ai_section = ai_section if isinstance(ai_section, dict) else {}
+
+    chronotype = ai_section.get("chronotype") if isinstance(ai_section.get("chronotype"), dict) else {}
+    work_style = str(chronotype.get("workStyle") or "Adaptive Rhythm Coder")
+    dev_class = str(ai_section.get("devClass") or "Steady Commit Craftsman")
+
+    top_language = metrics["top_languages"][0]["language"] if metrics["top_languages"] else "Unknown"
+    top_language_share = metrics["top_languages"][0]["percentage"] if metrics["top_languages"] else 0.0
+
+    dev_score = _to_int(profile_payload.get("devScore"), 0)
+    if dev_score <= 0:
+        traits = ai_section.get("traits") if isinstance(ai_section.get("traits"), dict) else {}
+        inferred_score = (
+            _to_int(traits.get("discipline"), 0)
+            + _to_int(traits.get("depth"), 0)
+            + _to_int(traits.get("velocity"), 0)
+        ) / 3
+        dev_score = _clamp_int(inferred_score)
+
+    achievements = profile_payload.get("achievements") if isinstance(profile_payload.get("achievements"), dict) else {}
+    unlocked_achievements = _to_int(achievements.get("unlockedCount"), 0)
+    total_achievements = _to_int(achievements.get("totalCount"), 0)
+
+    return {
+        "username": metrics["username"],
+        "dev_class": dev_class,
+        "dev_score": dev_score,
+        "work_style": work_style,
+        "total_stars": metrics["total_stars"],
+        "followers": metrics["followers"],
+        "public_repos": metrics["public_repos"],
+        "recent_commits_30d": metrics["recent_commits_30d"],
+        "account_age_years": metrics["account_age_years"],
+        "top_language": top_language,
+        "top_language_share": top_language_share,
+        "top_repo": metrics["top_starred_repo_name"] or "unknown",
+        "top_repo_stars": metrics["top_starred_repo_stars"],
+        "unlocked_achievements": unlocked_achievements,
+        "total_achievements": total_achievements,
+    }
+
+
+def _fallback_newspaper(profile_payload: dict[str, Any]) -> dict[str, Any]:
+    context = _extract_newspaper_context(profile_payload)
+    username = context["username"]
+    stars = context["total_stars"]
+    repos = context["public_repos"]
+    commits = context["recent_commits_30d"]
+    followers = context["followers"]
+    dev_score = context["dev_score"]
+    work_style = context["work_style"]
+    top_language = context["top_language"]
+    top_language_share = context["top_language_share"]
+    top_repo = context["top_repo"]
+    top_repo_stars = context["top_repo_stars"]
+    account_age_years = context["account_age_years"]
+    unlocked_achievements = context["unlocked_achievements"]
+    total_achievements = context["total_achievements"]
+
+    edition_label = f"{username.upper()} EDITION"
+    date_line = datetime.now(timezone.utc).strftime("%B %d, %Y")
+
+    return {
+        "masthead": "GITHUB NEWSPAPER",
+        "editionLabel": edition_label,
+        "dateLine": date_line,
+        "ticker": (
+            f"LIVE METRICS | {stars} stars | {commits} commits in 30d | {repos} repositories | "
+            f"{followers} followers"
+        ),
+        "headline": f"@{username} pushes {commits} commits and {stars} stars into the spotlight",
+        "subheadline": (
+            f"{work_style} rhythm, {repos} public repositories, and a {dev_score} dev score define this profile's current arc."
+        ),
+        "leadStory": (
+            f"{username} now operates as a {context['dev_class']}, balancing a {account_age_years:.2f}-year tenure with "
+            f"active output. The account carries {repos} repositories and {stars} stars, while {commits} recent commits "
+            "indicate sustained shipping pressure rather than isolated bursts."
+        ),
+        "secondaryTitle": "Repository Watch",
+        "secondaryStory": (
+            f"Top impact project is {top_repo} with {top_repo_stars} stars. Language signal is led by {top_language} "
+            f"at {top_language_share:.2f} percent, showing where most execution energy is concentrated."
+        ),
+        "editorialTitle": "Editorial: Ship With Intent",
+        "editorial": (
+            f"Momentum is clear, but long-term clarity still depends on disciplined communication. With {commits} commits in 30 days, "
+            "the next multiplier comes from preserving context in every change, not only shipping speed."
+        ),
+        "sidebarTitle": "Data Desk",
+        "sidebarBullets": [
+            f"Dev Score: {dev_score}",
+            f"Followers: {followers}",
+            f"Top Language: {top_language} ({top_language_share:.2f}%)",
+            f"Achievement Vault: {unlocked_achievements}/{total_achievements}",
+            f"Account Age: {account_age_years:.2f} years",
+        ],
+        "pullQuote": (
+            f"{commits} commits in 30 days means this developer is shipping at a pace that forces the roadmap to keep up."
+        ),
+        "footerNote": "Printed by GitDNA Press | Built from public GitHub telemetry",
+    }
+
+
+def _build_newspaper_user_prompt(context: dict[str, Any], profile_payload: dict[str, Any]) -> str:
+    return (
+        "Generate a full front-page developer newspaper and return ONLY JSON.\n"
+        "Use this exact schema and no extra keys:\n"
+        "{\n"
+        '  "masthead": "string",\n'
+        '  "editionLabel": "string",\n'
+        '  "dateLine": "string",\n'
+        '  "ticker": "string",\n'
+        '  "headline": "string",\n'
+        '  "subheadline": "string",\n'
+        '  "leadStory": "string",\n'
+        '  "secondaryTitle": "string",\n'
+        '  "secondaryStory": "string",\n'
+        '  "editorialTitle": "string",\n'
+        '  "editorial": "string",\n'
+        '  "sidebarTitle": "string",\n'
+        '  "sidebarBullets": ["string", "string", "string", "string", "string"],\n'
+        '  "pullQuote": "string",\n'
+        '  "footerNote": "string"\n'
+        "}\n\n"
+        "Rules:\n"
+        "- Headline must be under 14 words.\n"
+        "- Use at least four concrete numbers from the profile.\n"
+        "- Keep each story factual and punchy (no markdown).\n"
+        "- sidebarBullets must contain 4 to 6 short bullet lines.\n\n"
+        f"profile_context_json:\n{json.dumps(context)}\n\n"
+        f"full_profile_payload_json:\n{json.dumps(profile_payload)}"
+    )
+
+
+def _normalize_newspaper_result(parsed: dict[str, Any], fallback: dict[str, Any]) -> dict[str, Any]:
+    result = json.loads(json.dumps(fallback))
+    if not isinstance(parsed, dict):
+        return result
+
+    for key in (
+        "masthead",
+        "editionLabel",
+        "dateLine",
+        "ticker",
+        "headline",
+        "subheadline",
+        "leadStory",
+        "secondaryTitle",
+        "secondaryStory",
+        "editorialTitle",
+        "editorial",
+        "sidebarTitle",
+        "pullQuote",
+        "footerNote",
+    ):
+        value = parsed.get(key)
+        if isinstance(value, str) and value.strip():
+            result[key] = value.strip()
+
+    sidebar_bullets = parsed.get("sidebarBullets")
+    if isinstance(sidebar_bullets, list):
+        clean = [str(item).strip()[:180] for item in sidebar_bullets if str(item).strip()]
+        if len(clean) >= 3:
+            result["sidebarBullets"] = clean[:6]
+
+    return result
+
+
+async def analyze_newspaper(profile_payload: dict[str, Any]) -> dict[str, Any]:
+    fallback = _fallback_newspaper(profile_payload)
+    context = _extract_newspaper_context(profile_payload)
+
+    api_key = (os.getenv("GROQ_API_KEY") or "").strip()
+    if not api_key:
+        return fallback
+
+    try:
+        response = await client.chat.completions.create(
+            model=MODEL_NAME,
+            temperature=0.58,
+            max_tokens=1100,
+            messages=[
+                {"role": "system", "content": NEWSPAPER_SYSTEM_PROMPT},
+                {"role": "user", "content": _build_newspaper_user_prompt(context, profile_payload)},
+            ],
+        )
+
+        raw_content = ""
+        if response.choices:
+            content = response.choices[0].message.content
+            if isinstance(content, list):
+                raw_content = "".join(part.get("text", "") for part in content if isinstance(part, dict))
+            else:
+                raw_content = str(content or "")
+
+        parsed = _safe_json_parse(raw_content)
+        if parsed is None:
+            return fallback
+        return _normalize_newspaper_result(parsed, fallback)
+    except Exception:
+        return fallback
 
 
 async def analyze_battle(left_payload: dict[str, Any], right_payload: dict[str, Any]) -> str:
@@ -1300,3 +1518,6 @@ class GroqAIEngine:
 
     async def generate_commit_linguistics_insight(self, payload: dict[str, Any]) -> str:
         return await analyze_commit_linguistics_insight(payload)
+
+    async def generate_newspaper_front_page(self, profile_payload: dict[str, Any]) -> dict[str, Any]:
+        return await analyze_newspaper(profile_payload)
