@@ -70,6 +70,17 @@ const GITHUB_API_HEADERS = {
   ...(GITHUB_TOKEN ? { Authorization: `Bearer ${GITHUB_TOKEN}` } : {}),
 };
 
+const getGitHubErrorMessage = (status, username) => {
+  switch (status) {
+    case 404: return `Developer "${username}" not found. Check the username and try again.`;
+    case 403: return "GitHub rate limit reached. Add a GITHUB_TOKEN to .env or wait 60 minutes.";
+    case 401: return "GitHub token is invalid. Check your VITE_GITHUB_TOKEN in .env.";
+    case 422: return "Invalid username format. GitHub usernames can only contain letters, numbers, and hyphens.";
+    case 500: return "GitHub is having issues. Try again in a few minutes.";
+    default: return `GitHub returned an unexpected error (${status}). Try again.`;
+  }
+};
+
 function isGithubRateLimitResponse(response) {
   if (!response) return false;
   if (response.status !== 403) return false;
@@ -83,15 +94,21 @@ async function fetchGithubJson(path, { notFoundMessage = "GitHub resource not fo
   });
 
   if (isGithubRateLimitResponse(response)) {
-    throw new Error(RATE_LIMIT_MESSAGE);
+    const error = new Error(RATE_LIMIT_MESSAGE);
+    error.status = 403;
+    throw error;
   }
 
   if (response.status === 404) {
-    throw new Error(notFoundMessage);
+    const error = new Error(notFoundMessage);
+    error.status = 404;
+    throw error;
   }
 
   if (!response.ok) {
-    throw new Error(`GitHub API error (${response.status}).`);
+    const error = new Error(`GitHub API error (${response.status}).`);
+    error.status = response.status;
+    throw error;
   }
 
   return response.json();
@@ -3965,7 +3982,7 @@ function BackgroundCanvas({ attractRef = null, attractActive = false }) {
   return <canvas ref={canvasRef} className="gd-bg-canvas" aria-hidden="true" />;
 }
 
-function LandingPage({ onAnalyze, ultraMode = false }) {
+function LandingPage({ onAnalyze, ultraMode = false, isOnline = true }) {
   const [username, setUsername] = useState("");
   const [loading, setLoading] = useState(false);
   const [inputError, setInputError] = useState("");
@@ -4030,6 +4047,23 @@ function LandingPage({ onAnalyze, ultraMode = false }) {
             {inputError && (
               <div style={{ marginTop: 8, color: "#ff8b8b", fontFamily: "Share Tech Mono,monospace", fontSize: "0.62rem", letterSpacing: "0.03em" }}>
                 {inputError}
+              </div>
+            )}
+            {!isOnline && (
+              <div
+                style={{
+                  marginTop: 8,
+                  border: "1px solid rgba(0,220,255,0.42)",
+                  borderRadius: 6,
+                  padding: "10px 12px",
+                  background: "rgba(0,220,255,0.08)",
+                  color: "rgba(186,242,255,0.9)",
+                  fontFamily: "Share Tech Mono,monospace",
+                  fontSize: "0.62rem",
+                  letterSpacing: "0.05em",
+                }}
+              >
+                ⚡ NO SIGNAL DETECTED — Connect to network to analyze
               </div>
             )}
           </div>
@@ -9339,6 +9373,10 @@ export default function GitDNA() {
   const [starTier, setStarTier] = useState(null);
   const [nightOwlShown, setNightOwlShown] = useState(false);
   const [nightOwlToastVisible, setNightOwlToastVisible] = useState(false);
+  const [isOnline, setIsOnline] = useState(() => {
+    if (typeof window === "undefined") return true;
+    return window.navigator.onLine;
+  });
   const autoAnalyzeRef = useRef(false);
   const streamRef = useRef(null);
   const battleIntroTimerRef = useRef(null);
@@ -9529,6 +9567,21 @@ export default function GitDNA() {
   }, []);
 
   useEffect(() => {
+    if (typeof window === "undefined") return undefined;
+
+    const onOnline = () => setIsOnline(true);
+    const onOffline = () => setIsOnline(false);
+
+    window.addEventListener("online", onOnline);
+    window.addEventListener("offline", onOffline);
+
+    return () => {
+      window.removeEventListener("online", onOnline);
+      window.removeEventListener("offline", onOffline);
+    };
+  }, []);
+
+  useEffect(() => {
     if (typeof window === "undefined") return;
 
     const sequence = ["arrowup", "arrowup", "arrowdown", "arrowdown", "arrowleft", "arrowright", "arrowleft", "arrowright", "b", "a"];
@@ -9709,6 +9762,17 @@ export default function GitDNA() {
       const data = await fetchProfilePayload(parsedUsername, frontendPayload);
       await applyResult(data);
     } catch (err) {
+      const status = Number(err?.status);
+      if (Number.isInteger(status) && status > 0) {
+        handleFailure(getGitHubErrorMessage(status, parsedUsername));
+        return;
+      }
+
+      if (/rate limit/i.test(String(err?.message || ""))) {
+        handleFailure(getGitHubErrorMessage(403, parsedUsername));
+        return;
+      }
+
       handleFailure(err.message || "Analysis failed.");
     }
   }
@@ -9883,7 +9947,7 @@ export default function GitDNA() {
   if (phase === "landing") return (
     <>
       <style>{CSS}</style>
-      <LandingPage onAnalyze={analyze} ultraMode={ultraMode} />
+      <LandingPage onAnalyze={analyze} ultraMode={ultraMode} isOnline={isOnline} />
       <GlobalEasterEggOverlays
         ultraMode={ultraMode}
         showKonamiFlash={showKonamiFlash}

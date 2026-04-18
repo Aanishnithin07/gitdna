@@ -41,6 +41,8 @@ if genai is not None:
     gemini_models = [_build_gemini_model(model_name) for model_name in GEMINI_MODEL_CANDIDATES]
 
 GROQ_MODEL_NAME = "llama-3.1-8b-instant"
+GROQ_TIMEOUT_SECONDS = 6.0
+GEMINI_TIMEOUT_SECONDS = 12.0
 
 
 def _has_groq_key() -> bool:
@@ -51,46 +53,62 @@ def _has_gemini_key() -> bool:
     return bool((os.getenv("GEMINI_API_KEY") or "").strip()) and len(gemini_models) > 0
 
 
-async def call_groq(prompt: str, system: str, max_tokens: int = 800, temperature: float = 0.6) -> str:
-    response = await groq_client.chat.completions.create(
-        model=GROQ_MODEL_NAME,
-        max_tokens=max_tokens,
-        temperature=temperature,
-        messages=[
-            {"role": "system", "content": system},
-            {"role": "user", "content": prompt},
-        ],
-    )
-
-    content = response.choices[0].message.content if response.choices else ""
-    if isinstance(content, list):
-        return "".join(part.get("text", "") for part in content if isinstance(part, dict)).strip()
-    return str(content or "").strip()
+async def _with_timeout(coro, timeout_seconds: float, fallback: str = "") -> str:
+    try:
+        return await asyncio.wait_for(coro, timeout=timeout_seconds)
+    except Exception:
+        return fallback
 
 
-async def call_gemini(prompt: str) -> str:
+async def call_groq(
+    prompt: str,
+    system: str,
+    max_tokens: int = 800,
+    temperature: float = 0.6,
+    fallback: str = "",
+) -> str:
+    async def _request() -> str:
+        response = await groq_client.chat.completions.create(
+            model=GROQ_MODEL_NAME,
+            max_tokens=max_tokens,
+            temperature=temperature,
+            messages=[
+                {"role": "system", "content": system},
+                {"role": "user", "content": prompt},
+            ],
+        )
+
+        content = response.choices[0].message.content if response.choices else ""
+        if isinstance(content, list):
+            return "".join(part.get("text", "") for part in content if isinstance(part, dict)).strip()
+        return str(content or "").strip()
+
+    result = await _with_timeout(_request(), GROQ_TIMEOUT_SECONDS, fallback=fallback)
+    return str(result or fallback).strip()
+
+
+async def call_gemini(prompt: str, fallback: str = "") -> str:
     if not gemini_models:
-        raise RuntimeError("Gemini SDK is not available.")
+        return fallback
 
-    loop = asyncio.get_event_loop()
-    last_error: Exception | None = None
+    async def _generate_with_model(model) -> str:
+        loop = asyncio.get_running_loop()
+        response = await loop.run_in_executor(
+            None,
+            lambda m=model: m.generate_content(prompt),
+        )
+        return str(getattr(response, "text", "") or "").strip()
 
     for model in gemini_models:
-        try:
-            response = await loop.run_in_executor(
-                None,
-                lambda m=model: m.generate_content(prompt),
-            )
-            text = str(getattr(response, "text", "") or "").strip()
-            if text:
-                return text
-        except Exception as exc:  # pragma: no cover - provider/network variance
-            last_error = exc
-            continue
+        text = await _with_timeout(
+            _generate_with_model(model),
+            GEMINI_TIMEOUT_SECONDS,
+            fallback="",
+        )
+        if text:
+            return text
 
-    if last_error is not None:
-        raise RuntimeError(f"Gemini generation failed across candidates: {last_error}")
-    raise RuntimeError("Gemini generation returned empty content.")
+    return fallback
 
 
 SYSTEM_PROMPT = (
