@@ -6,12 +6,8 @@
   "scripts": {
     "dev": "vite",
     "build": "vite build",
-    "prelaunch": "node scripts/prelaunch-check.js",
-    "analyze": "vite build --mode analyze",
-    "lint": "eslint .",
     "preview": "vite preview",
-    "deploy": "gh-pages -d dist",
-    "deploy:pages": "npm run build && npm run deploy"
+    "prelaunch": "node scripts/prelaunch-check.js"
   },
   "dependencies": {
     "d3-geo": "^3.1.1",

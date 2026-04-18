@@ -25,23 +25,20 @@ limiter = Limiter(key_func=get_remote_address)
 app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
-allowed_origins = {
+ALLOWED_ORIGINS = [
     "http://localhost:5173",
-    "http://127.0.0.1:5173",
-    "http://localhost:5174",
-    "http://127.0.0.1:5174",
+    "http://localhost:4173",
     "https://gitdna.vercel.app",
-    "https://your-vercel-url.vercel.app",
-}
-frontend_url = os.getenv("FRONTEND_URL", "").strip()
-if frontend_url:
-    allowed_origins.add(frontend_url)
+    os.getenv("FRONTEND_URL", ""),
+]
+# Filter empty strings
+ALLOWED_ORIGINS = [o for o in ALLOWED_ORIGINS if o]
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=sorted(allowed_origins),
+    allow_origins=ALLOWED_ORIGINS,
     allow_credentials=True,
-    allow_methods=["*"],
+    allow_methods=["GET", "POST", "OPTIONS"],
     allow_headers=["*"],
 )
 
@@ -246,10 +243,11 @@ async def on_shutdown() -> None:
 
 
 @app.get("/health")
-async def health() -> dict[str, str]:
+async def health():
     return {
-        "status": "ok",
+        "status": "operational",
         "service": "gitdna-backend",
+        "version": "1.0.0"
     }
 
 
