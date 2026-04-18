@@ -63,6 +63,39 @@ const GITMAP_GEOCODE_CACHE = new Map();
 const GITMAP_INSIGHT_CACHE = new Map();
 const COMMIT_LINGUISTICS_CACHE = new Map();
 const NEWSPAPER_AI_CACHE = new Map();
+const GITHUB_API_BASE = "https://api.github.com";
+const GITHUB_TOKEN = String(import.meta.env.VITE_GITHUB_TOKEN || "").trim();
+const GITHUB_API_HEADERS = {
+  Accept: "application/vnd.github+json",
+  ...(GITHUB_TOKEN ? { Authorization: `Bearer ${GITHUB_TOKEN}` } : {}),
+};
+
+function isGithubRateLimitResponse(response) {
+  if (!response) return false;
+  if (response.status !== 403) return false;
+  return String(response.headers?.get("x-ratelimit-remaining") || "") === "0";
+}
+
+async function fetchGithubJson(path, { notFoundMessage = "GitHub resource not found." } = {}) {
+  const normalizedPath = String(path || "").startsWith("/") ? String(path) : `/${String(path || "")}`;
+  const response = await fetch(`${GITHUB_API_BASE}${normalizedPath}`, {
+    headers: GITHUB_API_HEADERS,
+  });
+
+  if (isGithubRateLimitResponse(response)) {
+    throw new Error(RATE_LIMIT_MESSAGE);
+  }
+
+  if (response.status === 404) {
+    throw new Error(notFoundMessage);
+  }
+
+  if (!response.ok) {
+    throw new Error(`GitHub API error (${response.status}).`);
+  }
+
+  return response.json();
+}
 
 function getLocalDayKey(value = Date.now()) {
   const date = new Date(value);
@@ -1906,6 +1939,216 @@ function calculateBaseTraits(data) {
   };
 }
 
+async function buildFrontendAnalyzePayload(username) {
+  const safeUsername = String(username || "").trim();
+  if (!safeUsername) {
+    throw new Error("Username is required.");
+  }
+
+  const encodedUsername = encodeURIComponent(safeUsername);
+  const [userResponse, reposResponse, eventsResponse] = await Promise.all([
+    fetchGithubJson(`/users/${encodedUsername}`, { notFoundMessage: "GitHub user not found." }),
+    fetchGithubJson(`/users/${encodedUsername}/repos?per_page=100&sort=updated`),
+    fetchGithubJson(`/users/${encodedUsername}/events/public?per_page=100`),
+  ]);
+
+  const user = userResponse && typeof userResponse === "object" ? userResponse : {};
+  const repos = Array.isArray(reposResponse) ? reposResponse : [];
+  const events = Array.isArray(eventsResponse) ? eventsResponse : [];
+
+  let commitData = extractCommitData(events);
+  const missingCommitMessages = !Array.isArray(commitData?.messages) || commitData.messages.length === 0;
+
+  if (missingCommitMessages) {
+    const latestRepo = [...repos]
+      .filter((repo) => !repo?.fork && String(repo?.name || "").trim())
+      .sort((left, right) => {
+        const leftPushed = new Date(left?.pushed_at || left?.updated_at || 0).getTime();
+        const rightPushed = new Date(right?.pushed_at || right?.updated_at || 0).getTime();
+        return rightPushed - leftPushed;
+      })[0];
+
+    const owner = String(user?.login || safeUsername).trim();
+    const repoName = String(latestRepo?.name || "").trim();
+
+    if (owner && repoName) {
+      try {
+        const fallbackCommits = await fetchGithubJson(
+          `/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repoName)}/commits?per_page=10`,
+        );
+
+        const fallbackMessages = Array.isArray(fallbackCommits)
+          ? fallbackCommits
+              .map((commit) => {
+                const message = normalizeCommitMessage(String(commit?.commit?.message || "").split("\n")[0]);
+                if (!message) return null;
+
+                return {
+                  message,
+                  repo: repoName,
+                  timestamp: String(commit?.commit?.author?.date || ""),
+                  sha: String(commit?.sha || "").slice(0, 7) || "???????",
+                };
+              })
+              .filter(Boolean)
+          : [];
+
+        if (fallbackMessages.length > 0) {
+          const fallbackHours = fallbackMessages
+            .map((entry) => {
+              const timestamp = String(entry?.timestamp || "");
+              if (!timestamp) return null;
+              const hour = new Date(timestamp).getUTCHours();
+              return Number.isInteger(hour) && hour >= 0 && hour <= 23 ? hour : null;
+            })
+            .filter((hour) => hour !== null);
+
+          commitData = {
+            messages: fallbackMessages,
+            messageTexts: fallbackMessages.map((entry) => entry.message),
+            hours: fallbackHours,
+            repoActivity: { [repoName]: fallbackMessages.length },
+          };
+        }
+      } catch {
+        // Keep empty commit data when fallback lookup fails.
+      }
+    }
+  }
+
+  const commitHours = Array.isArray(commitData?.hours) ? commitData.hours : [];
+  const commitHourDist = Array.from({ length: 24 }, () => 0);
+  commitHours.forEach((hour) => {
+    if (Number.isInteger(hour) && hour >= 0 && hour <= 23) {
+      commitHourDist[hour] += 1;
+    }
+  });
+
+  const pushEvents = events.filter((event) => event?.type === "PushEvent" && event?.created_at);
+  const weekendPushes = pushEvents.filter((event) => {
+    const dt = new Date(event.created_at);
+    if (Number.isNaN(dt.getTime())) return false;
+    const day = dt.getUTCDay();
+    return day === 0 || day === 6;
+  }).length;
+  const weekdayPushes = Math.max(0, pushEvents.length - weekendPushes);
+  const weekendRatio = pushEvents.length > 0 ? (weekendPushes / pushEvents.length) : 0;
+
+  const avgCommitHour = commitHours.length > 0
+    ? (commitHours.reduce((sum, hour) => sum + hour, 0) / commitHours.length)
+    : 14;
+
+  const totalStars = repos.reduce((sum, repo) => sum + Number(repo?.stargazers_count || 0), 0);
+  const totalRepos = Math.max(Number(user?.public_repos || 0), repos.length);
+  const accountAgeYears = user?.created_at
+    ? ((Date.now() - new Date(user.created_at).getTime()) / (1000 * 60 * 60 * 24 * 365))
+    : 0;
+  const topLangs = extractTopLangs(repos);
+
+  const recentCommitMessages = Array.isArray(commitData?.messageTexts)
+    ? commitData.messageTexts.map((message) => normalizeCommitMessage(message)).filter(Boolean)
+    : [];
+  const recentCommitTimestamps = Array.isArray(commitData?.messages)
+    ? commitData.messages
+        .map((entry) => String(entry?.timestamp || ""))
+        .filter(Boolean)
+    : [];
+
+  const now = Date.now();
+  const activeRepos30d = repos.filter((repo) => {
+    const pushed = new Date(repo?.pushed_at || repo?.updated_at || 0).getTime();
+    return Number.isFinite(pushed) && pushed > 0 && (now - pushed) <= (30 * 24 * 60 * 60 * 1000);
+  }).length;
+  const activeRepos90d = repos.filter((repo) => {
+    const pushed = new Date(repo?.pushed_at || repo?.updated_at || 0).getTime();
+    return Number.isFinite(pushed) && pushed > 0 && (now - pushed) <= (90 * 24 * 60 * 60 * 1000);
+  }).length;
+  const staleRepos180d = repos.filter((repo) => {
+    const pushed = new Date(repo?.pushed_at || repo?.updated_at || 0).getTime();
+    return Number.isFinite(pushed) && pushed > 0 && (now - pushed) > (180 * 24 * 60 * 60 * 1000);
+  }).length;
+  const archivedRepoCount = repos.filter((repo) => Boolean(repo?.archived)).length;
+  const forkRepoCount = repos.filter((repo) => Boolean(repo?.fork)).length;
+  const totalRepoSizeKb = repos.reduce((sum, repo) => sum + Number(repo?.size || 0), 0);
+  const avgRepoSizeKb = repos.length > 0 ? (totalRepoSizeKb / repos.length) : 0;
+  const totalOpenIssues = repos.reduce((sum, repo) => sum + Number(repo?.open_issues_count || 0), 0);
+  const languageDiversity = new Set(
+    repos
+      .map((repo) => String(repo?.language || "").trim())
+      .filter(Boolean),
+  ).size;
+
+  const topStarredRepo = repos
+    .map((repo) => ({
+      name: String(repo?.name || "").trim(),
+      stars: Number(repo?.stargazers_count || 0),
+    }))
+    .sort((left, right) => right.stars - left.stars)[0] || { name: "", stars: 0 };
+
+  const largestRepo = repos
+    .map((repo) => ({
+      name: String(repo?.name || "").trim(),
+      size_kb: Number(repo?.size || 0),
+    }))
+    .sort((left, right) => right.size_kb - left.size_kb)[0] || { name: "", size_kb: 0 };
+
+  const baseTraits = calculateBaseTraits({
+    totalStars,
+    totalRepos,
+    followers: Number(user?.followers || 0),
+    following: Number(user?.following || 0),
+    accountAge: accountAgeYears,
+    recentCommits: recentCommitMessages.length,
+    topLangs,
+    avgCommitHour,
+    weekendRatio,
+    commitMessages: recentCommitMessages,
+    bio: String(user?.bio || ""),
+    blog: String(user?.blog || ""),
+    repos,
+  });
+
+  return {
+    username: String(user?.login || safeUsername),
+    user,
+    repos,
+    events,
+    total_stars: totalStars,
+    total_repos: totalRepos,
+    followers: Number(user?.followers || 0),
+    following: Number(user?.following || 0),
+    account_age_years: Number(accountAgeYears.toFixed(2)),
+    avg_commit_hour: Number(avgCommitHour.toFixed(2)),
+    weekend_ratio: Number(weekendRatio.toFixed(3)),
+    top_languages: topLangs,
+    recent_commit_messages: recentCommitMessages,
+    recent_commits_30d: recentCommitMessages.length,
+    recent_commit_timestamps: recentCommitTimestamps,
+    commit_hour_distribution: commitHourDist,
+    weekend_vs_weekday: {
+      weekend_commits: weekendPushes,
+      weekday_commits: weekdayPushes,
+      ratio: weekdayPushes > 0 ? Number((weekendPushes / weekdayPushes).toFixed(3)) : Number(weekendRatio.toFixed(3)),
+    },
+    language_diversity: languageDiversity,
+    active_repos_30d: activeRepos30d,
+    active_repos_90d: activeRepos90d,
+    stale_repos_180d: staleRepos180d,
+    archived_repo_count: archivedRepoCount,
+    fork_repo_count: forkRepoCount,
+    total_repo_size_kb: totalRepoSizeKb,
+    avg_repo_size_kb: Number(avgRepoSizeKb.toFixed(2)),
+    total_open_issues: totalOpenIssues,
+    top_starred_repo: topStarredRepo,
+    largest_repo: largestRepo,
+    base_traits: baseTraits,
+    bio: String(user?.bio || ""),
+    blog: String(user?.blog || ""),
+    location: String(user?.location || ""),
+    created_at: String(user?.created_at || ""),
+  };
+}
+
 function constrainAiTraitRefinement(baseTraits, aiTraits, maxDelta = 8) {
   const safeBase = baseTraits && typeof baseTraits === "object" ? baseTraits : {};
   const safeAi = aiTraits && typeof aiTraits === "object" ? aiTraits : {};
@@ -1989,157 +2232,171 @@ function detectCommitSpikeDrop(events) {
   };
 }
 
-function buildBurnoutAnalysis({ github, user, repos, events, contributions }) {
-  const safeGithub = github || {};
-  const fallbackCommitData = extractCommitData(events || []);
-
-  const commitMessages = Array.isArray(safeGithub.recent_commit_messages) && safeGithub.recent_commit_messages.length > 0
-    ? safeGithub.recent_commit_messages.map((msg) => String(msg || ""))
-    : fallbackCommitData.messageTexts;
-
-  const hourDistribution = Array.isArray(safeGithub.commit_hour_distribution) && safeGithub.commit_hour_distribution.length === 24
-    ? safeGithub.commit_hour_distribution.map((entry) => Number(entry || 0))
-    : (() => {
-        const dist = Array(24).fill(0);
-        fallbackCommitData.hours.forEach((hour) => {
-          if (Number.isInteger(hour) && hour >= 0 && hour <= 23) {
-            dist[hour] += 1;
-          }
-        });
-        return dist;
-      })();
-
-  const totalHourSamples = hourDistribution.reduce((sum, value) => sum + value, 0);
-  let maxWindowRatio = 0;
-  if (totalHourSamples > 0) {
-    for (let i = 0; i < 24; i += 1) {
-      const windowSum = hourDistribution[i] + hourDistribution[(i + 1) % 24] + hourDistribution[(i + 2) % 24];
-      maxWindowRatio = Math.max(maxWindowRatio, windowSum / totalHourSamples);
-    }
-  }
-
-  const meanHour = totalHourSamples > 0 ? totalHourSamples / 24 : 0;
-  const variance = totalHourSamples > 0
-    ? hourDistribution.reduce((sum, value) => sum + Math.pow(value - meanHour, 2), 0) / 24
-    : 0;
-  const stdDev = Math.sqrt(variance);
-
-  const concentratedWindow = totalHourSamples >= 12 && maxWindowRatio >= 0.55;
-  const evenlySpread = totalHourSamples >= 12 && maxWindowRatio <= 0.3 && stdDev <= (meanHour * 1.15);
-
-  const providedNightRatio = Number(safeGithub.night_commit_ratio);
-  const computedNightRatio = totalHourSamples > 0
-    ? (hourDistribution.slice(0, 6).reduce((sum, value) => sum + value, 0) / totalHourSamples)
-    : 0;
-  const nightRatio = Number.isFinite(providedNightRatio) ? providedNightRatio : computedNightRatio;
-
-  let weekendCommits = Number(safeGithub?.weekend_vs_weekday?.weekend_commits || 0);
-  let weekdayCommits = Number(safeGithub?.weekend_vs_weekday?.weekday_commits || 0);
-
-  if (weekendCommits + weekdayCommits === 0 && Array.isArray(safeGithub.recent_commit_timestamps)) {
-    safeGithub.recent_commit_timestamps.forEach((timestamp) => {
-      const dt = new Date(timestamp);
-      if (Number.isNaN(dt.getTime())) return;
-      if (dt.getUTCDay() === 0 || dt.getUTCDay() === 6) weekendCommits += 1;
-      else weekdayCommits += 1;
-    });
-  }
-
-  const weekdayShare = (weekdayCommits + weekendCommits) > 0
-    ? (weekdayCommits / (weekdayCommits + weekendCommits))
-    : 0;
-
-  const lazyRegex = /\b(?:wip|fix|hotfix)\b/i;
-  const lazyCount = commitMessages.filter((message) => lazyRegex.test(message)).length;
-  const lazyRatio = commitMessages.length > 0 ? (lazyCount / commitMessages.length) : 0;
-
-  const descriptiveCount = commitMessages.filter((message) => {
-    const words = String(message || "").trim().split(/\s+/).filter(Boolean).length;
-    return words >= 5 && message.length >= 28 && !lazyRegex.test(message);
-  }).length;
-  const descriptiveRatio = commitMessages.length > 0 ? (descriptiveCount / commitMessages.length) : 0;
-
-  const repoCount = Number(user?.public_repos ?? repos?.length ?? 0);
-  const streakLength = getCurrentContributionStreak(contributions || []);
-  const spikeDrop = detectCommitSpikeDrop(events || []);
+function calculateBurnoutIndex(data) {
+  const {
+    commitHourDist,
+    recentCommits,
+    totalRepos,
+    commitMessages,
+    accountAge,
+    weekendRatio,
+    topLangs,
+    avgCommitHour,
+    followers,
+    totalStars,
+  } = data;
 
   let score = 50;
   const signals = [];
 
-  if (concentratedWindow) {
-    score += 15;
-    signals.push({ impact: 15, text: `${Math.round(maxWindowRatio * 100)}% of commits cluster inside 3-hour windows` });
+  const safeHourDist = Array.isArray(commitHourDist) && commitHourDist.length === 24
+    ? commitHourDist.map((count) => Number(count || 0))
+    : Array(24).fill(0);
+  const safeCommitMessages = Array.isArray(commitMessages)
+    ? commitMessages.map((message) => normalizeCommitMessage(message)).filter(Boolean)
+    : [];
+  const safeTopLangs = Array.isArray(topLangs) ? topLangs : [];
+  const safeRecentCommits = Math.max(0, Number(recentCommits || 0));
+  const safeTotalRepos = Math.max(0, Number(totalRepos || 0));
+  const safeAccountAge = Math.max(0, Number(accountAge || 0));
+  const safeWeekendRatio = Math.max(0, Math.min(1, Number(weekendRatio || 0)));
+  const safeFollowers = Math.max(0, Number(followers || 0));
+  const safeTotalStars = Math.max(0, Number(totalStars || 0));
+  const safeAvgCommitHour = Number.isFinite(Number(avgCommitHour)) ? Number(avgCommitHour) : 14;
+
+  const totalCommits = safeHourDist.reduce((sum, count) => sum + count, 0) || 1;
+  const lateNightCommits = safeHourDist
+    .slice(0, 5)
+    .concat(safeHourDist.slice(22))
+    .reduce((sum, count) => sum + count, 0);
+  const lateNightRatio = lateNightCommits / totalCommits;
+  if (lateNightRatio > 0.5) {
+    score += 18;
+    signals.push({ type: "risk", text: `${Math.round(lateNightRatio * 100)}% of commits between 10pm-5am` });
+  } else if (lateNightRatio > 0.3) {
+    score += 8;
+    signals.push({ type: "risk", text: `${Math.round(lateNightRatio * 100)}% late-night commit concentration` });
   }
 
-  if (nightRatio > 0.4) {
+  const activeHours = safeHourDist.filter((count) => count > 0).length;
+  if (activeHours <= 4 && totalCommits > 5) {
     score += 12;
-    signals.push({ impact: 12, text: `${Math.round(nightRatio * 100)}% of commits between midnight and 5am` });
+    signals.push({ type: "risk", text: `Commits clustered in ${activeHours} hour windows - tunnel vision pattern` });
   }
 
-  if (spikeDrop.detected) {
-    score += 10;
-    signals.push({ impact: 10, text: `Commit velocity spiked then dropped ${spikeDrop.dropPct}% in adjacent periods` });
+  if (safeTotalRepos > 70) {
+    score += 12;
+    signals.push({ type: "risk", text: `${safeTotalRepos} repositories - extreme context switching detected` });
+  } else if (safeTotalRepos > 40) {
+    score += 6;
+    signals.push({ type: "risk", text: `${safeTotalRepos} repositories - high context switching load` });
   }
 
-  if ((weekdayCommits + weekendCommits) >= 10 && weekdayShare > 0.6) {
-    score += 8;
-    signals.push({ impact: 8, text: `${Math.round(weekdayShare * 100)}% of commits on weekdays vs weekends` });
+  if (safeCommitMessages.length > 0) {
+    const chaoticCount = safeCommitMessages.filter((message) => {
+      const lowered = message.toLowerCase();
+      return /^(fix|wip|hotfix|urgent|asap|temp|hack|quick|dirty|broken|debug)/.test(lowered)
+        || message.length < 6;
+    }).length;
+    const chaoticRatio = chaoticCount / safeCommitMessages.length;
+    if (chaoticRatio > 0.4) {
+      score += 10;
+      signals.push({ type: "risk", text: `${Math.round(chaoticRatio * 100)}% of commits show hurried/stressed pattern` });
+    }
   }
 
-  if (commitMessages.length >= 6 && lazyRatio >= 0.35) {
-    score += 8;
-    signals.push({ impact: 8, text: `${Math.round(lazyRatio * 100)}% of commit messages are wip/fix/hotfix` });
-  }
-
-  if (repoCount >= 50) {
+  if (safeRecentCommits === 0 && safeAccountAge > 0.5) {
+    score += 15;
+    signals.push({ type: "risk", text: "No activity in 30 days - possible burnout recovery or hiatus" });
+  } else if (safeRecentCommits < 3 && safeAccountAge > 1) {
     score += 7;
-    signals.push({ impact: 7, text: `${repoCount} repositories detected — high context switching` });
+    signals.push({ type: "risk", text: "Very low recent activity for account age" });
   }
 
-  if (evenlySpread) {
+  if (safeTopLangs[0]?.pct >= 90) {
+    score += 5;
+    signals.push({ type: "risk", text: `${safeTopLangs[0].pct}% ${safeTopLangs[0].lang} - deep specialization, limited variety` });
+  }
+
+  if (safeWeekendRatio > 0.25) {
+    score -= 12;
+    signals.push({ type: "healthy", text: `${Math.round(safeWeekendRatio * 100)}% weekend commits - personal projects detected` });
+  } else if (safeWeekendRatio > 0.15) {
+    score -= 6;
+    signals.push({ type: "healthy", text: "Moderate weekend activity - healthy balance signal" });
+  }
+
+  if (activeHours >= 8) {
     score -= 10;
-    signals.push({ impact: -10, text: `Commit activity is evenly spread (${Math.round(maxWindowRatio * 100)}% max 3-hour concentration)` });
+    signals.push({ type: "healthy", text: `Commits spread across ${activeHours} hours - sustainable work pattern` });
   }
 
-  if (weekendCommits > 0) {
+  if (safeRecentCommits > 10 && safeAccountAge > 2) {
     score -= 8;
-    signals.push({ impact: -8, text: "Weekend activity detected — healthy passion signals" });
+    signals.push({ type: "healthy", text: "Active after 2+ years - sustainable development pace" });
   }
 
-  if (streakLength >= 7 && streakLength <= 21) {
-    score -= 5;
-    signals.push({ impact: -5, text: `${streakLength}-day streak sits in a sustainable range` });
+  const qualityMsg = safeCommitMessages.filter((message) => (
+    /^(feat|fix|docs|refactor|chore|perf|test):/i.test(message)
+  )).length;
+  if (safeCommitMessages.length > 0 && (qualityMsg / safeCommitMessages.length) > 0.3) {
+    score -= 8;
+    signals.push({ type: "healthy", text: "Structured commit discipline - deliberate working style" });
   }
 
-  if (commitMessages.length >= 6 && descriptiveRatio >= 0.45) {
-    score -= 5;
-    signals.push({ impact: -5, text: `${Math.round(descriptiveRatio * 100)}% of commit messages are descriptive` });
+  if (safeTopLangs.length >= 4) {
+    score -= 6;
+    signals.push({ type: "healthy", text: `${safeTopLangs.length} languages used - cognitive diversity signal` });
   }
 
-  const burnoutIndex = Math.round(clampNumber(score, 0, 100));
-  const tier = burnoutIndex <= 30
-    ? { label: "OPTIMAL", color: "#39ff14" }
-    : burnoutIndex <= 60
-      ? { label: "ELEVATED", color: "#ffb300" }
-      : burnoutIndex <= 80
-        ? { label: "HIGH", color: "#ff7a00" }
-        : { label: "CRITICAL", color: "#ff4545" };
+  if (signals.length === 0) {
+    signals.push({ type: "healthy", text: "No dominant overload signatures detected in visible public activity" });
+  }
 
-  const rankedSignals = [...signals]
-    .sort((a, b) => Math.abs(b.impact) - Math.abs(a.impact))
-    .slice(0, 3);
+  const finalScore = Math.max(5, Math.min(95, Math.round(score)));
+  const tier = finalScore >= 75
+    ? "CRITICAL"
+    : finalScore >= 55
+      ? "ELEVATED"
+      : finalScore >= 35
+        ? "OPTIMAL"
+        : "BALANCED";
 
-  const recommendation = burnoutIndex > 60
-    ? "The data suggests unsustainable velocity. Ships fast. Sleeps less. History is watching."
-    : burnoutIndex < 30
-      ? "Balanced output. Rare. Most developers never find this equilibrium."
-      : "Current velocity is manageable, but guard your sleep windows and context switches before they become structural debt.";
+  const color = finalScore >= 75
+    ? "#ff4545"
+    : finalScore >= 55
+      ? "#ffb300"
+      : finalScore >= 35
+        ? "#00dcff"
+        : "#39ff14";
+
+  const topSignals = signals.slice(0, 4);
+  const riskSignals = topSignals.filter((signal) => signal.type === "risk");
+  const topRiskSignal = riskSignals[0]?.text || "late-stage overload markers";
+
+  const recommendation = tier === "CRITICAL"
+    ? "The pattern suggests unsustainable velocity. Burnout events typically follow this signature. Reduce context switching. Guard sleep windows."
+    : tier === "ELEVATED"
+      ? `Manageable now but trending toward overload. The ${topRiskSignal} is the clearest warning sign.`
+      : tier === "OPTIMAL"
+        ? "Healthy signal. Current patterns are sustainable. The data shows a developer working with intention."
+        : "Rare equilibrium detected. Whatever your system is, document it. Most developers never find this.";
 
   return {
-    burnoutIndex,
+    score: finalScore,
     tier,
+    color,
+    signals: topSignals,
     recommendation,
-    topSignals: rankedSignals,
+    topRiskSignal,
+    context: {
+      totalCommits,
+      activeHours,
+      lateNightRatio,
+      avgCommitHour: safeAvgCommitHour,
+      followers: safeFollowers,
+      totalStars: safeTotalStars,
+    },
   };
 }
 
@@ -2183,14 +2440,6 @@ function getLoadingSequenceForUsername(username) {
   if (login === FOUNDER_HANDLE) return FOUNDER_LOADING_STEPS;
   if (login === TORVALDS_HANDLE) return TORVALDS_LOADING_STEPS;
   return LOADING_STEPS;
-}
-
-function mapLoadingStep(rawStep, totalSteps) {
-  const safeTotalSteps = Math.max(1, Number(totalSteps) || 1);
-  const maxBackendStep = Math.max(1, LOADING_STEPS.length - 1);
-  const clampedRaw = Math.max(0, Math.min(Number(rawStep) || 0, maxBackendStep));
-  if (safeTotalSteps === 1) return 0;
-  return Math.round((clampedRaw / maxBackendStep) * (safeTotalSteps - 1));
 }
 
 function getStarTier(totalStars) {
@@ -2586,11 +2835,7 @@ async function fetchReadmeFallbackCommitSample(username, repos) {
       const apiUrl = `https://api.github.com/repos/${encodeURIComponent(safeUsername)}/${encodeURIComponent(repoName)}/commits?path=${encodeURIComponent(readmePath)}&per_page=1`;
 
       try {
-        const response = await fetch(apiUrl, {
-          headers: {
-            Accept: "application/vnd.github+json",
-          },
-        });
+        const response = await fetch(apiUrl, { headers: GITHUB_API_HEADERS });
         if (!response.ok) continue;
 
         const payload = await response.json();
@@ -2744,15 +2989,26 @@ function ScoreRing({ score, specialMode = null, percentileText = "", percentileC
   );
 }
 
-function BurnoutGauge({ score }) {
+function BurnoutGauge({ score, tierLabel, tierColor }) {
   const safeScore = clampNumber(Number(score) || 0, 0, 100);
-  const tier = safeScore <= 30
-    ? { label: "OPTIMAL", color: "#39ff14" }
-    : safeScore <= 60
-      ? { label: "ELEVATED", color: "#ffb300" }
-      : safeScore <= 80
-        ? { label: "HIGH", color: "#ff7a00" }
-        : { label: "CRITICAL", color: "#ff4545" };
+  const resolvedTierLabel = tierLabel || (
+    safeScore >= 75
+      ? "CRITICAL"
+      : safeScore >= 55
+        ? "ELEVATED"
+        : safeScore >= 35
+          ? "OPTIMAL"
+          : "BALANCED"
+  );
+  const resolvedTierColor = tierColor || (
+    safeScore >= 75
+      ? "#ff4545"
+      : safeScore >= 55
+        ? "#ffb300"
+        : safeScore >= 35
+          ? "#00dcff"
+          : "#39ff14"
+  );
 
   const radius = 62;
   const circumference = 2 * Math.PI * radius;
@@ -2788,23 +3044,23 @@ function BurnoutGauge({ score }) {
           cy="85"
           r={radius}
           fill="none"
-          stroke={tier.color}
+          stroke={resolvedTierColor}
           strokeWidth="10"
           strokeLinecap="round"
           strokeDasharray={circumference}
           strokeDashoffset={offset}
-          style={{ filter: `drop-shadow(0 0 10px ${tier.color}99)` }}
+          style={{ filter: `drop-shadow(0 0 10px ${resolvedTierColor}99)` }}
         />
       </svg>
       <div style={{ position: "absolute", inset: 0, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center" }}>
-        <div style={{ fontFamily: "Orbitron,monospace", fontSize: "2rem", fontWeight: 900, lineHeight: 1, color: tier.color, textShadow: `0 0 12px ${tier.color}88` }}>
+        <div style={{ fontFamily: "Orbitron,monospace", fontSize: "2rem", fontWeight: 900, lineHeight: 1, color: resolvedTierColor, textShadow: `0 0 12px ${resolvedTierColor}88` }}>
           <AnimatedCounter target={safeScore} delay={180} duration={1000} />
         </div>
         <div style={{ marginTop: 4, fontFamily: "Share Tech Mono,monospace", fontSize: "0.5rem", letterSpacing: "0.16em", color: "rgba(0,220,255,0.58)" }}>
           BURNOUT INDEX
         </div>
-        <div style={{ marginTop: 4, fontFamily: "Share Tech Mono,monospace", fontSize: "0.6rem", letterSpacing: "0.13em", color: tier.color }}>
-          {tier.label}
+        <div style={{ marginTop: 4, fontFamily: "Share Tech Mono,monospace", fontSize: "0.6rem", letterSpacing: "0.13em", color: resolvedTierColor }}>
+          {resolvedTierLabel}
         </div>
       </div>
     </div>
@@ -6729,17 +6985,90 @@ function Dashboard({
     },
   ];
 
-  const burnoutReport = useMemo(() => (
-    buildBurnoutAnalysis({ github, user, repos, events, contributions })
-  ), [
-    github,
-    user,
-    repos,
-    events,
-    contributions,
-  ]);
+  const [commitData, setCommitData] = useState(() => extractCommitData(events));
 
-  const commitData = useMemo(() => extractCommitData(events), [events]);
+  useEffect(() => {
+    setCommitData(extractCommitData(events));
+  }, [events]);
+
+  const commitMessageCount = Array.isArray(commitData?.messages) ? commitData.messages.length : 0;
+
+  useEffect(() => {
+    let cancelled = false;
+
+    if (commitMessageCount > 0) {
+      return () => {
+        cancelled = true;
+      };
+    }
+
+    const owner = String(user.login || username || "").trim();
+    if (!owner || !Array.isArray(repos) || repos.length === 0) {
+      return () => {
+        cancelled = true;
+      };
+    }
+
+    const latestRepo = [...repos]
+      .filter((repo) => !repo?.fork && String(repo?.name || "").trim())
+      .sort((left, right) => {
+        const leftPushed = new Date(left?.pushed_at || left?.updated_at || 0).getTime();
+        const rightPushed = new Date(right?.pushed_at || right?.updated_at || 0).getTime();
+        return rightPushed - leftPushed;
+      })[0];
+
+    const repoName = String(latestRepo?.name || "").trim();
+    if (!repoName) {
+      return () => {
+        cancelled = true;
+      };
+    }
+
+    fetchGithubJson(`/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repoName)}/commits?per_page=10`)
+      .then((commitPayload) => {
+        if (cancelled) return;
+        const fallbackMessages = Array.isArray(commitPayload)
+          ? commitPayload
+              .map((commit) => {
+                const message = normalizeCommitMessage(String(commit?.commit?.message || "").split("\n")[0]);
+                if (!message) return null;
+
+                return {
+                  message,
+                  repo: repoName,
+                  timestamp: String(commit?.commit?.author?.date || ""),
+                  sha: String(commit?.sha || "").slice(0, 7) || "???????",
+                };
+              })
+              .filter(Boolean)
+          : [];
+
+        if (fallbackMessages.length === 0 || cancelled) return;
+
+        const fallbackHours = fallbackMessages
+          .map((entry) => {
+            const timestamp = String(entry?.timestamp || "");
+            if (!timestamp) return null;
+            const hour = new Date(timestamp).getUTCHours();
+            return Number.isInteger(hour) && hour >= 0 && hour <= 23 ? hour : null;
+          })
+          .filter((hour) => hour !== null);
+
+        setCommitData({
+          messages: fallbackMessages,
+          messageTexts: fallbackMessages.map((entry) => entry.message),
+          hours: fallbackHours,
+          repoActivity: { [repoName]: fallbackMessages.length },
+        });
+      })
+      .catch(() => {
+        // Keep current commit state if fallback fetch fails.
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [commitMessageCount, repos, user.login, username]);
 
   const commitRows = useMemo(() => {
     const fromEvents = Array.isArray(commitData?.messages) ? commitData.messages : [];
@@ -6786,6 +7115,59 @@ function Dashboard({
       };
     });
   }, [commitData?.messages, github?.recent_commit_messages]);
+
+  const burnoutInput = useMemo(() => {
+    const hourDistribution = Array(24).fill(0);
+    const commitHours = Array.isArray(commitData?.hours) ? commitData.hours : [];
+    commitHours.forEach((hour) => {
+      if (Number.isInteger(hour) && hour >= 0 && hour <= 23) {
+        hourDistribution[hour] += 1;
+      }
+    });
+
+    const pushEvents = Array.isArray(events)
+      ? events.filter((event) => event?.type === "PushEvent" && event?.created_at)
+      : [];
+    const weekendPushes = pushEvents.filter((event) => {
+      const dt = new Date(event.created_at);
+      if (Number.isNaN(dt.getTime())) return false;
+      const day = dt.getUTCDay();
+      return day === 0 || day === 6;
+    }).length;
+
+    const weekendRatio = pushEvents.length > 0 ? (weekendPushes / pushEvents.length) : 0;
+    const avgCommitHour = commitHours.length > 0
+      ? (commitHours.reduce((sum, hour) => sum + hour, 0) / commitHours.length)
+      : 14;
+
+    return {
+      commitHourDist: hourDistribution,
+      recentCommits: Number(recentCommits || 0),
+      totalRepos: Number(user?.public_repos ?? repos?.length ?? 0),
+      commitMessages: commitRows.map((row) => row.message),
+      accountAge: Number(accountAgeYears || 0),
+      weekendRatio,
+      topLangs: Array.isArray(langs) ? langs : [],
+      avgCommitHour,
+      followers: Number(user?.followers || 0),
+      totalStars: Number(totalStars || 0),
+    };
+  }, [
+    commitData?.hours,
+    events,
+    recentCommits,
+    user?.public_repos,
+    repos?.length,
+    commitRows,
+    accountAgeYears,
+    langs,
+    user?.followers,
+    totalStars,
+  ]);
+
+  const burnoutReport = useMemo(() => (
+    calculateBurnoutIndex(burnoutInput)
+  ), [burnoutInput]);
 
   const commitMessageInputs = useMemo(
     () => commitRows.map((row) => row.message).filter(Boolean).slice(0, 20),
@@ -7780,13 +8162,17 @@ function Dashboard({
             <div className="gd-section-label" style={{ marginBottom: 12 }}>COGNITIVE LOAD ANALYSIS</div>
             <div style={{ display: "flex", gap: 16, flexWrap: "wrap", alignItems: "stretch" }}>
               <div style={{ flex: "0 1 230px", display: "flex", alignItems: "center", justifyContent: "center", minWidth: 190 }}>
-                <BurnoutGauge score={burnoutReport.burnoutIndex} />
+                <BurnoutGauge
+                  score={burnoutReport.score}
+                  tierLabel={burnoutReport.tier}
+                  tierColor={burnoutReport.color}
+                />
               </div>
 
               <div style={{ flex: "1 1 360px", minWidth: 240 }}>
                 <div style={{ display: "flex", flexDirection: "column", gap: 8, marginBottom: 12 }}>
-                  {(burnoutReport.topSignals.length > 0 ? burnoutReport.topSignals : [{ impact: 0, text: "Insufficient signal variance — profile appears stable from visible public activity." }]).map((signal, index) => {
-                    const isRisk = signal.impact > 0;
+                  {(Array.isArray(burnoutReport.signals) ? burnoutReport.signals : []).map((signal, index) => {
+                    const isRisk = signal?.type === "risk";
                     return (
                       <div
                         key={`burnout-signal-${index}`}
@@ -7795,16 +8181,17 @@ function Dashboard({
                           alignItems: "center",
                           gap: 8,
                           padding: "8px 10px",
-                          border: `1px solid ${isRisk ? "rgba(255,122,0,0.32)" : "rgba(57,255,20,0.28)"}`,
+                          border: "1px solid rgba(255,255,255,0.08)",
+                          borderLeft: `4px solid ${isRisk ? "#ffb300" : "#39ff14"}`,
                           background: isRisk ? "rgba(32,12,8,0.62)" : "rgba(8,26,10,0.62)",
                           borderRadius: 8,
                           fontSize: "0.82rem",
-                          color: isRisk ? "rgba(255,196,170,0.92)" : "rgba(177,255,170,0.92)",
+                          color: isRisk ? "rgba(255,204,153,0.94)" : "rgba(180,255,175,0.94)",
                           lineHeight: 1.45,
                         }}
                       >
                         <span style={{ fontSize: "0.9rem", lineHeight: 1 }}>{isRisk ? "⚠" : "✓"}</span>
-                        <span>{signal.text}</span>
+                        <span>{signal?.text}</span>
                       </div>
                     );
                   })}
@@ -9024,9 +9411,14 @@ export default function GitDNA() {
     }, 3000);
   };
 
-  const fetchProfilePayload = async (username) => {
+  const fetchProfilePayload = async (username, body = null) => {
+    const hasBody = body && typeof body === "object";
     const res = await fetchFromBackend(`/api/analyze/${encodeURIComponent(username)}`, {
-      headers: { Accept: "application/json" },
+      method: hasBody ? "POST" : "GET",
+      headers: hasBody
+        ? { "Content-Type": "application/json", Accept: "application/json" }
+        : { Accept: "application/json" },
+      body: hasBody ? JSON.stringify(body) : undefined,
     });
     if (!res.ok) {
       let detail = `Backend error (${res.status})`;
@@ -9226,7 +9618,6 @@ export default function GitDNA() {
     }
 
     const selectedLoadingSteps = getLoadingSequenceForUsername(parsedUsername);
-    const overrideStreamMessages = isFounderLogin(parsedUsername) || parsedUsername.toLowerCase() === TORVALDS_HANDLE;
     const initialMessage = selectedLoadingSteps[0] || LOADING_STEPS[0];
 
     setPhase("loading");
@@ -9239,8 +9630,6 @@ export default function GitDNA() {
     setIsFounder(isFounderLogin(parsedUsername));
     setStarTier(null);
     setNightOwlToastVisible(false);
-
-    const endpoint = `${API_URL}/api/analyze/${encodeURIComponent(parsedUsername)}`;
 
     const applyResult = async (payload) => {
       let bundle = normalizeAnalysisPayload(payload, parsedUsername);
@@ -9277,76 +9666,48 @@ export default function GitDNA() {
       setPhase("error");
     };
 
-    const fallbackFetch = async () => {
-      const penultimateStep = Math.max(0, selectedLoadingSteps.length - 2);
-      const fallbackMessage = selectedLoadingSteps[penultimateStep] || selectedLoadingSteps[0] || LOADING_STEPS[0];
-      setLoadingStep(penultimateStep);
-      setLoadingMessage(fallbackMessage);
-      setLoadingFeed((prev) => prev.includes(fallbackMessage) ? prev : [...prev, fallbackMessage]);
-      const data = await fetchProfilePayload(parsedUsername);
-      await applyResult(data);
-    };
-
     try {
       if (streamRef.current) {
         streamRef.current.close();
         streamRef.current = null;
       }
 
-      if (typeof window !== "undefined" && "EventSource" in window) {
-        const source = new EventSource(endpoint);
-        streamRef.current = source;
+      const fetchStep = Math.max(1, Math.min(3, selectedLoadingSteps.length - 1));
+      const fetchMessage = selectedLoadingSteps[fetchStep] || selectedLoadingSteps[0] || LOADING_STEPS[0];
+      setLoadingStep(fetchStep);
+      setLoadingMessage(fetchMessage);
+      setLoadingFeed((prev) => prev.includes(fetchMessage) ? prev : [...prev, fetchMessage]);
 
-        source.onmessage = async (event) => {
-          if (!event?.data) return;
-          let packet;
-          try {
-            packet = JSON.parse(event.data);
-          } catch {
-            return;
-          }
+      const frontendPayload = await buildFrontendAnalyzePayload(parsedUsername);
 
-          if (typeof packet.step === "number") {
-            const mappedStep = mapLoadingStep(packet.step, selectedLoadingSteps.length);
-            setLoadingStep(mappedStep);
+      if (import.meta.env.DEV && typeof console !== "undefined") {
+        const eventsLength = Array.isArray(frontendPayload.events) ? frontendPayload.events.length : 0;
+        const pushEvents = Array.isArray(frontendPayload.events)
+          ? frontendPayload.events.filter((event) => event?.type === "PushEvent").length
+          : 0;
+        const commitMessages = Array.isArray(frontendPayload.recent_commit_messages)
+          ? frontendPayload.recent_commit_messages.length
+          : 0;
 
-            if (overrideStreamMessages) {
-              const overrideMessage = selectedLoadingSteps[mappedStep] || selectedLoadingSteps[0] || LOADING_STEPS[0];
-              setLoadingMessage(overrideMessage);
-              setLoadingFeed((prev) => prev.includes(overrideMessage) ? prev : [...prev, overrideMessage]);
-            }
-          }
-
-          if (!overrideStreamMessages && typeof packet.message === "string" && packet.message.trim()) {
-            const msg = packet.message.trim();
-            setLoadingMessage(msg);
-            setLoadingFeed((prev) => prev.includes(msg) ? prev : [...prev, msg]);
-          }
-
-          if (packet.done) {
-            source.close();
-            streamRef.current = null;
-            try {
-              await applyResult(packet.data || {});
-            } catch (err) {
-              handleFailure(err?.message || "Analysis failed.");
-            }
-          }
-        };
-
-        source.onerror = async () => {
-          source.close();
-          streamRef.current = null;
-          try {
-            await fallbackFetch();
-          } catch (err) {
-            handleFailure(err.message || "Analysis stream failed.");
-          }
-        };
-        return;
+        console.groupCollapsed(`[GitDNA] Data Quality :: @${parsedUsername}`);
+        console.log("events.length", eventsLength);
+        console.log("pushEvents", pushEvents);
+        console.log("commitMessages", commitMessages);
+        console.log("avgCommitHour", frontendPayload.avg_commit_hour);
+        console.log("weekendRatio", frontendPayload.weekend_ratio);
+        console.log("topLangs", frontendPayload.top_languages);
+        console.log("baseTraits", frontendPayload.base_traits);
+        console.groupEnd();
       }
 
-      await fallbackFetch();
+      const aiStep = Math.max(0, selectedLoadingSteps.length - 2);
+      const aiMessage = selectedLoadingSteps[aiStep] || selectedLoadingSteps[0] || LOADING_STEPS[0];
+      setLoadingStep(aiStep);
+      setLoadingMessage(aiMessage);
+      setLoadingFeed((prev) => prev.includes(aiMessage) ? prev : [...prev, aiMessage]);
+
+      const data = await fetchProfilePayload(parsedUsername, frontendPayload);
+      await applyResult(data);
     } catch (err) {
       handleFailure(err.message || "Analysis failed.");
     }

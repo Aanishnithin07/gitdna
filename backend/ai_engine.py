@@ -1,3 +1,4 @@
+import asyncio
 import hashlib
 import json
 import math
@@ -9,12 +10,89 @@ from typing import Any
 
 from dotenv import load_dotenv
 from groq import AsyncGroq
+import google.generativeai as genai  # type: ignore[reportMissingImports]
 
 load_dotenv()
 
-client = AsyncGroq(api_key=os.getenv("GROQ_API_KEY"))
+groq_client = AsyncGroq(api_key=os.getenv("GROQ_API_KEY"))
 
-MODEL_NAME = "llama-3.1-8b-instant"
+GEMINI_MODEL_CANDIDATES = [
+    "gemini-1.5-flash",
+    "gemini-1.5-flash-latest",
+    "gemini-2.0-flash",
+    "gemini-2.5-flash",
+]
+
+
+def _build_gemini_model(model_name: str):
+    return genai.GenerativeModel(
+        model_name=model_name,
+        generation_config={
+            "response_mime_type": "application/json",
+            "temperature": 0.7,
+            "max_output_tokens": 1500,
+        },
+    )
+
+
+gemini_models = []
+if genai is not None:
+    genai.configure(api_key=os.getenv("GEMINI_API_KEY"))
+    gemini_models = [_build_gemini_model(model_name) for model_name in GEMINI_MODEL_CANDIDATES]
+
+GROQ_MODEL_NAME = "llama-3.1-8b-instant"
+
+
+def _has_groq_key() -> bool:
+    return bool((os.getenv("GROQ_API_KEY") or "").strip())
+
+
+def _has_gemini_key() -> bool:
+    return bool((os.getenv("GEMINI_API_KEY") or "").strip()) and len(gemini_models) > 0
+
+
+async def call_groq(prompt: str, system: str, max_tokens: int = 800, temperature: float = 0.6) -> str:
+    response = await groq_client.chat.completions.create(
+        model=GROQ_MODEL_NAME,
+        max_tokens=max_tokens,
+        temperature=temperature,
+        messages=[
+            {"role": "system", "content": system},
+            {"role": "user", "content": prompt},
+        ],
+    )
+
+    content = response.choices[0].message.content if response.choices else ""
+    if isinstance(content, list):
+        return "".join(part.get("text", "") for part in content if isinstance(part, dict)).strip()
+    return str(content or "").strip()
+
+
+async def call_gemini(prompt: str) -> str:
+    if not gemini_models:
+        raise RuntimeError("Gemini SDK is not available.")
+
+    loop = asyncio.get_event_loop()
+    last_error: Exception | None = None
+
+    for model in gemini_models:
+        try:
+            response = await loop.run_in_executor(
+                None,
+                lambda m=model: m.generate_content(prompt),
+            )
+            text = str(getattr(response, "text", "") or "").strip()
+            if text:
+                return text
+        except Exception as exc:  # pragma: no cover - provider/network variance
+            last_error = exc
+            continue
+
+    if last_error is not None:
+        raise RuntimeError(f"Gemini generation failed across candidates: {last_error}")
+    raise RuntimeError("Gemini generation returned empty content.")
+
+
 SYSTEM_PROMPT = (
     "You are a behavioral data scientist specializing in developer psychology. "
     "You analyze GitHub contribution patterns the way a forensic psychologist reads behavior. "
@@ -63,10 +141,9 @@ GITMAP_INSIGHT_SYSTEM_PROMPT = (
 )
 
 COMMIT_LINGUISTICS_SYSTEM_PROMPT = (
-    "You are a developer writing-style profiler. "
-    "Given raw commit messages, produce exactly one short paragraph in plain text. "
-    "Be specific, direct, and grounded in the visible message patterns. "
-    "No markdown, no bullets, no emojis."
+    "You analyze developer commit messages for psychological and behavioral patterns. "
+    "Be specific, brief, and occasionally darkly witty. "
+    "2-3 sentences maximum. Reference the actual messages."
 )
 
 NEWSPAPER_SYSTEM_PROMPT = (
@@ -735,28 +812,15 @@ async def analyze_newspaper(profile_payload: dict[str, Any]) -> dict[str, Any]:
     fallback = _fallback_newspaper(profile_payload)
     context = _extract_newspaper_context(profile_payload)
 
-    api_key = (os.getenv("GROQ_API_KEY") or "").strip()
-    if not api_key:
+    if not _has_gemini_key():
         return fallback
 
     try:
-        response = await client.chat.completions.create(
-            model=MODEL_NAME,
-            temperature=0.58,
-            max_tokens=1100,
-            messages=[
-                {"role": "system", "content": NEWSPAPER_SYSTEM_PROMPT},
-                {"role": "user", "content": _build_newspaper_user_prompt(context, profile_payload)},
-            ],
+        prompt = (
+            f"{NEWSPAPER_SYSTEM_PROMPT}\n\n"
+            f"{_build_newspaper_user_prompt(context, profile_payload)}"
         )
-
-        raw_content = ""
-        if response.choices:
-            content = response.choices[0].message.content
-            if isinstance(content, list):
-                raw_content = "".join(part.get("text", "") for part in content if isinstance(part, dict))
-            else:
-                raw_content = str(content or "")
+        raw_content = await call_gemini(prompt)
 
         parsed = _safe_json_parse(raw_content)
         if parsed is None:
@@ -768,8 +832,7 @@ async def analyze_newspaper(profile_payload: dict[str, Any]) -> dict[str, Any]:
 
 async def analyze_battle(left_payload: dict[str, Any], right_payload: dict[str, Any]) -> str:
     fallback = _battle_fallback(left_payload, right_payload)
-    api_key = (os.getenv("GROQ_API_KEY") or "").strip()
-    if not api_key:
+    if not _has_groq_key():
         return fallback
 
     left_github = _extract_github_section(left_payload)
@@ -785,17 +848,7 @@ async def analyze_battle(left_payload: dict[str, Any], right_payload: dict[str, 
     )
 
     try:
-        response = await client.chat.completions.create(
-            model=MODEL_NAME,
-            temperature=0.5,
-            max_tokens=260,
-            messages=[
-                {"role": "system", "content": BATTLE_SYSTEM_PROMPT},
-                {"role": "user", "content": user_prompt},
-            ],
-        )
-        content = response.choices[0].message.content if response.choices else ""
-        text = str(content or "").replace("```", "").strip()
+        text = (await call_groq(user_prompt, BATTLE_SYSTEM_PROMPT, max_tokens=260, temperature=0.5)).replace("```", "").strip()
         return text or fallback
     except Exception:
         return fallback
@@ -805,28 +858,15 @@ async def analyze_roast(profile_payload: dict[str, Any]) -> dict[str, Any]:
     fallback = _fallback_roast(profile_payload)
     metrics = _extract_roast_metrics(profile_payload)
 
-    api_key = (os.getenv("GROQ_API_KEY") or "").strip()
-    if not api_key:
+    if not _has_gemini_key():
         return fallback
 
     try:
-        response = await client.chat.completions.create(
-            model=MODEL_NAME,
-            temperature=0.8,
-            max_tokens=650,
-            messages=[
-                {"role": "system", "content": ROAST_SYSTEM_PROMPT},
-                {"role": "user", "content": _build_roast_user_prompt(metrics, profile_payload)},
-            ],
+        prompt = (
+            f"{ROAST_SYSTEM_PROMPT}\n\n"
+            f"{_build_roast_user_prompt(metrics, profile_payload)}"
         )
-
-        raw_content = ""
-        if response.choices:
-            content = response.choices[0].message.content
-            if isinstance(content, list):
-                raw_content = "".join(part.get("text", "") for part in content if isinstance(part, dict))
-            else:
-                raw_content = str(content or "")
+        raw_content = await call_gemini(prompt)
 
         parsed = _safe_json_parse(raw_content)
         if parsed is None:
@@ -836,10 +876,48 @@ async def analyze_roast(profile_payload: dict[str, Any]) -> dict[str, Any]:
         return fallback
 
 
+def _fallback_time_machine_narration(payload: dict[str, Any]) -> dict[str, Any]:
+    username = str(payload.get("username") or "developer")
+    year_data = payload.get("yearData") if isinstance(payload.get("yearData"), list) else []
+    first_language = str(payload.get("firstLanguage") or "Unknown")
+    current_language = str(payload.get("currentLanguage") or "Unknown")
+    velocity_multiplier = _to_float(payload.get("velocityMultiplier"), 1.0) or 1.0
+
+    year_narrations: dict[str, str] = {}
+    for item in year_data:
+        if not isinstance(item, dict):
+            continue
+        year = str(item.get("year") or "unknown")
+        commits = _to_int(item.get("commits"), 0)
+        language = str(item.get("language") or current_language or "code")
+        year_narrations[year] = (
+            f"{year}: {username} pushed {commits} tracked commits with {language}, building steady momentum through visible output."
+        )
+
+    if not year_narrations:
+        year_narrations = {
+            "present": (
+                f"{username} keeps shipping with measurable consistency, even when yearly telemetry is sparse."
+            )
+        }
+
+    return {
+        "yearNarrations": year_narrations,
+        "evolutionSummary": (
+            f"The journey moved from {first_language} foundations to {current_language} execution focus. "
+            f"Current velocity signal sits around {velocity_multiplier:.1f}x, indicating sustained iteration pressure."
+        ),
+        "heroTitle": "Relentless Commit Navigator",
+        "originStory": (
+            f"At the start, {username} was a builder learning in public, one commit at a time."
+        ),
+    }
+
+
 async def analyze_time_machine_narration(payload: dict[str, Any]) -> dict[str, Any]:
-    api_key = (os.getenv("GROQ_API_KEY") or "").strip()
-    if not api_key:
-        raise RuntimeError("Groq API key is not configured.")
+    fallback = _fallback_time_machine_narration(payload)
+    if not _has_gemini_key():
+        return fallback
 
     username = str(payload.get("username") or "unknown")
     year_data = payload.get("yearData") if isinstance(payload.get("yearData"), list) else []
@@ -871,29 +949,15 @@ async def analyze_time_machine_narration(payload: dict[str, Any]) -> dict[str, A
         f"Total years active: {total_years_active}."
     )
 
-    response = await client.chat.completions.create(
-        model=MODEL_NAME,
-        temperature=0.65,
-        max_tokens=1200,
-        messages=[
-            {"role": "system", "content": TIME_MACHINE_SYSTEM_PROMPT},
-            {"role": "user", "content": user_prompt},
-        ],
-    )
-
-    raw_content = ""
-    if response.choices:
-        content = response.choices[0].message.content
-        if isinstance(content, list):
-            raw_content = "".join(part.get("text", "") for part in content if isinstance(part, dict))
-        else:
-            raw_content = str(content or "")
-
-    parsed = _safe_json_parse(raw_content)
-    if parsed is None:
-        raise RuntimeError("Invalid narration JSON returned by Groq.")
-
-    return parsed
+    prompt = f"{TIME_MACHINE_SYSTEM_PROMPT}\n\n{user_prompt}"
+    try:
+        raw_content = await call_gemini(prompt)
+        parsed = _safe_json_parse(raw_content)
+        if parsed is None:
+            return fallback
+        return parsed
+    except Exception:
+        return fallback
 
 
 async def analyze_gitmap_insight(payload: dict[str, Any]) -> str:
@@ -911,8 +975,7 @@ async def analyze_gitmap_insight(payload: dict[str, Any]) -> str:
         f"{'strong' if total_stars >= 100 else 'growing'} regional momentum."
     )
 
-    api_key = (os.getenv("GROQ_API_KEY") or "").strip()
-    if not api_key:
+    if not _has_groq_key():
         return fallback
 
     user_prompt = (
@@ -928,18 +991,7 @@ async def analyze_gitmap_insight(payload: dict[str, Any]) -> str:
     )
 
     try:
-        response = await client.chat.completions.create(
-            model=MODEL_NAME,
-            temperature=0.55,
-            max_tokens=120,
-            messages=[
-                {"role": "system", "content": GITMAP_INSIGHT_SYSTEM_PROMPT},
-                {"role": "user", "content": user_prompt},
-            ],
-        )
-
-        content = response.choices[0].message.content if response.choices else ""
-        text = str(content or "").replace("```", "").strip()
+        text = (await call_groq(user_prompt, GITMAP_INSIGHT_SYSTEM_PROMPT, max_tokens=120, temperature=0.55)).replace("```", "").strip()
         text = re.sub(r"\s+", " ", text)
         if not text:
             return fallback
@@ -987,6 +1039,60 @@ def _fallback_commit_linguistics_insight(username: str, messages: list[str]) -> 
     )
 
 
+async def analyze_commit_linguistics(commit_messages: list[str], username: str, top_lang: str) -> str:
+    safe_messages = [str(message).strip() for message in commit_messages if str(message).strip()][:20]
+    if not safe_messages:
+        return (
+            f"No recent public commits available for {username}. "
+            "This could indicate private repository activity or a recent hiatus."
+        )
+
+    avg_len = sum(len(message) for message in safe_messages) / len(safe_messages)
+    conventional = sum(
+        1
+        for message in safe_messages
+        if re.match(r"^(feat|fix|docs|refactor|chore|perf|test):", message, re.IGNORECASE)
+    )
+    vague = sum(
+        1
+        for message in safe_messages
+        if re.match(r"^(fix|wip|update|test|temp)$", message, re.IGNORECASE)
+    )
+
+    sample = "\n".join(f'- "{message}"' for message in safe_messages[:12])
+    prompt = (
+        f"Analyze these commit messages from @{username} ({top_lang} developer):\n\n"
+        f"{sample}\n\n"
+        f"Stats: {len(safe_messages)} messages, avg {avg_len:.0f} chars, "
+        f"{conventional} conventional format, {vague} vague/single-word.\n\n"
+        "Write 2-3 sentences analyzing their communication style and "
+        "what it reveals about how they work under pressure. "
+        "Be specific - reference actual patterns you see. "
+        "Do NOT start with 'The developer' - start differently each time."
+    )
+
+    if not _has_groq_key():
+        return (
+            f"Pattern analysis: {len(safe_messages)} commits analyzed. "
+            f"Average message length of {avg_len:.0f} characters suggests "
+            f"{'deliberate documentation' if avg_len > 40 else 'rapid-fire shipping style'}."
+        )
+
+    try:
+        text = await call_groq(prompt, COMMIT_LINGUISTICS_SYSTEM_PROMPT, max_tokens=200, temperature=0.55)
+        return text or (
+            f"Pattern analysis: {len(safe_messages)} commits analyzed. "
+            f"Average message length of {avg_len:.0f} characters suggests "
+            f"{'deliberate documentation' if avg_len > 40 else 'rapid-fire shipping style'}."
+        )
+    except Exception:
+        return (
+            f"Pattern analysis: {len(safe_messages)} commits analyzed. "
+            f"Average message length of {avg_len:.0f} characters suggests "
+            f"{'deliberate documentation' if avg_len > 40 else 'rapid-fire shipping style'}."
+        )
+
+
 def _grade_commit_message(message: str) -> dict[str, Any]:
     normalized = re.sub(r"\s+", " ", str(message or "")).strip()
     lowered = normalized.lower()
@@ -1029,51 +1135,16 @@ def _grade_commit_message(message: str) -> dict[str, Any]:
 async def analyze_commit_linguistics_insight(payload: dict[str, Any]) -> str:
     username = str(payload.get("username") or "developer")
     raw_messages = payload.get("commitMessages") if isinstance(payload.get("commitMessages"), list) else []
-    commit_messages = [str(message).strip()[:160] for message in raw_messages if str(message).strip()][:20]
+    commit_messages = [str(message).strip()[:160] for message in raw_messages if str(message).strip()]
+    top_lang = str(payload.get("topLang") or payload.get("top_lang") or "code")
+    text = await analyze_commit_linguistics(commit_messages, username, top_lang)
+    cleaned = re.sub(r"\s+", " ", str(text or "")).strip()[:360]
+    if cleaned and cleaned[-1] not in ".!?":
+        cleaned = f"{cleaned}."
 
-    fallback = _fallback_commit_linguistics_insight(username, commit_messages)
-    api_key = (os.getenv("GROQ_API_KEY") or "").strip()
-    if not api_key:
-        return fallback
-
-    graded = [_grade_commit_message(message) for message in commit_messages]
-    average_score = 0.0
-    if graded:
-        average_score = round(sum(item["points"] for item in graded) / max(1, len(graded)), 2)
-
-    user_prompt = (
-        "Write one short paragraph called WHAT YOUR COMMITS SAY ABOUT YOU, based only on raw commit messages.\n"
-        f"username: {username}\n"
-        f"messages_count: {len(commit_messages)}\n"
-        f"average_commit_score_out_of_10: {average_score}\n"
-        "raw_commit_messages:\n"
-        f"{json.dumps(commit_messages)}\n"
-        "Rules: 35-65 words, no markdown, no list, no emojis, no quotes."
-    )
-
-    try:
-        response = await client.chat.completions.create(
-            model=MODEL_NAME,
-            temperature=0.55,
-            max_tokens=170,
-            messages=[
-                {"role": "system", "content": COMMIT_LINGUISTICS_SYSTEM_PROMPT},
-                {"role": "user", "content": user_prompt},
-            ],
-        )
-
-        content = response.choices[0].message.content if response.choices else ""
-        text = str(content or "").replace("```", "").strip()
-        text = re.sub(r"\s+", " ", text)
-        if not text:
-            return fallback
-
-        cleaned = text[:360].strip()
-        if cleaned and cleaned[-1] not in ".!?":
-            cleaned = f"{cleaned}."
-        return cleaned or fallback
-    except Exception:
-        return fallback
+    if cleaned:
+        return cleaned
+    return _fallback_commit_linguistics_insight(username, commit_messages[:20])
 
 
 def _select_dev_class(metrics: dict[str, Any]) -> str:
@@ -1298,81 +1369,79 @@ def _calculate_base_traits(metrics: dict[str, Any], github_data: dict[str, Any])
     }
 
 
-def _fallback_analysis(github_data: dict[str, Any]) -> dict[str, Any]:
+def _fallback_analysis(github_data: dict[str, Any], base_traits: dict[str, int]) -> dict[str, Any]:
+    """
+    Pure algorithmic fallback with deterministic personalization.
+    """
     metrics = _extract_metrics(github_data)
-    username = metrics["username"]
-    stars = metrics["total_stars"]
-    repos = metrics["public_repos"]
-    followers = metrics["followers"]
-    age_years = metrics["account_age_years"]
-    avg_hour = metrics["avg_commit_hour"]
-    ratio = metrics["weekend_weekday_ratio"]
-    ratio_for_calc = ratio if ratio is not None else 0.35
-    commits_30d = metrics["recent_commits_30d"]
-    weekend_commits = metrics["weekend_commits"]
-    weekday_commits = metrics["weekday_commits"]
-    active_30d = metrics["active_repos_30d"]
-    active_90d = metrics["active_repos_90d"]
-    stale_180d = metrics["stale_repos_180d"]
-    lazy_ratio = metrics["commit_message_lazy_ratio"]
-    lexical_diversity = metrics["commit_message_lexical_diversity"]
 
-    base_traits = _calculate_base_traits(metrics, github_data)
-    collaboration = base_traits["collaboration"]
+    username = str(metrics.get("username") or "developer")
+    avg_hour_raw = metrics.get("avg_commit_hour")
+    avg_hour = int(avg_hour_raw) if avg_hour_raw is not None else 14
+    stars = _to_int(metrics.get("total_stars"), 0)
+    repos = _to_int(metrics.get("public_repos"), 0)
+    account_age = max(0.0, _to_float(metrics.get("account_age_years"), 1.0) or 1.0)
+    top_langs = metrics.get("top_languages") if isinstance(metrics.get("top_languages"), list) else []
+    top_lang = str(top_langs[0].get("language") or "code") if top_langs else "code"
+    followers = _to_int(metrics.get("followers"), 0)
 
-    top_lang = metrics["top_languages"][0] if metrics["top_languages"] else {"language": "Unknown", "percentage": 0.0}
-    avg_hour_display = int(avg_hour) if avg_hour is not None else 12
-    chronotype_title = _chronotype_title(avg_hour)
-    work_style = _chronotype_work_style(chronotype_title)
-    tier = _tier_from_stars(stars)
-    dev_class = _select_dev_class(metrics)
-    archetype_name = _select_archetype_name(metrics)
-    collab_title = _select_collab_title(metrics)
-    dna_seed = f"{username.lower()}:{stars}:{repos}:{commits_30d}:{metrics['top_starred_repo_name']}"
-    dna_sequence = hashlib.md5(dna_seed.encode("utf-8")).hexdigest()[:16].upper()
+    safe_traits = {
+        trait: _clamp_int(_to_float(base_traits.get(trait), 50) or 50, 5, 100)
+        for trait in ("creativity", "discipline", "collaboration", "boldness", "depth", "velocity")
+    }
+
+    chronotype_map = {
+        range(0, 5): ("Midnight Architect", "codes in absolute darkness"),
+        range(5, 9): ("Dawn Protocol Engineer", "commits before the world wakes"),
+        range(9, 13): ("Morning Systems Builder", "runs on coffee and clarity"),
+        range(13, 17): ("Afternoon Velocity Engine", "peaks when the market opens"),
+        range(17, 21): ("Evening Runtime", "deploys after dark"),
+        range(21, 24): ("Late Orbit Coder", "orbits the deadline"),
+    }
+    chron_title, chron_style = next(
+        (value for key, value in chronotype_map.items() if avg_hour in key),
+        ("Temporal Drifter", "operates outside normal time"),
+    )
+
+    tier = (
+        "LEGENDARY"
+        if stars > 10000
+        else "ELITE"
+        if stars > 1000
+        else "VETERAN"
+        if stars > 100
+        else "RISING"
+    )
+
+    dna_source = (username + str(stars))[:16].ljust(16, "0")
+    dna_sequence = "".join(format(ord(char) % 16, "X") for char in dna_source)
 
     return {
-        "devClass": dev_class,
+        "devClass": f"The {top_lang} {'Architect' if safe_traits.get('discipline', 50) > 60 else 'Hacker'}",
         "archetype": {
-            "name": archetype_name,
+            "name": chron_title,
             "tier": tier,
-            "description": (
-                f"{username} carries {stars} stars, {repos} repos, and {followers} followers with {active_90d} repos active in the last 90 days. "
-                f"Execution signal shows {commits_30d} recent commits and stale-to-active balance ({stale_180d} stale / {active_90d} active), which shapes this profile's delivery style."
-            ),
+            "description": f"{stars} stars across {repos} repositories in {account_age:.1f} years. The numbers are honest - they always are.",
         },
         "chronotype": {
-            "title": chronotype_title,
-            "description": (
-                f"Average commits land at {avg_hour_display}:00 UTC with night ratio {metrics['night_commit_ratio']:.2f}, placing this profile in {metrics['hour_bucket']} operating mode. "
-                f"Weekend to weekday ratio is {ratio_for_calc:.3f}, showing how {username} distributes coding pressure across the week."
-            ),
-            "workStyle": work_style,
+            "title": chron_title,
+            "description": f"Peak activity at {avg_hour}:00 UTC - {chron_style}. The commit log doesn't lie about when this developer is most alive.",
+            "workStyle": chron_style,
         },
         "collaborationStyle": {
-            "title": collab_title,
-            "description": (
-                f"{repos} repos, {followers} followers, and {metrics['fork_repo_count']} forked repos suggest a collaboration footprint that mixes independent shipping with selective ecosystem reuse. "
-                f"The weekend/weekday split ({weekend_commits}/{weekday_commits}) and active repo count ({active_30d} in 30 days) indicate how this builder sustains momentum under load."
-            ),
-            "score": collaboration,
+            "title": "The Silent Builder" if followers < 50 else "The Community Node",
+            "description": f"{followers} developers follow this work. {'The audience is growing.' if followers > 20 else 'The work speaks for itself.'}",
+            "score": min(80, max(20, followers // 2)),
         },
-        "traits": {
-            "creativity": base_traits["creativity"],
-            "discipline": base_traits["discipline"],
-            "collaboration": base_traits["collaboration"],
-            "boldness": base_traits["boldness"],
-            "depth": base_traits["depth"],
-            "velocity": base_traits["velocity"],
-        },
-        "fastFacts": _build_fast_facts(metrics),
+        "traits": safe_traits,
+        "fastFacts": [
+            f"{stars} stars across {repos} repositories. That's {stars / max(repos, 1):.1f} stars per repo. The market has spoken.",
+            f"Peak commit hour: {avg_hour}:00 UTC. {chron_style.capitalize()}.",
+            f"{account_age:.1f} years on GitHub. That's {int(account_age * 365)} days of showing up.",
+        ],
         "dnaSequence": dna_sequence,
-        "strengthReport": (
-            f"{username} performs best when converting commit velocity ({commits_30d}/30d) plus active maintenance ({active_30d} active repos/30d) into visible public output."
-        ),
-        "warningSign": (
-            f"Commit-message quality signals lazy ratio {lazy_ratio:.0%} and lexical diversity {lexical_diversity:.2f}; if this drifts upward while stale repos rise ({stale_180d}), handoff clarity can decay fast."
-        ),
+        "strengthReport": f"Consistent {top_lang} output over {account_age:.1f} years signals deep expertise.",
+        "warningSign": "Public event data is limited - full pattern analysis requires more recent activity.",
     }
 
 
@@ -1595,38 +1664,145 @@ Respond with this exact JSON schema and no extra keys:
 
 
 async def analyze_developer(github_data: dict) -> dict:
-    """Run Groq behavioral analysis, always returning a valid structured profile."""
-    fallback = _fallback_analysis(github_data)
-    api_key = (os.getenv("GROQ_API_KEY") or "").strip()
-    if not api_key:
+    metrics = _extract_metrics(github_data)
+
+    computed_base_traits = _calculate_base_traits(metrics, github_data)
+    provided_base_traits = github_data.get("base_traits") if isinstance(github_data.get("base_traits"), dict) else {}
+    base_traits = {
+        trait: _clamp_int(_to_float(provided_base_traits.get(trait), computed_base_traits.get(trait, 50)) or computed_base_traits.get(trait, 50), 5, 100)
+        for trait in ("creativity", "discipline", "collaboration", "boldness", "depth", "velocity")
+    }
+
+    fallback = _fallback_analysis(github_data, base_traits)
+    if not _has_gemini_key():
         return fallback
 
     try:
-        metrics = _extract_metrics(github_data)
-        base_traits = _calculate_base_traits(metrics, github_data)
-        response = await client.chat.completions.create(
-            model=MODEL_NAME,
-            temperature=0.1,
-            max_tokens=1200,
-            messages=[
-                {"role": "system", "content": SYSTEM_PROMPT},
-                {"role": "user", "content": _build_user_prompt(metrics, base_traits)},
-            ],
-        )
+        username = str(metrics.get("username") or "")
+        stars = _to_int(metrics.get("total_stars"), 0)
+        repos = _to_int(metrics.get("public_repos"), 0)
+        followers = _to_int(metrics.get("followers"), 0)
+        account_age = _to_float(metrics.get("account_age_years"), 0.0) or 0.0
 
-        raw_content = ""
-        if response.choices:
-            content = response.choices[0].message.content
-            if isinstance(content, list):
-                raw_content = "".join(part.get("text", "") for part in content if isinstance(part, dict))
-            else:
-                raw_content = str(content or "")
+        metrics_top_langs = metrics.get("top_languages") if isinstance(metrics.get("top_languages"), list) else []
+        top_langs: list[dict[str, Any]] = []
+        for item in metrics_top_langs[:4]:
+            if not isinstance(item, dict):
+                continue
+            lang = str(item.get("language") or item.get("lang") or "Unknown")
+            pct = _to_float(item.get("percentage"), None)
+            if pct is None:
+                pct = _to_float(item.get("pct"), 0.0) or 0.0
+            top_langs.append({"lang": lang, "pct": round(pct, 2)})
 
-        parsed = _safe_json_parse(raw_content)
+        avg_hour = _to_float(metrics.get("avg_commit_hour"), 14.0) or 14.0
+        commit_msgs = metrics.get("last_commit_messages") if isinstance(metrics.get("last_commit_messages"), list) else []
+        weekend_commits = _to_int(metrics.get("weekend_commits"), 0)
+        weekday_commits = _to_int(metrics.get("weekday_commits"), 0)
+        weekend_ratio = 0.2
+        if weekend_commits + weekday_commits > 0:
+            weekend_ratio = weekend_commits / (weekend_commits + weekday_commits)
+        recent_commits = _to_int(metrics.get("recent_commits_30d"), 0)
+
+        user_payload = github_data.get("user") if isinstance(github_data.get("user"), dict) else {}
+        bio = str(user_payload.get("bio") or github_data.get("bio") or "")
+
+        lang_str = ", ".join(f"{item['lang']}({item['pct']}%)" for item in top_langs[:4]) or "Unknown"
+        if avg_hour < 5:
+            hour_label = "deep night"
+        elif avg_hour < 9:
+            hour_label = "early morning"
+        elif avg_hour < 17:
+            hour_label = "daytime"
+        elif avg_hour < 21:
+            hour_label = "evening"
+        else:
+            hour_label = "night"
+
+        commit_sample = "\n".join(str(message) for message in commit_msgs[:10]) or "No recent commits"
+        primary_lang_ref = lang_str.split(",")[0].strip() if lang_str and lang_str != "Unknown" else "Unknown"
+
+        gemini_prompt = f"""Analyze this GitHub developer profile and return ONLY valid JSON.
+No markdown, no backticks, no explanation.
+
+DEVELOPER DATA:
+Username: {username}
+Account age: {account_age:.1f} years
+Primary languages: {lang_str}
+Total stars: {stars}
+Followers: {followers}
+Public repos: {repos}
+Peak commit time: {int(round(avg_hour))}:00 UTC ({hour_label})
+Weekend commit ratio: {weekend_ratio:.0%}
+Recent commits (30 days): {recent_commits}
+Bio: {bio or 'none'}
+
+RECENT COMMIT MESSAGES (analyze writing style and working patterns):
+{commit_sample}
+
+PRE-CALCULATED TRAIT SCORES (adjust by max +/-8 only):
+creativity={base_traits.get('creativity', 50)},
+discipline={base_traits.get('discipline', 50)},
+collaboration={base_traits.get('collaboration', 50)},
+boldness={base_traits.get('boldness', 50)},
+depth={base_traits.get('depth', 50)},
+velocity={base_traits.get('velocity', 50)}
+
+Return this EXACT JSON structure. Every string field must be
+specific to this developer's actual data - never generic:
+{{
+  "devClass": "3-5 word creative RPG archetype title specific to their stack and patterns",
+  "archetype": {{
+    "name": "archetype name",
+    "tier": "LEGENDARY|ELITE|VETERAN|RISING",
+    "description": "2 sentences. Reference their specific numbers and patterns."
+  }},
+  "chronotype": {{
+    "title": "creative name based on {int(round(avg_hour))}:00 UTC peak commit time",
+    "description": "2 sentences connecting {hour_label} coding to their personality. Reference their {primary_lang_ref} work.",
+    "workStyle": "3-word working style phrase"
+  }},
+  "collaborationStyle": {{
+    "title": "archetype name based on {followers} followers and {weekend_ratio:.0%} weekend activity",
+    "description": "2 sentences grounded in their follower count and commit patterns.",
+    "score": integer between 20 and 85
+  }},
+  "traits": {{
+    "creativity": integer,
+    "discipline": integer,
+    "collaboration": integer,
+    "boldness": integer,
+    "depth": integer,
+    "velocity": integer
+  }},
+  "fastFacts": [
+    "fact 1: reference {stars} stars or {repos} repos with a specific comparison or dark observation",
+    "fact 2: reference the {int(round(avg_hour))}:00 UTC commit time specifically",
+    "fact 3: reference {account_age:.1f} years or their top language specifically"
+  ],
+  "dnaSequence": "exactly 16 uppercase hex characters derived conceptually from their profile",
+  "strengthReport": "1 sentence about their strongest capability. Use their actual top language.",
+  "warningSign": "1 sentence about their most visible blindspot from the commit patterns."
+}}"""
+
+        raw = await call_gemini(gemini_prompt)
+        cleaned = (raw or "").strip()
+        if cleaned.startswith("```"):
+            cleaned = cleaned.split("\n", 1)[1].rsplit("```", 1)[0]
+
+        parsed = _safe_json_parse(cleaned)
         if parsed is None:
             return fallback
-        return _normalize_result(parsed, fallback)
-    except Exception:
+
+        result = _normalize_result(parsed, fallback)
+        for trait, base_value in base_traits.items():
+            if trait in result.get("traits", {}):
+                ai_value = _to_int(result["traits"].get(trait), base_value)
+                result["traits"][trait] = max(base_value - 8, min(base_value + 8, ai_value))
+
+        return result
+    except Exception as exc:
+        print(f"[GitDNA] Gemini analysis failed: {exc}")
         return fallback
 
 
@@ -1636,7 +1812,7 @@ class GroqAIEngine:
     def __init__(self, api_key: str | None = None, model: str | None = None) -> None:
         if api_key:
             os.environ["GROQ_API_KEY"] = api_key
-        self.model = model or MODEL_NAME
+        self.model = model or GROQ_MODEL_NAME
 
     async def generate_profile_insights(self, github_data: dict[str, Any]) -> dict[str, Any]:
         return await analyze_developer(github_data)

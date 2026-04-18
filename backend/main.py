@@ -6,7 +6,7 @@ from datetime import datetime, timezone
 from typing import Any
 
 from dotenv import load_dotenv
-from fastapi import FastAPI, HTTPException, Request
+from fastapi import Body, FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
@@ -132,6 +132,113 @@ async def full_analysis(username: str) -> dict[str, Any]:
     return response
 
 
+def _normalize_frontend_github_payload(username: str, body: dict[str, Any]) -> dict[str, Any]:
+    safe_body = dict(body) if isinstance(body, dict) else {}
+    safe_username = username.strip()
+
+    user = safe_body.get("user") if isinstance(safe_body.get("user"), dict) else {}
+    user = dict(user)
+    user["login"] = str(user.get("login") or safe_body.get("username") or safe_username)
+
+    if "followers" not in user and isinstance(safe_body.get("followers"), (int, float)):
+        user["followers"] = int(safe_body["followers"])
+    if "following" not in user and isinstance(safe_body.get("following"), (int, float)):
+        user["following"] = int(safe_body["following"])
+    if "public_repos" not in user and isinstance(safe_body.get("total_repos"), (int, float)):
+        user["public_repos"] = int(safe_body["total_repos"])
+
+    if not user.get("created_at") and isinstance(safe_body.get("created_at"), str):
+        user["created_at"] = safe_body["created_at"]
+    if not user.get("bio") and isinstance(safe_body.get("bio"), str):
+        user["bio"] = safe_body["bio"]
+    if not user.get("blog") and isinstance(safe_body.get("blog"), str):
+        user["blog"] = safe_body["blog"]
+
+    repos = safe_body.get("repos") if isinstance(safe_body.get("repos"), list) else []
+    events = safe_body.get("events") if isinstance(safe_body.get("events"), list) else []
+
+    total_stars = safe_body.get("total_stars")
+    if not isinstance(total_stars, (int, float)):
+        total_stars = sum(int(repo.get("stargazers_count") or 0) for repo in repos if isinstance(repo, dict))
+
+    top_languages = safe_body.get("top_languages")
+    if not isinstance(top_languages, list):
+        top_languages = []
+
+    recent_commit_messages = safe_body.get("recent_commit_messages")
+    if not isinstance(recent_commit_messages, list):
+        recent_commit_messages = []
+
+    recent_commit_timestamps = safe_body.get("recent_commit_timestamps")
+    if not isinstance(recent_commit_timestamps, list):
+        recent_commit_timestamps = []
+
+    if not recent_commit_messages and events:
+        for event in events:
+            if not isinstance(event, dict) or event.get("type") != "PushEvent":
+                continue
+
+            payload = event.get("payload") if isinstance(event.get("payload"), dict) else {}
+            commits = payload.get("commits") if isinstance(payload.get("commits"), list) else []
+            for commit in commits:
+                if not isinstance(commit, dict):
+                    continue
+                message = str(commit.get("message") or "").strip()
+                if not message:
+                    continue
+                recent_commit_messages.append(message.split("\n", 1)[0])
+
+            created_at = str(event.get("created_at") or "").strip()
+            if created_at:
+                recent_commit_timestamps.append(created_at)
+
+    weekend_vs_weekday = safe_body.get("weekend_vs_weekday") if isinstance(safe_body.get("weekend_vs_weekday"), dict) else {}
+    if not weekend_vs_weekday:
+        weekend_ratio = safe_body.get("weekend_ratio") if isinstance(safe_body.get("weekend_ratio"), (int, float)) else 0.0
+        weekend_vs_weekday = {
+            "weekend_commits": 0,
+            "weekday_commits": 0,
+            "ratio": float(weekend_ratio),
+        }
+
+    normalized = {
+        **safe_body,
+        "username": user["login"],
+        "user": user,
+        "repos": repos,
+        "events": events,
+        "total_stars": int(total_stars),
+        "top_languages": top_languages,
+        "recent_commit_messages": [str(message).strip() for message in recent_commit_messages if str(message).strip()],
+        "recent_commit_timestamps": [str(ts).strip() for ts in recent_commit_timestamps if str(ts).strip()],
+        "weekend_vs_weekday": weekend_vs_weekday,
+    }
+
+    if "recent_commits_30d" not in normalized:
+        normalized["recent_commits_30d"] = len(normalized["recent_commit_messages"])
+
+    return normalized
+
+
+async def full_analysis_from_payload(username: str, body: dict[str, Any]) -> dict[str, Any]:
+    cached = _cache_get(username)
+    if cached:
+        return cached
+
+    github_data = _normalize_frontend_github_payload(username, body)
+    ai_data = await ai_engine.generate_profile_insights(github_data)
+
+    response = {
+        "username": github_data.get("user", {}).get("login", username),
+        "generated_at": datetime.now(timezone.utc).isoformat(),
+        "github": github_data,
+        "ai": ai_data,
+    }
+
+    _cache_set(username, response)
+    return response
+
+
 @app.on_event("shutdown")
 async def on_shutdown() -> None:
     await analyzer.close()
@@ -167,6 +274,49 @@ async def analyze_profile(request: Request, username: str):
         await asyncio.sleep(0.2)
 
         result = await full_analysis(username)
+        yield f"data: {json.dumps({'step': 9, 'message': 'PROFILE READY — INITIALIZING', 'done': True, 'data': result})}\n\n"
+
+    return StreamingResponse(
+        generate(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+            "X-Accel-Buffering": "no",
+        },
+    )
+
+
+@app.post("/api/analyze/{username}")
+@limiter.limit("10/minute")
+async def analyze_profile_from_frontend(request: Request, username: str, body: dict[str, Any] = Body(...)):
+    if not username.strip():
+        raise HTTPException(status_code=400, detail="Username is required.")
+
+    wants_stream = "text/event-stream" in request.headers.get("accept", "").lower()
+    if not wants_stream:
+        return await full_analysis_from_payload(username, body)
+
+    async def generate():
+        steps = [
+            "CONNECTING TO GITHUB",
+            "EXTRACTING REPOSITORY GENOME",
+            "MAPPING LANGUAGE TOPOLOGY",
+            "ANALYZING COMMIT BEHAVIOR",
+            "DECODING COLLABORATION PATTERNS",
+            "RUNNING BEHAVIORAL ENGINE",
+            "SYNTHESIZING PROFILE",
+            "RENDERING PSYCHOLOGICAL MATRIX",
+        ]
+
+        for i, message in enumerate(steps):
+            yield f"data: {json.dumps({'step': i, 'message': message})}\n\n"
+            await asyncio.sleep(0.2)
+
+        yield f"data: {json.dumps({'step': 8, 'message': 'FINALIZING PROFILE'})}\n\n"
+        await asyncio.sleep(0.1)
+
+        result = await full_analysis_from_payload(username, body)
         yield f"data: {json.dumps({'step': 9, 'message': 'PROFILE READY — INITIALIZING', 'done': True, 'data': result})}\n\n"
 
     return StreamingResponse(
