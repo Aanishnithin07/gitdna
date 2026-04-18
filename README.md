@@ -18,7 +18,7 @@ Your code has a fingerprint. We read it.
 
 ![GitDNA Demo](./docs/demo.gif)
 
-Note: replace with actual screen recording.
+
 
 ## What Is GitDNA
 
