@@ -30,6 +30,7 @@ allowed_origins = {
     "http://127.0.0.1:5173",
     "http://localhost:5174",
     "http://127.0.0.1:5174",
+    "https://gitdna.vercel.app",
     "https://your-vercel-url.vercel.app",
 }
 frontend_url = os.getenv("FRONTEND_URL", "").strip()
@@ -242,6 +243,14 @@ async def full_analysis_from_payload(username: str, body: dict[str, Any]) -> dic
 @app.on_event("shutdown")
 async def on_shutdown() -> None:
     await analyzer.close()
+
+
+@app.get("/health")
+async def health() -> dict[str, str]:
+    return {
+        "status": "ok",
+        "service": "gitdna-backend",
+    }
 
 
 @app.get("/api/analyze/{username}")

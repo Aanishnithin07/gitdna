@@ -1,10 +1,9 @@
-import { useState, useEffect, useRef, useMemo, useId } from "react";
-import { createPortal } from "react-dom";
-import { RadarChart, Radar, PolarGrid, PolarAngleAxis, PolarRadiusAxis, ResponsiveContainer } from "recharts";
-import html2canvas from "html2canvas";
-import { geoContains, geoNaturalEarth1, geoPath } from "d3-geo";
-import { feature as topojsonFeature } from "topojson-client";
-import worldAtlas110m from "world-atlas/countries-110m.json";
+import { Suspense, lazy, memo, useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
+
+const TimeMachine = lazy(() => import("./components/TimeMachine"));
+const GitMap = lazy(() => import("./components/GitMap"));
+const TradingCard = lazy(() => import("./components/TradingCard"));
+const GitHubNewspaperPortal = lazy(() => import("./components/GitNewspaper"));
 
 const LANG_COLORS = {
   JavaScript:"#f1e05a",TypeScript:"#3178c6",Python:"#3572A5",Rust:"#dea584",
@@ -32,7 +31,6 @@ const LOADING_STEPS = [
 const RATE_LIMIT_MESSAGE = "RATE LIMIT HIT — Add a GitHub token in .env or wait 60 minutes";
 const FOUNDER_HANDLE = "aanishnithin07";
 const TORVALDS_HANDLE = "torvalds";
-const BALATHARUNR_HANDLE = "balatharunr";
 const FOUNDER_LOADING_STEPS = [
   "WAIT... THIS SIGNATURE IS FAMILIAR",
   "CROSS-REFERENCING FOUNDER DATABASE",
@@ -58,7 +56,6 @@ const FOUNDER_FAST_FACTS = [
   "0 to GitDNA in one idea. Some developers use tools. This one forges them.",
 ];
 const EMPTY_REPO_ROAST = "Zero stars. Every legend started here.\nThe commit log doesn't lie — you showed up.";
-const TIME_MACHINE_AI_CACHE = new Map();
 const GITMAP_GEOCODE_CACHE = new Map();
 const GITMAP_INSIGHT_CACHE = new Map();
 const COMMIT_LINGUISTICS_CACHE = new Map();
@@ -311,62 +308,113 @@ const TZ_MAP = {
   NL: "Europe/Amsterdam",
 };
 
-const TRADING_CARD_STYLES = `
-.tc-overlay{position:fixed;inset:0;z-index:9998;display:flex;align-items:center;justify-content:center;padding:20px;background:rgba(3,8,14,.78);backdrop-filter:blur(8px)}
-.tc-shell{display:flex;flex-direction:column;align-items:center;gap:10px}
-.tc-card{position:relative;width:320px;height:480px;perspective:1400px;cursor:pointer;--mx:50;--my:50}
-.tc-inner{position:relative;width:100%;height:100%;transform-style:preserve-3d;transition:transform .68s cubic-bezier(.2,.8,.2,1)}
-.tc-inner.flipped{transform:rotateY(180deg)}
-.tc-face{position:absolute;inset:0;border-radius:14px;overflow:hidden;background:linear-gradient(180deg,#0a121f,#0a101b 46%,#0a0f18);border:1px solid rgba(255,255,255,.16);box-shadow:0 16px 40px rgba(0,0,0,.45),inset 0 0 24px rgba(255,255,255,.03);backface-visibility:hidden;display:flex;flex-direction:column}
-.tc-face::before{content:'';position:absolute;inset:0;border-radius:14px;border:1px solid rgba(255,255,255,.08);pointer-events:none}
-.tc-back{transform:rotateY(180deg)}
-.tc-header{height:36px;padding:0 10px;background:var(--tier-band);display:flex;align-items:center;justify-content:space-between;font-family:'Share Tech Mono',monospace;font-size:.54rem;letter-spacing:.1em;color:rgba(255,255,255,.92);text-transform:uppercase}
-.tc-portrait{position:relative;height:192px;border-bottom:1px solid rgba(255,255,255,.1);overflow:hidden;background:#060b12}
-.tc-portrait img{width:100%;height:100%;object-fit:cover;filter:saturate(.62) contrast(1.05)}
-.tc-username{position:absolute;left:10px;right:10px;bottom:8px;padding:4px 7px;border:1px solid rgba(0,220,255,.32);background:rgba(4,10,20,.7);backdrop-filter:blur(4px);font-family:'Orbitron',monospace;font-size:.75rem;letter-spacing:.08em;color:#e8f9ff;text-shadow:0 0 10px rgba(0,220,255,.32)}
-.tc-holo{position:absolute;inset:0;pointer-events:none;background:linear-gradient(135deg,transparent 40%,rgba(255,255,255,0.08) 50%,transparent 60%);mix-blend-mode:screen;opacity:.88;transform:translate(calc((var(--mx) - 50) * 0.24px),calc((var(--my) - 50) * 0.24px));transition:transform .08s linear,opacity .2s ease}
-.tc-card:hover .tc-holo{opacity:1}
-.tc-stats{display:grid;grid-template-columns:1fr 1fr;gap:6px 10px;padding:11px 12px 6px}
-.tc-stat{display:flex;justify-content:space-between;align-items:center;font-family:'Share Tech Mono',monospace;font-size:.58rem;letter-spacing:.08em;color:rgba(0,220,255,.75);padding-bottom:4px;border-bottom:1px dashed rgba(0,220,255,.16)}
-.tc-stat strong{font-family:'Orbitron',monospace;color:#e6f8ff;font-size:.68rem;letter-spacing:.03em}
-.tc-devscore{padding:6px 12px 8px;text-align:center}
-.tc-devscore-label{font-family:'Share Tech Mono',monospace;font-size:.55rem;letter-spacing:.14em;color:rgba(0,220,255,.55)}
-.tc-devscore-value{font-family:'Orbitron',monospace;font-size:1.7rem;line-height:1;color:#00dcff;text-shadow:0 0 14px rgba(0,220,255,.38)}
-.tc-ability{margin:0 12px 8px;padding:9px 10px;border:1px solid rgba(255,255,255,.16);background:rgba(4,10,18,.74);border-radius:8px}
-.tc-ability-title{font-family:'Share Tech Mono',monospace;font-size:.54rem;letter-spacing:.14em;color:rgba(255,179,0,.74);margin-bottom:4px}
-.tc-ability-main{font-family:'Orbitron',monospace;font-size:.74rem;color:#fff;letter-spacing:.05em;line-height:1.35}
-.tc-ability-sub{margin-top:4px;font-family:'Share Tech Mono',monospace;font-size:.56rem;color:rgba(0,220,255,.58);letter-spacing:.09em}
-.tc-footer{margin-top:auto;padding:8px 10px;border-top:1px solid rgba(255,255,255,.12);display:flex;align-items:center;justify-content:space-between;gap:8px;font-family:'Share Tech Mono',monospace;font-size:.5rem;letter-spacing:.08em;color:rgba(200,232,255,.64)}
-.tc-dna{max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.tc-card-number{font-family:'Orbitron',monospace;color:#ffd770;font-size:.62rem;letter-spacing:.08em}
-.tc-rarity{position:absolute;right:10px;bottom:34px;padding:3px 8px;border-radius:999px;border:1px solid rgba(255,255,255,.26);font-family:'Share Tech Mono',monospace;font-size:.5rem;letter-spacing:.12em;background:rgba(4,10,18,.84);color:#dff7ff;text-transform:uppercase}
-.tc-back-wrap{padding:10px 10px 8px;height:100%;display:flex;flex-direction:column;gap:8px}
-.tc-radar{display:grid;place-items:center;border:1px solid rgba(0,220,255,.2);border-radius:10px;background:rgba(4,14,24,.7);padding:8px}
-.tc-textbox{border:1px solid rgba(255,255,255,.16);border-radius:8px;background:rgba(5,10,18,.72);padding:8px}
-.tc-textbox h4{font-family:'Share Tech Mono',monospace;font-size:.54rem;letter-spacing:.12em;color:rgba(0,220,255,.62);margin:0 0 4px}
-.tc-textbox p{font-family:'Rajdhani',sans-serif;font-size:.72rem;line-height:1.35;color:rgba(220,240,255,.9);margin:0}
-.tc-logo{margin-top:auto;text-align:center;font-family:'Orbitron',monospace;font-size:1.2rem;letter-spacing:.2em;color:rgba(0,220,255,.72);text-shadow:0 0 14px rgba(0,220,255,.25)}
-.tc-actions{display:flex;gap:8px;flex-wrap:wrap;justify-content:center}
-.tc-hint{font-family:'Share Tech Mono',monospace;font-size:.55rem;letter-spacing:.12em;color:rgba(0,220,255,.56)}
-.tc-copy{font-family:'Share Tech Mono',monospace;font-size:.58rem;letter-spacing:.08em;color:#39ff14}
-.tc-card.tc-rarity-mythic .tc-face{border-color:rgba(224,214,255,.8);box-shadow:0 0 18px rgba(192,135,255,.32),0 0 32px rgba(0,220,255,.24),0 16px 40px rgba(0,0,0,.45);animation:tc-hue 7s linear infinite}
-.tc-card.tc-rarity-legendary .tc-face{border-color:rgba(255,215,110,.82);box-shadow:0 0 20px rgba(255,190,80,.33),0 16px 40px rgba(0,0,0,.45)}
-.tc-card.tc-rarity-rare .tc-face{border-color:rgba(193,122,255,.74);box-shadow:0 0 18px rgba(179,71,234,.35),0 16px 40px rgba(0,0,0,.45)}
-.tc-card.tc-rarity-uncommon .tc-face{border-color:rgba(76,231,255,.68);box-shadow:0 0 14px rgba(0,220,255,.28),0 16px 40px rgba(0,0,0,.45)}
-.tc-card.tc-rarity-common .tc-face{border-color:rgba(176,188,206,.48)}
-.tc-card.tc-rarity-legendary .tc-face::after{content:'';position:absolute;inset:-80% -20%;background:linear-gradient(120deg,transparent 42%,rgba(255,220,120,.24) 50%,transparent 58%);animation:tc-shimmer 4.2s linear infinite;pointer-events:none}
-.tc-card.tc-collab-silver .tc-face{border-color:rgba(214,223,233,.88);box-shadow:0 0 20px rgba(220,228,240,.35),0 0 34px rgba(152,168,186,.24),0 16px 40px rgba(0,0,0,.45)}
-.tc-card.tc-collab-silver .tc-face::after{content:'';position:absolute;inset:-80% -20%;background:linear-gradient(120deg,transparent 40%,rgba(236,242,249,.34) 50%,transparent 60%);animation:tc-shimmer 3.4s linear infinite;pointer-events:none}
-.tc-card.tc-collab-silver .tc-rarity{border-color:rgba(222,232,246,.65);color:rgba(232,241,253,.96);box-shadow:0 0 10px rgba(214,223,236,.28)}
-.tc-card.tc-collab-silver .tc-card-number{color:#f1f6ff;text-shadow:0 0 10px rgba(216,228,242,.5)}
-.tc-export-static,.tc-export-static *{animation:none!important;transition:none!important}
-@keyframes tc-hue{from{filter:hue-rotate(0deg)}to{filter:hue-rotate(360deg)}}
-@keyframes tc-shimmer{0%{transform:translateX(-45%) translateY(-10%)}100%{transform:translateX(55%) translateY(10%)}}
-@media (max-width:430px){.tc-overlay{padding:10px}.tc-card{transform:scale(.92);transform-origin:center top;margin-bottom:-34px}}
-`;
-
 let GITMAP_WORLD_FEATURES_CACHE = null;
 let GITMAP_COUNTRY_NAME_CACHE = null;
+let GITMAP_CARTOGRAPHY_MODULE_CACHE = null;
+let GITMAP_CARTOGRAPHY_MODULE_PROMISE = null;
+let RECHARTS_MODULE_CACHE = null;
+let RECHARTS_MODULE_PROMISE = null;
+let HTML2CANVAS_MODULE_CACHE = null;
+let HTML2CANVAS_MODULE_PROMISE = null;
+
+async function loadGitMapCartographyModule() {
+  if (GITMAP_CARTOGRAPHY_MODULE_CACHE) return GITMAP_CARTOGRAPHY_MODULE_CACHE;
+
+  if (!GITMAP_CARTOGRAPHY_MODULE_PROMISE) {
+    GITMAP_CARTOGRAPHY_MODULE_PROMISE = Promise.all([
+      import("topojson-client"),
+      import("world-atlas/countries-110m.json"),
+    ]).then(([topojsonModule, worldAtlasModule]) => {
+      const loadedModule = {
+        topojsonFeature: topojsonModule?.feature,
+        worldAtlas110m: worldAtlasModule?.default || worldAtlasModule,
+      };
+      GITMAP_CARTOGRAPHY_MODULE_CACHE = loadedModule;
+      return loadedModule;
+    }).finally(() => {
+      GITMAP_CARTOGRAPHY_MODULE_PROMISE = null;
+    });
+  }
+
+  return GITMAP_CARTOGRAPHY_MODULE_PROMISE;
+}
+
+async function loadRechartsModule() {
+  if (RECHARTS_MODULE_CACHE) return RECHARTS_MODULE_CACHE;
+
+  if (!RECHARTS_MODULE_PROMISE) {
+    RECHARTS_MODULE_PROMISE = Promise.all([
+      import("recharts/es6/chart/RadarChart"),
+      import("recharts/es6/polar/Radar"),
+      import("recharts/es6/polar/PolarGrid"),
+      import("recharts/es6/polar/PolarAngleAxis"),
+      import("recharts/es6/polar/PolarRadiusAxis"),
+      import("recharts/es6/component/ResponsiveContainer"),
+    ]).then(([
+      radarChartModule,
+      radarModule,
+      polarGridModule,
+      polarAngleAxisModule,
+      polarRadiusAxisModule,
+      responsiveContainerModule,
+    ]) => {
+      const module = {
+        RadarChart: radarChartModule?.RadarChart,
+        Radar: radarModule?.Radar,
+        PolarGrid: polarGridModule?.PolarGrid,
+        PolarAngleAxis: polarAngleAxisModule?.PolarAngleAxis,
+        PolarRadiusAxis: polarRadiusAxisModule?.PolarRadiusAxis,
+        ResponsiveContainer: responsiveContainerModule?.ResponsiveContainer,
+      };
+      RECHARTS_MODULE_CACHE = module;
+      return module;
+    }).finally(() => {
+      RECHARTS_MODULE_PROMISE = null;
+    });
+  }
+
+  return RECHARTS_MODULE_PROMISE;
+}
+
+function useRechartsModule() {
+  const [rechartsModule, setRechartsModule] = useState(RECHARTS_MODULE_CACHE);
+
+  useEffect(() => {
+    if (rechartsModule) return;
+    let cancelled = false;
+
+    loadRechartsModule()
+      .then((module) => {
+        if (!cancelled) {
+          setRechartsModule(module);
+        }
+      })
+      .catch((error) => {
+        console.error("Unable to load radar chart module", error);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [rechartsModule]);
+
+  return rechartsModule;
+}
+
+async function loadHtml2Canvas() {
+  if (HTML2CANVAS_MODULE_CACHE) return HTML2CANVAS_MODULE_CACHE;
+
+  if (!HTML2CANVAS_MODULE_PROMISE) {
+    HTML2CANVAS_MODULE_PROMISE = import("html2canvas").then((module) => {
+      HTML2CANVAS_MODULE_CACHE = module?.default || module;
+      return HTML2CANVAS_MODULE_CACHE;
+    }).finally(() => {
+      HTML2CANVAS_MODULE_PROMISE = null;
+    });
+  }
+
+  return HTML2CANVAS_MODULE_PROMISE;
+}
 
 const CSS = `
 @import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@400;600;700;900&family=Share+Tech+Mono&family=Rajdhani:wght@300;400;500;600;700&display=swap');
@@ -2517,6 +2565,11 @@ async function loadGitMapCartography() {
     return { features: GITMAP_WORLD_FEATURES_CACHE, nameById: GITMAP_COUNTRY_NAME_CACHE };
   }
 
+  const { topojsonFeature, worldAtlas110m } = await loadGitMapCartographyModule();
+  if (!topojsonFeature || !worldAtlas110m) {
+    throw new Error("Unable to load map cartography dependencies.");
+  }
+
   const countriesObject = worldAtlas110m?.objects?.countries;
   if (!countriesObject) {
     throw new Error("Unable to load world atlas countries data.");
@@ -2993,7 +3046,7 @@ function ScoreRing({ score, specialMode = null, percentileText = "", percentileC
       </svg>
       <div style={{ position: "absolute", inset: 0, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center" }}>
         <div style={{ fontFamily: "Orbitron,monospace", fontSize: "1.75rem", fontWeight: 900, color: scoreColor, lineHeight: 1, textShadow: `0 0 12px ${scoreColor}88` }}>
-          <AnimatedCounter target={score} delay={500} duration={1800} />
+          <MemoAnimatedCounter target={score} delay={500} duration={1800} />
         </div>
         <div style={{ fontFamily: "Share Tech Mono,monospace", fontSize: percentileText ? "0.5rem" : "0.55rem", color: labelColor, letterSpacing: "0.2em", marginTop: 3 }}>DEV SCORE</div>
         {percentileText && (
@@ -3071,7 +3124,7 @@ function BurnoutGauge({ score, tierLabel, tierColor }) {
       </svg>
       <div style={{ position: "absolute", inset: 0, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center" }}>
         <div style={{ fontFamily: "Orbitron,monospace", fontSize: "2rem", fontWeight: 900, lineHeight: 1, color: resolvedTierColor, textShadow: `0 0 12px ${resolvedTierColor}88` }}>
-          <AnimatedCounter target={safeScore} delay={180} duration={1000} />
+          <MemoAnimatedCounter target={safeScore} delay={180} duration={1000} />
         </div>
         <div style={{ marginTop: 4, fontFamily: "Share Tech Mono,monospace", fontSize: "0.5rem", letterSpacing: "0.16em", color: "rgba(0,220,255,0.58)" }}>
           BURNOUT INDEX
@@ -3123,7 +3176,7 @@ function StatCard({ label, value, delay, sub, enterIndex = 0, ticker = false }) 
       }}>
       <div className="gd-section-label" style={{ justifyContent: "center", marginBottom: 8 }}>{label}</div>
       <div className="stat-number anim-count" style={{ fontSize: "1.5rem", color: "#00dcff", textShadow: "0 0 12px rgba(0,220,255,0.4)" }}>
-        {typeof value === "number" ? <AnimatedCounter target={value} delay={delay * 80} ticker={ticker} /> : value}
+        {typeof value === "number" ? <MemoAnimatedCounter target={value} delay={delay * 80} ticker={ticker} /> : value}
       </div>
       {sub && <div style={{ fontFamily: "Share Tech Mono,monospace", fontSize: "0.58rem", color: "rgba(0,220,255,0.3)", letterSpacing: "0.1em", marginTop: 4 }}>{sub}</div>}
     </div>
@@ -3132,7 +3185,19 @@ function StatCard({ label, value, delay, sub, enterIndex = 0, ticker = false }) 
 
 function TraitsRadar({ traits }) {
   const gradientToken = useId().replace(/:/g, "");
+  const recharts = useRechartsModule();
   if (!traits || typeof traits !== "object") return null;
+  if (!recharts) {
+    return (
+      <div style={{ width: "100%", display: "flex", justifyContent: "center" }}>
+        <div style={{ color: "rgba(200,232,255,0.42)", fontFamily: "Share Tech Mono,monospace", fontSize: "0.68rem" }}>
+          Initializing trait radar...
+        </div>
+      </div>
+    );
+  }
+
+  const { RadarChart, Radar, PolarGrid, PolarAngleAxis, PolarRadiusAxis } = recharts;
 
   const data = [
     { key: "creativity", trait: "Creativity", value: clampNumber(Number(traits.creativity ?? 50), 0, 100) },
@@ -3683,6 +3748,13 @@ function DNASequence({ seq, goldMode = false }) {
   );
 }
 
+const MemoAnimatedCounter = memo(AnimatedCounter);
+const MemoScoreRing = memo(ScoreRing);
+const MemoSkillBar = memo(SkillBar);
+const MemoStatCard = memo(StatCard);
+const MemoTraitsRadar = memo(TraitsRadar);
+const MemoDNASequence = memo(DNASequence);
+
 function BackgroundCanvas({ attractRef = null, attractActive = false }) {
   const canvasRef = useRef(null);
   const animationRef = useRef(null);
@@ -4167,2679 +4239,6 @@ function LoadingPage({ step, message, feed, steps = LOADING_STEPS, ultraMode = f
         </div>
       </div>
     </div>
-  );
-}
-
-const TIME_MACHINE_PORTAL_STYLES = `
-.tm-overlay{position:fixed;inset:0;z-index:9999;background:#000;overflow:hidden;color:#dff7ff}
-.tm-overlay::before{content:'';position:absolute;inset:0;background:radial-gradient(circle at 20% 0%,rgba(0,220,255,.08),transparent 36%),radial-gradient(circle at 80% 100%,rgba(179,71,234,.1),transparent 42%);opacity:0;transition:opacity .6s ease;pointer-events:none}
-.tm-overlay.tm-has-grid::before{opacity:1}
-.tm-overlay-closing{animation:tm-close-fade .4s ease forwards}
-.tm-open-shell{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;padding:24px;background:#000;cursor:default}
-.tm-open-shell.tm-step-2,.tm-open-shell.tm-step-3,.tm-open-shell.tm-step-4{background:#060b12;transition:background .8s ease}
-.tm-open-shell.tm-step-2::before,.tm-open-shell.tm-step-3::before,.tm-open-shell.tm-step-4::before{content:'';position:absolute;inset:0;background-image:linear-gradient(rgba(0,220,255,.08) 1px,transparent 1px),linear-gradient(90deg,rgba(0,220,255,.08) 1px,transparent 1px);background-size:42px 42px;opacity:.22;pointer-events:none}
-.tm-scan-line{position:absolute;left:0;right:0;height:2px;background:linear-gradient(90deg,transparent,#fff,transparent);animation:tm-scan-down .5s linear forwards}
-.tm-avatar-wrap{width:100px;height:100px;border-radius:50%;border:2px solid #00dcff;box-shadow:0 0 40px rgba(0,220,255,.5);overflow:hidden;transform:scale(0);animation:tm-avatar-pop .6s cubic-bezier(.34,1.56,.64,1) forwards}
-.tm-avatar-wrap img{width:100%;height:100%;object-fit:cover;display:block}
-.tm-open-username{margin-top:14px;font-family:'Orbitron',monospace;font-size:1.2rem;color:#00dcff;opacity:0;letter-spacing:.5em;animation:tm-name-fade .4s ease forwards}
-.tm-chronicles{position:absolute;top:18px;left:50%;transform:translateX(-50%);font-family:'Share Tech Mono',monospace;font-size:.62rem;letter-spacing:.2em;color:rgba(0,220,255,.62)}
-.tm-origin{margin-top:18px;max-width:400px;min-height:46px;font-family:'Share Tech Mono',monospace;font-size:.85rem;line-height:1.5;color:rgba(200,232,255,.74)}
-.tm-cursor{opacity:.8;animation:tm-cursor-blink .8s linear infinite}
-.tm-divider-wrap{margin-top:14px;width:min(90vw,420px);display:flex;justify-content:center;overflow:hidden}
-.tm-divider{font-family:'Share Tech Mono',monospace;color:rgba(0,220,255,.4);white-space:nowrap;display:inline-block;transform-origin:left center;animation:tm-divider-grow .5s ease forwards}
-.tm-hero{margin-top:16px;font-family:'Orbitron',monospace;font-weight:900;font-size:clamp(1.4rem,4vw,2.2rem);letter-spacing:.12em;color:#fff;text-shadow:0 0 30px rgba(0,220,255,.5);opacity:0;transform:translateY(40px);animation:tm-hero-slam .4s ease forwards}
-.tm-begin-hint{position:absolute;bottom:28px;left:50%;transform:translateX(-50%);font-family:'Share Tech Mono',monospace;font-size:.65rem;color:rgba(0,220,255,.5);letter-spacing:.2em;animation:tm-hint-pulse 1.3s ease-in-out infinite}
-.tm-skip{position:absolute;top:16px;right:16px;border:1px solid rgba(0,220,255,.25);background:transparent;color:rgba(0,220,255,.55);font-family:'Share Tech Mono',monospace;font-size:.58rem;letter-spacing:.12em;padding:6px 8px;cursor:pointer;opacity:.7}
-.tm-main{position:absolute;inset:0;overflow:auto;background:#060b12}
-.tm-main::before{content:'';position:fixed;inset:0;background-image:linear-gradient(rgba(0,220,255,.08) 1px,transparent 1px),linear-gradient(90deg,rgba(0,220,255,.08) 1px,transparent 1px);background-size:42px 42px;opacity:.2;pointer-events:none}
-.tm-exit{position:fixed;top:16px;right:16px;z-index:4;background:transparent;border:1px solid rgba(0,220,255,.3);color:rgba(0,220,255,.66);font-family:'Orbitron',monospace;font-size:.7rem;letter-spacing:.08em;padding:8px 10px;cursor:pointer}
-.tm-scroll{position:relative;max-width:700px;margin:0 auto;padding:80px 20px 120px;z-index:2}
-.tm-head{text-align:center;margin-bottom:30px}
-.tm-head-kicker{font-family:'Share Tech Mono',monospace;font-size:.62rem;letter-spacing:.2em;color:rgba(0,220,255,.42);margin-bottom:8px}
-.tm-head-title{font-family:'Orbitron',monospace;font-size:clamp(1.5rem,4vw,2rem);letter-spacing:.1em;color:#fff}
-.tm-head-byline{margin-top:10px;display:inline-flex;align-items:center;gap:8px;font-family:'Share Tech Mono',monospace;font-size:.64rem;color:rgba(200,232,255,.55)}
-.tm-head-byline img{width:32px;height:32px;border-radius:50%;border:1px solid rgba(0,220,255,.4)}
-.tm-track{position:relative;padding-top:8px}
-.tm-spine{position:absolute;left:calc(50% - 1px);top:0;width:2px;height:100%;background:linear-gradient(180deg,transparent,#00dcff 5%,#00dcff 95%,transparent);box-shadow:0 0 8px rgba(0,220,255,.4),0 0 20px rgba(0,220,255,.15);transform-origin:top center;animation:tm-spine-grow 2s ease-out forwards}
-.tm-row{position:relative;display:flex;min-height:174px;margin-bottom:18px}
-.tm-row.tm-right{justify-content:flex-end}
-.tm-row.tm-left{justify-content:flex-start}
-.tm-chevron{position:absolute;left:50%;top:-12px;transform:translateX(-50%);font-size:9px;letter-spacing:.15em;color:rgba(0,220,255,.2)}
-.tm-node-wrap{position:absolute;left:50%;top:28px;transform:translateX(-50%);width:0;height:0;z-index:2}
-.tm-now{position:absolute;top:-22px;left:50%;transform:translateX(-50%);font-family:'Share Tech Mono',monospace;font-size:.52rem;letter-spacing:.16em;color:#00dcff}
-.tm-node{position:relative;display:grid;place-items:center;transform:translate(-50%,-50%);transition:transform .2s ease}
-.tm-node svg{display:block}
-.tm-node-level{position:absolute;font-family:'Orbitron',monospace;font-size:.6rem;color:#dff7ff;text-shadow:0 0 8px rgba(0,220,255,.32)}
-.tm-node-active{transform:translate(-50%,-50%) scale(1.3)}
-.tm-node-active svg{filter:drop-shadow(0 0 6px var(--tier-color));animation:tm-node-pulse 1s ease-in-out infinite}
-.tm-node-ripple{position:absolute;left:50%;top:50%;border-radius:50%;border:1px solid var(--tier-color);animation:tm-ripple 1.5s ease-out infinite;transform:translate(-50%,-50%)}
-.tm-node-current svg{animation:tm-current-pulse 2s ease-in-out infinite}
-.tm-card{width:calc(50% - 40px);border-radius:6px;padding:16px 18px;background:rgba(4,14,26,.9);backdrop-filter:blur(12px);opacity:0;will-change:transform,opacity;transition:opacity .5s cubic-bezier(.2,.8,.2,1),transform .5s cubic-bezier(.2,.8,.2,1),box-shadow .35s ease}
-.tm-row.tm-right .tm-card{margin-left:20px;border-left:2px solid var(--tier-color);text-align:left;transform:translateX(30px)}
-.tm-row.tm-left .tm-card{margin-right:20px;border-right:2px solid var(--tier-color);text-align:right;transform:translateX(-30px)}
-.tm-card.tm-visible{opacity:1;transform:translateX(0)}
-.tm-card.tm-peak{box-shadow:0 0 0 1px var(--tier-color),0 0 24px var(--tier-glow)}
-.tm-peak-banner{font-family:'Share Tech Mono',monospace;font-size:.6rem;letter-spacing:.15em;color:var(--tier-color);margin-bottom:8px}
-.tm-card-head{display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap}
-.tm-row.tm-left .tm-card-head{flex-direction:row-reverse}
-.tm-year{font-family:'Orbitron',monospace;font-size:1.5rem;font-weight:700;color:var(--tier-color);text-shadow:0 0 10px var(--tier-glow)}
-.tm-year.tm-year-peak{text-shadow:0 0 18px var(--tier-glow)}
-.tm-tier{display:inline-flex;align-items:center;padding:2px 8px;border-radius:3px;font-family:'Share Tech Mono',monospace;font-size:.58rem;letter-spacing:.12em;color:var(--tier-color);background:var(--tier-soft);border:1px solid var(--tier-mid)}
-.tm-level-row{display:flex;align-items:center;justify-content:flex-end;gap:8px;margin-top:8px}
-.tm-row.tm-right .tm-level-row{justify-content:flex-end}
-.tm-row.tm-left .tm-level-row{justify-content:flex-start}
-.tm-level-label{font-family:'Orbitron',monospace;font-size:.6rem;color:var(--tier-color);letter-spacing:.1em}
-.tm-level-track{height:3px;border-radius:2px;background:rgba(255,255,255,.05);overflow:hidden;flex:1;position:relative}
-.tm-level-fill{height:100%;border-radius:2px;background:linear-gradient(90deg,var(--tier-mid),var(--tier-color));width:0;transition:width .6s ease .08s;position:relative}
-.tm-card.tm-visible .tm-level-fill{width:var(--lvl)}
-.tm-level-fill.tm-peak::after{content:'';position:absolute;inset:0;background:linear-gradient(90deg,transparent,rgba(255,255,255,.38),transparent);transform:translateX(-100%);animation:tm-shimmer 1s ease .85s 1 forwards}
-.tm-lang{margin-top:10px;display:flex;align-items:center;gap:7px;font-family:'Share Tech Mono',monospace;font-size:.75rem;color:rgba(200,232,255,.85)}
-.tm-row.tm-left .tm-lang{justify-content:flex-end}
-.tm-dot{width:8px;height:8px;border-radius:50%}
-.tm-stats{margin-top:8px;font-family:'Share Tech Mono',monospace;font-size:.68rem;color:rgba(0,220,255,.55)}
-.tm-bars{margin-top:10px;display:flex;gap:2px;align-items:flex-end}
-.tm-row.tm-left .tm-bars{justify-content:flex-end}
-.tm-bars span{width:3px;border-radius:2px}
-.tm-sep{height:1px;background:rgba(255,255,255,.06);margin:10px 0}
-.tm-narration{font-family:'Rajdhani',sans-serif;font-size:.88rem;color:rgba(200,232,255,.66);line-height:1.55;font-style:italic;min-height:34px}
-.tm-active-badge{margin-top:8px;display:inline-flex;align-items:center;gap:6px;font-family:'Share Tech Mono',monospace;font-size:.62rem;letter-spacing:.1em;color:#39ff14}
-.tm-active-badge-dot{width:7px;height:7px;border-radius:50%;background:#39ff14;box-shadow:0 0 8px rgba(57,255,20,.7);animation:tm-cursor-blink .9s linear infinite}
-.tm-current-status{margin-top:12px;border:1px solid rgba(255,215,0,.4);box-shadow:0 0 14px rgba(255,215,0,.22);border-radius:6px;padding:10px 12px}
-.tm-current-level{font-family:'Orbitron',monospace;font-size:1.6rem;color:#ffd700;letter-spacing:.08em}
-.tm-current-sub{font-family:'Share Tech Mono',monospace;font-size:.58rem;color:rgba(255,215,0,.68);letter-spacing:.13em}
-.tm-sentinel{height:2px}
-.tm-final{margin-top:20px;border:1px solid rgba(255,215,0,.35);background:rgba(18,12,0,.9);box-shadow:0 0 30px rgba(255,215,0,.1);border-radius:8px;padding:32px;opacity:0;transform:translateY(20px);animation:tm-final-in .55s ease forwards}
-.tm-stagger{opacity:0;transform:translateY(10px);animation:tm-final-stagger .45s ease forwards}
-.tm-final-kicker{font-family:'Share Tech Mono',monospace;font-size:.62rem;letter-spacing:.18em;color:rgba(255,215,0,.68)}
-.tm-final-divider{height:1px;background:linear-gradient(90deg,transparent,rgba(255,215,0,.62),transparent);margin:14px 0}
-.tm-final-title{font-family:'Orbitron',monospace;font-size:1.8rem;color:#fff;letter-spacing:.08em}
-.tm-final-summary{margin-top:12px;font-family:'Rajdhani',sans-serif;font-size:1rem;line-height:1.7;font-style:italic;color:rgba(200,232,255,.7)}
-.tm-chip-row{display:flex;justify-content:center;gap:8px;flex-wrap:wrap;margin-top:14px}
-.tm-chip{border:1px solid rgba(255,215,0,.48);color:#ffd700;background:rgba(255,215,0,.08);padding:4px 8px;border-radius:999px;font-family:'Share Tech Mono',monospace;font-size:.65rem;letter-spacing:.09em}
-.tm-journey{margin-top:14px}
-.tm-journey-track{display:flex;height:8px;border-radius:4px;overflow:hidden;background:rgba(255,255,255,.05);position:relative}
-.tm-journey-seg{flex:1;opacity:0;animation:tm-segment-in .35s ease forwards;cursor:pointer}
-.tm-journey-tip{margin-top:7px;text-align:center;font-family:'Share Tech Mono',monospace;font-size:.58rem;color:rgba(0,220,255,.62);letter-spacing:.12em;min-height:14px}
-.tm-final-actions{margin-top:18px;display:flex;justify-content:center;gap:10px;flex-wrap:wrap}
-.tm-btn{background:linear-gradient(135deg,rgba(0,220,255,.12),rgba(179,71,234,.12));border:1px solid rgba(0,220,255,.4);color:#00dcff;font-family:'Orbitron',monospace;font-size:.68rem;letter-spacing:.1em;padding:10px 14px;cursor:pointer}
-.tm-btn.tm-close{border-color:rgba(255,120,120,.45);color:#ff8a8a;background:linear-gradient(135deg,rgba(255,60,60,.14),rgba(100,20,20,.25))}
-.tm-particles{position:fixed;inset:0;pointer-events:none;z-index:6}
-.tm-particle{position:fixed;width:4px;height:4px;border-radius:50%;left:0;top:0;animation:tm-level-particle .6s ease-out forwards}
-.tm-level-up-text{position:fixed;left:0;top:0;font-family:'Orbitron',monospace;font-size:.7rem;letter-spacing:.08em;animation:tm-float-up-fade 1s ease-out forwards;white-space:nowrap}
-.tm-returning{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-family:'Share Tech Mono',monospace;font-size:.75rem;letter-spacing:.2em;color:#fff;pointer-events:none;animation:tm-return-fade .6s ease forwards;background:rgba(0,0,0,.82)}
-
-@media (max-width:600px){
-  .tm-open-username{font-size:clamp(.95rem,5.2vw,1.1rem)}
-  .tm-origin{font-size:clamp(.74rem,3.3vw,.82rem);max-width:88vw}
-  .tm-spine{left:28px}
-  .tm-row{justify-content:flex-end!important}
-  .tm-node-wrap{left:28px}
-  .tm-card{width:calc(100% - 52px);margin-left:52px!important;margin-right:0!important;text-align:left!important;border-left:2px solid var(--tier-color)!important;border-right:none!important}
-  .tm-card-head{flex-direction:row!important}
-  .tm-level-row,.tm-lang,.tm-bars{justify-content:flex-start!important}
-}
-
-@keyframes tm-scan-down{from{top:0}to{top:100%}}
-@keyframes tm-avatar-pop{0%{transform:scale(0)}70%{transform:scale(1.15)}100%{transform:scale(1)}}
-@keyframes tm-name-fade{from{opacity:0;letter-spacing:.5em}to{opacity:1;letter-spacing:.15em}}
-@keyframes tm-cursor-blink{0%,49%{opacity:1}50%,100%{opacity:0}}
-@keyframes tm-divider-grow{from{transform:scaleX(0)}to{transform:scaleX(1)}}
-@keyframes tm-hero-slam{from{opacity:0;transform:translateY(40px)}to{opacity:1;transform:translateY(0)}}
-@keyframes tm-hint-pulse{0%,100%{opacity:.3}50%{opacity:.8}}
-@keyframes tm-spine-grow{from{transform:scaleY(0)}to{transform:scaleY(1)}}
-@keyframes tm-node-pulse{0%,100%{opacity:.55}50%{opacity:1}}
-@keyframes tm-ripple{0%{width:28px;height:28px;opacity:.8;transform:translate(-50%,-50%)}100%{width:70px;height:70px;opacity:0;transform:translate(-50%,-50%)}}
-@keyframes tm-current-pulse{0%,100%{filter:drop-shadow(0 0 8px rgba(0,220,255,.45))}50%{filter:drop-shadow(0 0 20px rgba(0,220,255,.85))}}
-@keyframes tm-shimmer{from{transform:translateX(-100%)}to{transform:translateX(100%)}}
-@keyframes tm-segment-in{from{opacity:0;transform:scaleX(.45)}to{opacity:1;transform:scaleX(1)}}
-@keyframes tm-final-in{from{opacity:0;transform:translateY(20px)}to{opacity:1;transform:translateY(0)}}
-@keyframes tm-final-stagger{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:translateY(0)}}
-@keyframes tm-close-fade{0%{opacity:1}100%{opacity:0;background:#000}}
-@keyframes tm-return-fade{0%{opacity:0}30%{opacity:1}100%{opacity:0}}
-@keyframes tm-level-particle{0%{transform:translate(-50%,-50%) scale(1);opacity:1}100%{transform:translate(calc(-50% + var(--dx)),calc(-50% + var(--dy))) scale(0);opacity:0}}
-@keyframes tm-float-up-fade{0%{transform:translate(-50%,0);opacity:1}100%{transform:translate(-50%,-40px);opacity:0}}
-`;
-
-function TimeMachine({ repos, events, user, onClose }) {
-  const API_URL = (import.meta.env.VITE_API_URL || "http://localhost:8000").replace(/\/$/, "");
-  const safeRepos = useMemo(() => (Array.isArray(repos) ? repos : []), [repos]);
-  const safeEvents = useMemo(() => (Array.isArray(events) ? events : []), [events]);
-  const cardRefs = useRef(new Map());
-  const nodeRefs = useRef(new Map());
-  const narrationIntervalsRef = useRef({});
-  const narrationSourceRef = useRef({});
-  const levelUpTriggeredRef = useRef(new Set());
-  const closeTimerRef = useRef(null);
-  const [sequenceStep, setSequenceStep] = useState(0);
-  const [showTimeline, setShowTimeline] = useState(false);
-  const [typedOrigin, setTypedOrigin] = useState("");
-  const [typedYearNarrations, setTypedYearNarrations] = useState({});
-  const [revealedYears, setRevealedYears] = useState({});
-  const [inViewYears, setInViewYears] = useState({});
-  const [hoveredYear, setHoveredYear] = useState(null);
-  const [particles, setParticles] = useState([]);
-  const [levelTexts, setLevelTexts] = useState([]);
-  const [showEvolutionCard, setShowEvolutionCard] = useState(false);
-  const [isClosing, setIsClosing] = useState(false);
-  const [showReturning, setShowReturning] = useState(false);
-  const [shareCopied, setShareCopied] = useState(false);
-  const [hoveredSegment, setHoveredSegment] = useState(null);
-  const [chroniclesLoading, setChroniclesLoading] = useState(false);
-  const [placeholderNarrations, setPlaceholderNarrations] = useState(false);
-  const [narrationData, setNarrationData] = useState(null);
-  const aiPendingRef = useRef(false);
-  const sentinelRef = useRef(null);
-
-  const accountCreationYear = useMemo(() => {
-    const parsed = new Date(user?.created_at || "");
-    const year = parsed.getUTCFullYear();
-    return Number.isFinite(year) ? year : new Date().getUTCFullYear();
-  }, [user?.created_at]);
-
-  const journey = useMemo(() => {
-    const nowYear = new Date().getUTCFullYear();
-    const startYear = Math.min(accountCreationYear, nowYear);
-    const eventsByYear = new Map();
-    const reposCreatedByYear = new Map();
-    const reposPushedByYear = new Map();
-
-    for (const event of safeEvents) {
-      if (event?.type !== "PushEvent") continue;
-      const year = new Date(event?.created_at || "").getUTCFullYear();
-      if (!Number.isFinite(year)) continue;
-      const commitCount = Array.isArray(event?.payload?.commits) && event.payload.commits.length > 0
-        ? event.payload.commits.length
-        : 1;
-      eventsByYear.set(year, (eventsByYear.get(year) || 0) + commitCount);
-    }
-
-    for (const repo of safeRepos) {
-      const createdYear = new Date(repo?.created_at || "").getUTCFullYear();
-      if (Number.isFinite(createdYear)) {
-        const list = reposCreatedByYear.get(createdYear) || [];
-        list.push(repo);
-        reposCreatedByYear.set(createdYear, list);
-      }
-
-      const pushedYear = new Date(repo?.pushed_at || "").getUTCFullYear();
-      if (Number.isFinite(pushedYear)) {
-        reposPushedByYear.set(pushedYear, (reposPushedByYear.get(pushedYear) || 0) + 1);
-      }
-    }
-
-    const resolveTier = (score) => {
-      if (score <= 5) return { label: "ROOKIE", level: 1, color: "#888888" };
-      if (score <= 15) return { label: "DEVELOPING", level: 2, color: "#39ff14" };
-      if (score <= 35) return { label: "COMPETENT", level: 3, color: "#00dcff" };
-      if (score <= 80) return { label: "VETERAN", level: 4, color: "#b347ea" };
-      return { label: "ELITE", level: 5, color: "#FFD700" };
-    };
-
-    const years = [];
-    let previousLanguage = "Unknown";
-    let cumulativeStars = 0;
-    let cumulativeRepos = 0;
-    const followers = Number(user?.followers || 0);
-
-    for (let year = startYear; year <= nowYear; year += 1) {
-      const yearRepos = reposCreatedByYear.get(year) || [];
-      const commitsFromEvents = eventsByYear.get(year) || 0;
-      const commitsFromPushedRepos = reposPushedByYear.get(year) || 0;
-      const commits = commitsFromEvents > 0 ? commitsFromEvents : commitsFromPushedRepos;
-      const newRepos = yearRepos.length;
-      const starsEarned = yearRepos.reduce((sum, repo) => sum + Number(repo?.stargazers_count ?? repo?.stars ?? 0), 0);
-
-      const langCount = {};
-      for (const repo of yearRepos) {
-        if (!repo?.language) continue;
-        langCount[repo.language] = (langCount[repo.language] || 0) + 1;
-      }
-
-      const topLanguage = Object.keys(langCount).length > 0
-        ? Object.entries(langCount).sort((a, b) => b[1] - a[1])[0][0]
-        : previousLanguage;
-
-      previousLanguage = topLanguage || previousLanguage || "Unknown";
-      cumulativeStars += starsEarned;
-      cumulativeRepos += newRepos;
-
-      const yearScore = commits + newRepos * 3 + starsEarned * 0.5;
-      const tier = resolveTier(yearScore);
-      const yearsActive = (year - startYear) + 1;
-      const overallLevel = Math.min(
-        100,
-        Math.round((cumulativeStars * 0.3) + (cumulativeRepos * 2) + (yearsActive * 5) + (followers * 0.1)),
-      );
-
-      years.push({
-        year,
-        commits,
-        newRepos,
-        starsEarned,
-        topLanguage: previousLanguage || "Unknown",
-        totalStarsAtEndOfYear: cumulativeStars,
-        tier,
-        overallLevel,
-      });
-    }
-
-    const first = years[0] || null;
-    const last = years[years.length - 1] || null;
-    const peak = years.reduce((top, current) => (current.commits > top.commits ? current : top), years[0] || { year: nowYear, commits: 0 });
-    const firstCommits = Math.max(1, Number(first?.commits || 0));
-    const lastCommits = Math.max(0, Number(last?.commits || 0));
-    const velocityMultiplier = Math.max(1, Math.min(99, Number((lastCommits / firstCommits).toFixed(2))));
-
-    return {
-      years,
-      firstLanguage: first?.topLanguage || "Unknown",
-      currentLanguage: last?.topLanguage || first?.topLanguage || "Unknown",
-      peakYear: peak?.year || nowYear,
-      totalYearsActive: years.length,
-      velocityMultiplier,
-      firstYear: first?.year || startYear,
-      firstYearRepos: first?.newRepos || 0,
-      firstTierLabel: first?.tier?.label || "ROOKIE",
-      finalLevel: last?.overallLevel || 1,
-    };
-  }, [safeRepos, safeEvents, user?.followers, accountCreationYear]);
-
-  const fallbackNarration = useMemo(() => {
-    const yearNarrations = {};
-    for (const item of journey.years) {
-      yearNarrations[String(item.year)] = `${item.year} — ${item.commits} commits. ${item.newRepos} new repos.`;
-    }
-
-    return {
-      yearNarrations,
-      evolutionSummary: `${journey.totalYearsActive} years. ${journey.firstLanguage} to ${journey.currentLanguage}. ${journey.velocityMultiplier}x velocity increase.`,
-      heroTitle: `${journey.years[journey.years.length - 1]?.tier?.label || "ROOKIE"} DEVELOPER`,
-      originStory: `It started in ${journey.firstYear} with ${journey.firstYearRepos} repositories.`,
-    };
-  }, [journey]);
-
-  const cacheKey = `${user?.login || "unknown"}:${journey.firstYear}:${journey.years.length}`;
-  const narrationCacheRef = useRef(TIME_MACHINE_AI_CACHE.get(cacheKey) || null);
-
-  useEffect(() => {
-    if (narrationCacheRef.current) {
-      setNarrationData(narrationCacheRef.current);
-      return;
-    }
-
-    let cancelled = false;
-    aiPendingRef.current = true;
-    setChroniclesLoading(true);
-
-    const timeoutId = setTimeout(() => {
-      if (cancelled || !aiPendingRef.current) return;
-      setPlaceholderNarrations(true);
-      setChroniclesLoading(false);
-    }, 8000);
-
-    const run = async () => {
-      try {
-        const response = await fetch(`${API_URL}/api/time-machine-narration`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json", Accept: "application/json" },
-          body: JSON.stringify({
-            username: user?.login || "unknown",
-            yearData: journey.years,
-            firstLanguage: journey.firstLanguage,
-            currentLanguage: journey.currentLanguage,
-            velocityMultiplier: journey.velocityMultiplier,
-            totalYearsActive: journey.totalYearsActive,
-          }),
-        });
-
-        if (!response.ok) {
-          throw new Error("Time Machine narration failed");
-        }
-
-        const payload = await response.json();
-        const narration = payload?.narration || payload;
-        if (!narration || typeof narration !== "object") {
-          throw new Error("Invalid narration payload");
-        }
-
-        if (!cancelled) {
-          narrationCacheRef.current = narration;
-          TIME_MACHINE_AI_CACHE.set(cacheKey, narration);
-          setNarrationData(narration);
-          setPlaceholderNarrations(false);
-        }
-      } catch {
-        if (!cancelled) {
-          narrationCacheRef.current = fallbackNarration;
-          TIME_MACHINE_AI_CACHE.set(cacheKey, fallbackNarration);
-          setNarrationData(fallbackNarration);
-          setPlaceholderNarrations(false);
-        }
-      } finally {
-        if (!cancelled) {
-          aiPendingRef.current = false;
-          setChroniclesLoading(false);
-        }
-        clearTimeout(timeoutId);
-      }
-    };
-
-    run();
-
-    return () => {
-      cancelled = true;
-      clearTimeout(timeoutId);
-    };
-  }, [API_URL, cacheKey, fallbackNarration, journey.currentLanguage, journey.firstLanguage, journey.totalYearsActive, journey.velocityMultiplier, journey.years, user?.login]);
-
-  const openingOriginStory = narrationData?.originStory || fallbackNarration.originStory;
-  const heroTitle = narrationData?.heroTitle || fallbackNarration.heroTitle;
-  const evolutionSummary = narrationData?.evolutionSummary || fallbackNarration.evolutionSummary;
-  const narrationByYear = useMemo(() => {
-    const mapped = {};
-    for (const item of journey.years) {
-      const key = String(item.year);
-      if (journey.totalYearsActive === 1) {
-        mapped[key] = "YOUR JOURNEY HAS BEGUN";
-      } else if (placeholderNarrations && aiPendingRef.current && !narrationData?.yearNarrations?.[key]) {
-        mapped[key] = "AI NARRATION LOADING...";
-      } else {
-        mapped[key] = narrationData?.yearNarrations?.[key] || fallbackNarration.yearNarrations[key] || `${item.year} — ${item.commits} commits. ${item.newRepos} new repos.`;
-      }
-    }
-    return mapped;
-  }, [journey.years, journey.totalYearsActive, placeholderNarrations, narrationData, fallbackNarration.yearNarrations]);
-
-  useEffect(() => {
-    const originalOverflow = document.body.style.overflow;
-    document.body.style.overflow = "hidden";
-    return () => {
-      document.body.style.overflow = originalOverflow;
-    };
-  }, []);
-
-  useEffect(() => {
-    if (showTimeline) return;
-    const t1 = setTimeout(() => setSequenceStep(1), 600);
-    const t2 = setTimeout(() => setSequenceStep(2), 1800);
-    return () => {
-      clearTimeout(t1);
-      clearTimeout(t2);
-    };
-  }, [showTimeline]);
-
-  useEffect(() => {
-    if (showTimeline || sequenceStep !== 2) return;
-
-    if (journey.totalYearsActive <= 1) {
-      const t = setTimeout(() => setSequenceStep(3), 200);
-      return () => clearTimeout(t);
-    }
-
-    setTypedOrigin("");
-    let index = 0;
-    const text = openingOriginStory || "";
-    const timer = setInterval(() => {
-      index += 1;
-      setTypedOrigin(text.slice(0, index));
-      if (index >= text.length) {
-        clearInterval(timer);
-        setTimeout(() => setSequenceStep(3), 400);
-      }
-    }, 28);
-
-    return () => clearInterval(timer);
-  }, [showTimeline, sequenceStep, journey.totalYearsActive, openingOriginStory]);
-
-  useEffect(() => {
-    if (showTimeline || sequenceStep !== 3) return;
-    const t = setTimeout(() => setSequenceStep(4), 500);
-    return () => clearTimeout(t);
-  }, [showTimeline, sequenceStep]);
-
-  useEffect(() => {
-    if (showTimeline || sequenceStep < 4) return;
-    const onKeyDown = (event) => {
-      if (event.code !== "Space") return;
-      event.preventDefault();
-      setShowTimeline(true);
-    };
-    window.addEventListener("keydown", onKeyDown);
-    return () => window.removeEventListener("keydown", onKeyDown);
-  }, [showTimeline, sequenceStep]);
-
-  const startNarrationTyping = (year, text, force = false) => {
-    const key = String(year);
-    if (!text) return;
-    if (!force && narrationSourceRef.current[key] === text) return;
-
-    if (narrationIntervalsRef.current[key]) {
-      clearInterval(narrationIntervalsRef.current[key]);
-      delete narrationIntervalsRef.current[key];
-    }
-
-    narrationSourceRef.current[key] = text;
-    setTypedYearNarrations((prev) => ({ ...prev, [key]: "" }));
-    let index = 0;
-    narrationIntervalsRef.current[key] = setInterval(() => {
-      index += 1;
-      setTypedYearNarrations((prev) => ({ ...prev, [key]: text.slice(0, index) }));
-      if (index >= text.length) {
-        clearInterval(narrationIntervalsRef.current[key]);
-        delete narrationIntervalsRef.current[key];
-      }
-    }, 20);
-  };
-
-  const triggerLevelUpBurst = (year, color) => {
-    const nodeEl = nodeRefs.current.get(year);
-    if (!nodeEl) return;
-    const rect = nodeEl.getBoundingClientRect();
-    const x = rect.left + (rect.width / 2);
-    const y = rect.top + (rect.height / 2);
-    const burstId = `${year}-${Date.now()}`;
-
-    const particlesToAdd = Array.from({ length: 8 }).map((_, index) => {
-      const angle = (Math.PI / 4) * index;
-      const distance = 30 + (index % 3) * 14;
-      return {
-        id: `${burstId}-${index}`,
-        x,
-        y,
-        dx: Math.cos(angle) * distance,
-        dy: Math.sin(angle) * distance,
-        color: index % 2 === 0 ? color : "#ffffff",
-      };
-    });
-
-    setParticles((prev) => [...prev, ...particlesToAdd]);
-    setLevelTexts((prev) => [...prev, { id: burstId, x, y, color, text: "+LEVEL UP" }]);
-
-    setTimeout(() => {
-      setParticles((prev) => prev.filter((item) => !item.id.startsWith(burstId)));
-      setLevelTexts((prev) => prev.filter((item) => item.id !== burstId));
-    }, 1000);
-  };
-
-  useEffect(() => {
-    if (!showTimeline) return;
-
-    const yearIndexMap = new Map(journey.years.map((item, index) => [item.year, index]));
-    const observer = new IntersectionObserver(
-      (entries) => {
-        for (const entry of entries) {
-          const year = Number(entry.target.getAttribute("data-year"));
-          if (!Number.isFinite(year)) continue;
-          const inView = entry.isIntersecting && entry.intersectionRatio >= 0.3;
-
-          setInViewYears((prev) => (prev[year] === inView ? prev : { ...prev, [year]: inView }));
-
-          if (!inView) continue;
-
-          setRevealedYears((prev) => (prev[year] ? prev : { ...prev, [year]: true }));
-          startNarrationTyping(year, narrationByYear[String(year)] || "");
-
-          const index = yearIndexMap.get(year);
-          if (index === undefined || index <= 0 || levelUpTriggeredRef.current.has(year)) continue;
-
-          const currentTier = journey.years[index]?.tier?.level || 0;
-          const previousTier = journey.years[index - 1]?.tier?.level || 0;
-          if (currentTier > previousTier) {
-            levelUpTriggeredRef.current.add(year);
-            triggerLevelUpBurst(year, journey.years[index].tier.color);
-          }
-        }
-      },
-      { threshold: [0.3] },
-    );
-
-    for (const item of journey.years) {
-      const target = cardRefs.current.get(item.year);
-      if (target) observer.observe(target);
-    }
-
-    return () => observer.disconnect();
-  }, [showTimeline, journey.years, narrationByYear]);
-
-  useEffect(() => {
-    if (!showTimeline) return;
-    for (const item of journey.years) {
-      const year = String(item.year);
-      if (!revealedYears[year] && !revealedYears[item.year]) continue;
-      const targetText = narrationByYear[year] || "";
-      if (targetText && narrationSourceRef.current[year] !== targetText) {
-        startNarrationTyping(item.year, targetText, true);
-      }
-    }
-  }, [showTimeline, narrationByYear, revealedYears, journey.years]);
-
-  useEffect(() => {
-    if (!showTimeline) return;
-    const sentinel = sentinelRef.current;
-    if (!sentinel) return;
-
-    const observer = new IntersectionObserver(
-      (entries) => {
-        for (const entry of entries) {
-          if (entry.isIntersecting) {
-            setShowEvolutionCard(true);
-          }
-        }
-      },
-      { threshold: [0.3] },
-    );
-
-    observer.observe(sentinel);
-    return () => observer.disconnect();
-  }, [showTimeline]);
-
-  useEffect(() => {
-    return () => {
-      Object.values(narrationIntervalsRef.current).forEach((timer) => clearInterval(timer));
-      narrationIntervalsRef.current = {};
-      if (closeTimerRef.current) {
-        clearTimeout(closeTimerRef.current);
-        closeTimerRef.current = null;
-      }
-    };
-  }, []);
-
-  const handleBegin = () => {
-    if (sequenceStep < 4) return;
-    setShowTimeline(true);
-  };
-
-  const handleClose = () => {
-    if (isClosing) return;
-    setIsClosing(true);
-    setShowReturning(true);
-    closeTimerRef.current = setTimeout(() => {
-      onClose?.();
-    }, 600);
-  };
-
-  const handleShareJourney = async () => {
-    const shareText = `My dev journey: ${journey.totalYearsActive} yrs · Started as ${journey.firstTierLabel} · Now LEVEL ${journey.finalLevel} ${heroTitle} · gitdna.vercel.app`;
-    try {
-      if (navigator?.clipboard?.writeText) {
-        await navigator.clipboard.writeText(shareText);
-      }
-      setShareCopied(true);
-      setTimeout(() => setShareCopied(false), 1400);
-    } catch {
-      // Ignore clipboard failures.
-    }
-  };
-
-  const deterministicBars = (year, commits) => {
-    const seed = Math.max(1, commits || 1);
-    return Array.from({ length: 7 }).map((_, index) => {
-      const n = Math.abs(Math.sin((seed * (index + 1)) + year * 0.37 + index * 2.1));
-      return 4 + Math.round(n * 14);
-    });
-  };
-
-  if (typeof document === "undefined") return null;
-
-  return createPortal(
-    <div className={`tm-overlay${showTimeline ? " tm-has-grid" : ""}${isClosing ? " tm-overlay-closing" : ""}`}>
-      <style>{TIME_MACHINE_PORTAL_STYLES}</style>
-
-      {!showTimeline ? (
-        <div className={`tm-open-shell tm-step-${sequenceStep}`} onClick={handleBegin}>
-          {chroniclesLoading && !placeholderNarrations && <div className="tm-chronicles">LOADING CHRONICLES...</div>}
-          {sequenceStep === 0 && <div className="tm-scan-line" />}
-
-          {sequenceStep >= 1 && (
-            <>
-              <div className="tm-avatar-wrap">
-                {user?.avatar_url ? <img src={user.avatar_url} alt="" /> : null}
-              </div>
-              <div className="tm-open-username">@{user?.login || "unknown"}</div>
-            </>
-          )}
-
-          {sequenceStep >= 2 && journey.totalYearsActive > 1 && (
-            <div className="tm-origin">
-              {typedOrigin}
-              {typedOrigin.length < (openingOriginStory || "").length && <span className="tm-cursor"> |</span>}
-            </div>
-          )}
-
-          {sequenceStep >= 3 && (
-            <>
-              <div className="tm-divider-wrap">
-                <span className="tm-divider">━━━━━━━━━━━━━━━━━━━━━━━</span>
-              </div>
-              <div className="tm-hero">{heroTitle}</div>
-            </>
-          )}
-
-          {sequenceStep >= 4 && (
-            <>
-              <button className="tm-skip" onClick={(event) => { event.stopPropagation(); setShowTimeline(true); }}>SKIP ›</button>
-              <div className="tm-begin-hint">PRESS SPACE OR CLICK TO BEGIN JOURNEY</div>
-            </>
-          )}
-        </div>
-      ) : (
-        <div className="tm-main">
-          <button className="tm-exit" onClick={handleClose}>✕ EXIT</button>
-          <div className="tm-scroll">
-            <div className="tm-head">
-              <div className="tm-head-kicker">// DEVELOPMENT JOURNEY</div>
-              <div className="tm-head-title">{journey.totalYearsActive} YEARS IN THE MAKING</div>
-              <div className="tm-head-byline">
-                {user?.avatar_url ? <img src={user.avatar_url} alt="" /> : null}
-                <span>@{user?.login || "unknown"}</span>
-              </div>
-            </div>
-
-            <div className="tm-track">
-              <div className="tm-spine" />
-
-              {journey.years.map((item, index) => {
-                const isLeft = index % 2 === 1;
-                const isPeak = item.year === journey.peakYear;
-                const isCurrent = index === journey.years.length - 1;
-                const active = Boolean(inViewYears[item.year] || hoveredYear === item.year);
-                const visible = Boolean(revealedYears[item.year]);
-                const bars = deterministicBars(item.year, item.commits);
-                const levelWidth = `${Math.max(0, Math.min(item.overallLevel, 100))}%`;
-                const tierGlow = `${item.tier.color}55`;
-
-                return (
-                  <div key={item.year} className={`tm-row ${isLeft ? "tm-left" : "tm-right"}`}>
-                    {index > 0 && <div className="tm-chevron">▼</div>}
-                    <div className="tm-node-wrap">
-                      {isCurrent && <div className="tm-now">▶ NOW</div>}
-                      <div
-                        ref={(node) => {
-                          if (node) nodeRefs.current.set(item.year, node);
-                          else nodeRefs.current.delete(item.year);
-                        }}
-                        className={`tm-node${active ? " tm-node-active" : ""}${isCurrent ? " tm-node-current" : ""}`}
-                        style={{ "--tier-color": item.tier.color }}
-                      >
-                        <svg width={isPeak ? 40 : 28} height={isPeak ? 44 : 32} viewBox="0 0 28 32" aria-hidden="true">
-                          <polygon points="14,1 26,8 26,24 14,31 2,24 2,8" fill="rgba(4,14,26,0.95)" stroke={item.tier.color} strokeWidth="1.5" />
-                        </svg>
-                        <div className="tm-node-level">{item.commits > 0 ? item.tier.level : "•"}</div>
-                        {active && <div className="tm-node-ripple" />}
-                      </div>
-                    </div>
-
-                    <div
-                      ref={(node) => {
-                        if (node) cardRefs.current.set(item.year, node);
-                        else cardRefs.current.delete(item.year);
-                      }}
-                      data-year={item.year}
-                      className={`tm-card${visible ? " tm-visible" : ""}${isPeak ? " tm-peak" : ""}`}
-                      style={{ "--tier-color": item.tier.color, "--tier-soft": `${item.tier.color}18`, "--tier-mid": `${item.tier.color}55`, "--tier-glow": tierGlow, "--lvl": levelWidth }}
-                      onMouseEnter={() => setHoveredYear(item.year)}
-                      onMouseLeave={() => setHoveredYear(null)}
-                    >
-                      {isPeak && <div className="tm-peak-banner">⚡ PEAK PERFORMANCE YEAR</div>}
-                      <div className="tm-card-head">
-                        <div className={`tm-year${isPeak ? " tm-year-peak" : ""}`}>{item.year}</div>
-                        <span className="tm-tier">{item.tier.label}</span>
-                      </div>
-
-                      <div className="tm-level-row">
-                        <div className="tm-level-track">
-                          <div className={`tm-level-fill${isPeak ? " tm-peak" : ""}`} />
-                        </div>
-                        <div className="tm-level-label">LVL {item.overallLevel}</div>
-                      </div>
-
-                      <div className="tm-lang">
-                        <span className="tm-dot" style={{ background: getLangColor(item.topLanguage) }} />
-                        <span>{item.topLanguage || "Unknown"}</span>
-                      </div>
-
-                      <div className="tm-stats">
-                        {item.commits > 0
-                          ? `${item.commits} commits · ${item.newRepos} repos · ${item.starsEarned}⭐`
-                          : `~${item.newRepos} active repos`}
-                      </div>
-
-                      <div className="tm-bars">
-                        {bars.map((height, barIndex) => (
-                          <span key={`${item.year}-bar-${barIndex}`} style={{ height, background: `${item.tier.color}66` }} />
-                        ))}
-                      </div>
-
-                      <div className="tm-sep" />
-                      <div className="tm-narration">{typedYearNarrations[String(item.year)] || ""}</div>
-
-                      {isCurrent && (
-                        <>
-                          <div className="tm-active-badge">
-                            <span className="tm-active-badge-dot" />
-                            ACTIVE DEVELOPER
-                          </div>
-                          <div className="tm-current-status">
-                            <div className="tm-current-level">LEVEL {item.overallLevel}</div>
-                            <div className="tm-current-sub">OVERALL DEVELOPER RANK</div>
-                          </div>
-                        </>
-                      )}
-                    </div>
-                  </div>
-                );
-              })}
-
-              <div ref={sentinelRef} className="tm-sentinel" />
-
-              {showEvolutionCard && (
-                <div className="tm-final">
-                  <div className="tm-final-kicker tm-stagger" style={{ animationDelay: "0ms" }}>// EVOLUTION ANALYSIS</div>
-                  <div className="tm-final-divider tm-stagger" style={{ animationDelay: "150ms" }} />
-                  <div className="tm-final-title tm-stagger" style={{ animationDelay: "300ms" }}>{heroTitle}</div>
-                  <div className="tm-final-summary tm-stagger" style={{ animationDelay: "450ms" }}>{evolutionSummary}</div>
-
-                  <div className="tm-chip-row tm-stagger" style={{ animationDelay: "600ms" }}>
-                    <div className="tm-chip">STARTED: {journey.firstYear}</div>
-                    <div className="tm-chip">PEAK: {journey.peakYear}</div>
-                    <div className="tm-chip">LEVEL: {journey.finalLevel}</div>
-                  </div>
-
-                  <div className="tm-journey tm-stagger" style={{ animationDelay: "750ms" }}>
-                    <div className="tm-journey-track">
-                      {journey.years.map((item, index) => (
-                        <div
-                          key={`segment-${item.year}`}
-                          className="tm-journey-seg"
-                          style={{ background: item.tier.color, animationDelay: `${index * 100}ms` }}
-                          onMouseEnter={() => setHoveredSegment(item.year)}
-                          onMouseLeave={() => setHoveredSegment(null)}
-                          title={String(item.year)}
-                        />
-                      ))}
-                    </div>
-                    <div className="tm-journey-tip">{hoveredSegment ? `YEAR ${hoveredSegment}` : "HOVER SEGMENTS FOR YEAR"}</div>
-                  </div>
-
-                  <div className="tm-final-actions tm-stagger" style={{ animationDelay: "900ms" }}>
-                    <button className="tm-btn" onClick={handleShareJourney}>↗ SHARE JOURNEY</button>
-                    <button className="tm-btn tm-close" onClick={handleClose}>✕ CLOSE TIME MACHINE</button>
-                  </div>
-                  {shareCopied && <div className="tm-journey-tip">JOURNEY LINK COPIED</div>}
-                </div>
-              )}
-            </div>
-          </div>
-        </div>
-      )}
-
-      <div className="tm-particles">
-        {particles.map((particle) => (
-          <div
-            key={particle.id}
-            className="tm-particle"
-            style={{ left: particle.x, top: particle.y, background: particle.color, "--dx": `${particle.dx}px`, "--dy": `${particle.dy}px` }}
-          />
-        ))}
-        {levelTexts.map((entry) => (
-          <div key={entry.id} className="tm-level-up-text" style={{ left: entry.x, top: entry.y, color: entry.color }}>{entry.text}</div>
-        ))}
-      </div>
-
-      {showReturning && <div className="tm-returning">RETURNING TO PRESENT...</div>}
-    </div>,
-    document.body,
-  );
-}
-
-function GitMap({ user, avgCommitHour, totalStars, topLang, accountAge, recentCommits = 0, onClose }) {
-  const API_URL = (import.meta.env.VITE_API_URL || "http://localhost:8000").replace(/\/$/, "");
-  const geocodeRef = useRef(new Map());
-  const insightRef = useRef(new Map());
-  const closeTimeoutRef = useRef(null);
-  const [sequenceStep, setSequenceStep] = useState(0);
-  const [showMainMap, setShowMainMap] = useState(false);
-  const [isClosing, setIsClosing] = useState(false);
-  const [showReturning, setShowReturning] = useState(false);
-  const [geocodeReady, setGeocodeReady] = useState(false);
-  const [scanTimeoutReached, setScanTimeoutReached] = useState(false);
-  const [geo, setGeo] = useState({
-    lat: 20,
-    lon: 0,
-    city: user?.location || "UNKNOWN",
-    country: "Unknown",
-    countryCode: "DEFAULT",
-    displayName: user?.location || "Unknown location",
-  });
-  const [typedPlace, setTypedPlace] = useState("");
-  const [typedCoords, setTypedCoords] = useState("");
-  const [typedSignal, setTypedSignal] = useState("");
-  const [cartographyLoading, setCartographyLoading] = useState(true);
-  const [cartographyReady, setCartographyReady] = useState(false);
-  const [cartographyFailed, setCartographyFailed] = useState(false);
-  const [countries, setCountries] = useState([]);
-  const [countryNames, setCountryNames] = useState(new Map());
-  const [mapEntered, setMapEntered] = useState(false);
-  const [hoveredHub, setHoveredHub] = useState("");
-  const [insight, setInsight] = useState("");
-  const [insightLoading, setInsightLoading] = useState(false);
-  const [shareCopied, setShareCopied] = useState(false);
-  const [localTimeNow, setLocalTimeNow] = useState("");
-  const [isMobile, setIsMobile] = useState(() => (typeof window !== "undefined" ? window.innerWidth < 600 : false));
-  const [animatedDevCount, setAnimatedDevCount] = useState("0");
-  const [countryTooltip, setCountryTooltip] = useState(null);
-
-  const GITMAP_STYLES = `
-  .gm-overlay{position:fixed;inset:0;z-index:9999;background:#000;overflow:hidden;color:#dff7ff}
-  .gm-overlay.closing{animation:gm-fade-out .4s ease forwards}
-  .gm-grid{position:absolute;inset:0;background-image:linear-gradient(rgba(0,220,255,.08) 1px,transparent 1px),linear-gradient(90deg,rgba(0,220,255,.08) 1px,transparent 1px);background-size:42px 42px;opacity:.18;pointer-events:none}
-  .gm-open{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:24px;text-align:center;cursor:default;transition:background .8s ease}
-  .gm-open.step-0{background:#000}
-  .gm-open.step-1,.gm-open.step-2,.gm-open.step-3{background:#060b12}
-  .gm-scan-line{position:absolute;left:0;right:0;height:2px;background:linear-gradient(90deg,transparent,#ffffff,transparent);animation:gm-scan-down .5s linear forwards}
-  .gm-open-world{position:absolute;inset:0;opacity:0;animation:gm-world-fade .4s ease forwards;pointer-events:none}
-  .gm-open-world path{fill:none;stroke:rgba(255,255,255,.24);stroke-width:1.2}
-  .gm-kicker{font-family:'Share Tech Mono',monospace;font-size:.65rem;letter-spacing:.2em;color:rgba(0,220,255,.45);margin-bottom:14px}
-  .gm-scan-bars{display:flex;flex-direction:column;gap:6px;align-items:center}
-  .gm-scan-bars span{width:120px;height:2px;background:rgba(0,220,255,.3);display:block;animation:gm-bars 1.2s linear infinite}
-  .gm-scan-bars span:nth-child(2){animation-delay:.2s}
-  .gm-scan-bars span:nth-child(3){animation-delay:.4s}
-  .gm-acquired{font-family:'Orbitron',monospace;font-size:.9rem;color:#39ff14;letter-spacing:.12em;margin-bottom:12px}
-  .gm-place{font-family:'Orbitron',monospace;font-size:1.8rem;letter-spacing:.1em;color:#fff;line-height:1.2;min-height:2.2em}
-  .gm-coords{font-family:'Share Tech Mono',monospace;font-size:.85rem;color:rgba(0,220,255,.56);letter-spacing:.12em;min-height:1.4em;margin-top:4px}
-  .gm-signal-line{font-family:'Share Tech Mono',monospace;font-size:.68rem;color:rgba(0,220,255,.5);letter-spacing:.14em;margin-top:16px;min-height:1.2em}
-  .gm-signal-track{width:220px;height:4px;border-radius:999px;background:rgba(255,255,255,.08);margin-top:8px;overflow:hidden}
-  .gm-signal-fill{height:100%;border-radius:999px;transition:width .8s ease}
-  .gm-hint{position:absolute;left:50%;bottom:26px;transform:translateX(-50%);font-family:'Share Tech Mono',monospace;font-size:.63rem;letter-spacing:.2em;color:rgba(0,220,255,.5);animation:gm-pulse 1.25s ease-in-out infinite}
-  .gm-skip{position:absolute;top:14px;right:14px;border:1px solid rgba(0,220,255,.3);background:transparent;color:rgba(0,220,255,.6);font-family:'Share Tech Mono',monospace;font-size:.58rem;letter-spacing:.1em;padding:6px 8px;cursor:pointer}
-  .gm-main{position:absolute;inset:0;display:flex;flex-direction:column;background:#060b12}
-  .gm-topbar{height:48px;display:flex;align-items:center;justify-content:space-between;padding:0 16px;border-bottom:1px solid rgba(0,220,255,.14);background:rgba(4,14,26,.94);z-index:2}
-  .gm-title{font-family:'Orbitron',monospace;font-size:.72rem;letter-spacing:.14em;color:rgba(0,220,255,.75)}
-  .gm-exit{border:1px solid rgba(255,120,120,.4);background:transparent;color:#ff9b9b;font-family:'Orbitron',monospace;font-size:.62rem;letter-spacing:.08em;padding:7px 10px;cursor:pointer}
-  .gm-map-wrap{position:relative;height:60vh;min-height:260px;border-bottom:1px solid rgba(0,220,255,.12);overflow:hidden}
-  .gm-map-svg{width:100%;height:100%;display:block}
-  .gm-map-scan{position:absolute;left:0;right:0;height:1px;background:linear-gradient(90deg,transparent,rgba(0,220,255,.15),transparent);animation:gm-map-scan 4s linear infinite;pointer-events:none}
-  .gm-map-layer{transform-box:fill-box;transition:transform 1.2s cubic-bezier(.2,.8,.2,1),opacity .6s ease}
-  .gm-map-tooltip{position:fixed;z-index:6;padding:6px 8px;border:1px solid rgba(0,220,255,.3);background:rgba(4,14,26,.96);font-family:'Share Tech Mono',monospace;font-size:11px;color:#00dcff;pointer-events:none;white-space:nowrap}
-  .gm-country{fill:rgba(0,220,255,.04);stroke:rgba(0,220,255,.15);stroke-width:.5;transition:fill .2s ease}
-  .gm-country:hover{fill:rgba(0,220,255,.18)}
-  .gm-country-active{fill:rgba(0,220,255,.25)!important;stroke:rgba(0,220,255,.6)!important;stroke-width:1.5}
-  .gm-country-flow{fill:none;stroke:rgba(0,220,255,.3);stroke-width:1.2;stroke-dasharray:4 8;animation:gm-dash 2s linear infinite}
-  .gm-ripple{fill:none;stroke:#00dcff;stroke-width:1;animation:gm-ripple 2.4s ease-out infinite}
-  .gm-ripple.r2{animation-delay:.8s}
-  .gm-ripple.r3{animation-delay:1.6s}
-  .gm-beacon-dot{fill:#00dcff;filter:drop-shadow(0 0 6px #00dcff);animation:gm-dot-pulse 1.5s ease-in-out infinite}
-  .gm-beacon-label{font-family:'Share Tech Mono',monospace;font-size:10px;fill:#00dcff;filter:drop-shadow(0 0 8px rgba(0,220,255,.8))}
-  .gm-panel{position:relative;background:rgba(4,14,26,.95);border-top:1px solid rgba(0,220,255,.12);padding:20px 20px 120px;overflow:auto;flex:1}
-  .gm-grid3{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px}
-  .gm-card{border:1px solid rgba(0,220,255,.2);border-radius:8px;background:rgba(7,18,30,.88);padding:14px 14px 12px}
-  .gm-card-label{font-family:'Share Tech Mono',monospace;font-size:.6rem;letter-spacing:.16em;color:rgba(0,220,255,.45);margin-bottom:10px}
-  .gm-city{font-family:'Orbitron',monospace;font-size:1.2rem;color:#fff;letter-spacing:.06em}
-  .gm-country{font-family:'Share Tech Mono',monospace;font-size:.74rem;color:rgba(0,220,255,.6)}
-  .gm-small{font-family:'Share Tech Mono',monospace;font-size:.62rem;color:rgba(200,232,255,.6);letter-spacing:.08em}
-  .gm-row{display:flex;justify-content:space-between;align-items:center;gap:8px;margin-top:8px}
-  .gm-signal-chip{font-family:'Orbitron',monospace;font-size:1.4rem;letter-spacing:.05em}
-  .gm-density{display:flex;gap:3px;align-items:flex-end;height:16px}
-  .gm-density span{width:4px;border-radius:1px;background:rgba(255,255,255,.15)}
-  .gm-fact{margin-top:10px;font-family:'Rajdhani',sans-serif;font-size:.9rem;line-height:1.45;color:rgba(200,232,255,.72)}
-  .gm-table{display:flex;flex-direction:column;gap:8px;margin-top:2px}
-  .gm-tr{display:grid;grid-template-columns:1fr auto auto auto auto;gap:8px;align-items:center;font-family:'Share Tech Mono',monospace;font-size:.58rem;color:rgba(200,232,255,.76)}
-  .gm-chip-you{border:1px solid rgba(0,220,255,.4);padding:2px 6px;border-radius:999px;color:#00dcff}
-  .gm-chip-region{border:1px solid rgba(255,255,255,.22);padding:2px 6px;border-radius:999px;color:rgba(220,235,255,.7)}
-  .gm-insight{margin-top:12px;font-family:'Share Tech Mono',monospace;font-size:.64rem;line-height:1.55;color:rgba(200,232,255,.64);font-style:italic}
-  .gm-broadcast{margin-top:14px;border:1px solid rgba(0,220,255,.2);border-radius:8px;background:rgba(6,16,28,.9);padding:16px}
-  .gm-broadcast-line{font-family:'Share Tech Mono',monospace;font-size:.6rem;color:rgba(0,220,255,.45);letter-spacing:.16em;margin-bottom:10px}
-  .gm-broadcast-visual{width:100%;height:170px;display:block}
-  .gm-broadcast-path{fill:none;stroke:rgba(0,220,255,.2);stroke-width:2}
-  .gm-arc{fill:none;stroke:rgba(0,220,255,.28);stroke-width:1.3;stroke-dasharray:4 6;animation:gm-dash 2s linear infinite}
-  .gm-link{fill:none;stroke:rgba(0,220,255,.2);stroke-width:1;stroke-dasharray:3 5;animation:gm-dash 1.6s linear infinite}
-  .gm-hub-dot{fill:#00dcff}
-  .gm-hub-dot.active{fill:#ffd700;filter:drop-shadow(0 0 6px rgba(255,215,0,.85))}
-  .gm-hub-name{font-family:'Share Tech Mono',monospace;font-size:8px;fill:rgba(0,220,255,.62)}
-  .gm-broadcast-copy{margin-top:8px;font-family:'Share Tech Mono',monospace;font-size:.64rem;color:rgba(0,220,255,.62);letter-spacing:.12em;text-align:center}
-  .gm-footer{position:fixed;left:0;right:0;bottom:0;display:flex;justify-content:space-between;align-items:center;gap:10px;background:rgba(4,14,26,.98);border-top:1px solid rgba(0,220,255,.1);padding:12px 24px;z-index:8}
-  .gm-footer-left{font-family:'Share Tech Mono',monospace;font-size:.56rem;letter-spacing:.07em;color:rgba(0,220,255,.55)}
-  .gm-footer-actions{display:flex;gap:8px;flex-wrap:wrap;justify-content:flex-end}
-  .gm-btn{background:linear-gradient(135deg,rgba(0,220,255,.12),rgba(179,71,234,.12));border:1px solid rgba(0,220,255,.4);color:#00dcff;font-family:'Orbitron',monospace;font-size:.62rem;letter-spacing:.1em;padding:8px 10px;cursor:pointer}
-  .gm-btn.close{border-color:rgba(255,120,120,.4);color:#ff9b9b;background:linear-gradient(135deg,rgba(255,70,70,.15),rgba(80,20,20,.3))}
-  .gm-returning{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;background:rgba(0,0,0,.82);font-family:'Share Tech Mono',monospace;font-size:.75rem;letter-spacing:.2em;color:#fff;animation:gm-return-fade .6s ease forwards;pointer-events:none}
-
-  @media (max-width:900px){.gm-grid3{grid-template-columns:1fr;}}
-  @media (max-width:600px){
-    .gm-map-wrap{height:45vw;min-height:200px}
-    .gm-broadcast-visual{display:none}
-    .gm-footer{padding:10px 12px;flex-direction:column;align-items:flex-start}
-    .gm-footer-actions{width:100%;justify-content:flex-start}
-    .gm-place{font-size:clamp(1.1rem,6vw,1.45rem)}
-  }
-
-  @keyframes gm-scan-down{from{top:0}to{top:100%}}
-  @keyframes gm-world-fade{from{opacity:0}to{opacity:.06}}
-  @keyframes gm-bars{0%{transform:scaleX(.1);opacity:.25}50%{transform:scaleX(1);opacity:1}100%{transform:scaleX(.1);opacity:.25}}
-  @keyframes gm-pulse{0%,100%{opacity:.3}50%{opacity:.8}}
-  @keyframes gm-map-scan{0%{top:0}100%{top:100%}}
-  @keyframes gm-dash{from{stroke-dashoffset:0}to{stroke-dashoffset:-42}}
-  @keyframes gm-ripple{0%{r:4;opacity:.8;stroke-width:2}100%{r:50;opacity:0;stroke-width:.5}}
-  @keyframes gm-dot-pulse{0%,100%{transform:scale(1)}50%{transform:scale(1.4)}}
-  @keyframes gm-fade-out{0%{opacity:1}100%{opacity:0;background:#000}}
-  @keyframes gm-return-fade{0%{opacity:0}30%{opacity:1}100%{opacity:0}}
-  `;
-
-  const resolveFallbackGeo = (locationText) => {
-    const lower = String(locationText || "").toLowerCase();
-    for (const key of Object.keys(CITY_COORDS)) {
-      if (lower.includes(key)) {
-        const [lat, lon] = CITY_COORDS[key];
-        return {
-          lat,
-          lon,
-          displayName: locationText || key,
-          country: "Unknown",
-          countryCode: "DEFAULT",
-          city: key.replace(/\b\w/g, (char) => char.toUpperCase()),
-        };
-      }
-    }
-    return {
-      lat: 20,
-      lon: 0,
-      displayName: locationText || "Unknown location",
-      country: "Unknown",
-      countryCode: "DEFAULT",
-      city: (locationText || "Unknown").toString(),
-    };
-  };
-
-  const geocodeLocation = async () => {
-    const userKey = String(user?.login || "unknown").toLowerCase();
-    const locationText = String(user?.location || "").trim();
-    if (!locationText) return resolveFallbackGeo("Unknown");
-
-    if (geocodeRef.current.has(userKey)) return geocodeRef.current.get(userKey);
-    if (GITMAP_GEOCODE_CACHE.has(userKey)) {
-      const cached = GITMAP_GEOCODE_CACHE.get(userKey);
-      geocodeRef.current.set(userKey, cached);
-      return cached;
-    }
-
-    let resolved = null;
-    try {
-      const endpoint = `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(locationText)}&format=json&limit=1&addressdetails=1`;
-      const response = await fetch(endpoint, {
-        headers: {
-          "User-Agent": "GitDNA-App/1.0",
-          Accept: "application/json",
-        },
-      });
-      if (response.ok) {
-        const json = await response.json();
-        const row = Array.isArray(json) ? json[0] : null;
-        if (row && row.lat && row.lon) {
-          const address = row.address || {};
-          resolved = {
-            lat: Number.parseFloat(row.lat),
-            lon: Number.parseFloat(row.lon),
-            displayName: row.display_name || locationText,
-            country: address.country || "Unknown",
-            countryCode: String(address.country_code || "DEFAULT").toUpperCase(),
-            city: address.city || address.town || address.state || locationText,
-          };
-        }
-      }
-    } catch {
-      // Continue to fallback coordinates.
-    }
-
-    if (!resolved || !Number.isFinite(resolved.lat) || !Number.isFinite(resolved.lon)) {
-      resolved = resolveFallbackGeo(locationText);
-    }
-
-    geocodeRef.current.set(userKey, resolved);
-    GITMAP_GEOCODE_CACHE.set(userKey, resolved);
-    return resolved;
-  };
-
-  const countryStats = COUNTRY_DEV_DATA[String(geo?.countryCode || "DEFAULT").toUpperCase()] || COUNTRY_DEV_DATA.DEFAULT;
-  const timezone = inferTimezone(geo?.countryCode);
-
-  const signalColor = countryStats.signal > 80 ? "#39ff14" : countryStats.signal > 60 ? "#00dcff" : "#ffb300";
-  const rankColor = typeof countryStats.rank === "number"
-    ? (countryStats.rank <= 3 ? "#FFD700" : countryStats.rank <= 7 ? "#b347ea" : "#00dcff")
-    : "#00dcff";
-
-  const formatCardinal = (lat, lon) => {
-    const latText = `${Math.abs(lat).toFixed(4)}°${lat >= 0 ? "N" : "S"}`;
-    const lonText = `${Math.abs(lon).toFixed(4)}°${lon >= 0 ? "E" : "W"}`;
-    return `${latText}  ${lonText}`;
-  };
-
-  const coordsText = formatCardinal(geo.lat, geo.lon);
-
-  const parseCompactCount = (value) => {
-    const text = String(value || "").trim().toUpperCase();
-    if (!text || text === "UNKNOWN") return null;
-    if (text.endsWith("M")) return Number.parseFloat(text.slice(0, -1)) * 1_000_000;
-    if (text.endsWith("K")) return Number.parseFloat(text.slice(0, -1)) * 1_000;
-    const parsed = Number.parseFloat(text.replace(/,/g, ""));
-    return Number.isFinite(parsed) ? parsed : null;
-  };
-
-  const formatCompactCount = (value) => {
-    if (!Number.isFinite(value)) return "Unknown";
-    if (value >= 1_000_000) return `${(value / 1_000_000).toFixed(1)}M`;
-    if (value >= 1_000) return `${(value / 1_000).toFixed(0)}K`;
-    return `${Math.round(value)}`;
-  };
-
-  const getLocalHourFromUtc = (utcHour, tz) => {
-    const safeHour = Number.isFinite(Number(utcHour)) ? Number(utcHour) : 12;
-    const date = new Date(Date.UTC(2024, 0, 1, safeHour, 0, 0));
-    const parts = new Intl.DateTimeFormat("en-US", {
-      timeZone: tz,
-      hour: "2-digit",
-      hourCycle: "h23",
-    }).formatToParts(date);
-    const hourPart = parts.find((part) => part.type === "hour")?.value;
-    return Number.isFinite(Number(hourPart)) ? Number(hourPart) : 12;
-  };
-
-  const localCommitHour = getLocalHourFromUtc(avgCommitHour, timezone);
-  const commitChrono = localCommitHour <= 5
-    ? "MIDNIGHT CODER 🌑"
-    : localCommitHour <= 11
-      ? "MORNING BUILDER 🌅"
-      : localCommitHour <= 17
-        ? "DAYSHIFT DEV ☀"
-        : "EVENING ENGINEER 🌆";
-
-  const densityBars = countryStats.devDensity === "EXTREME"
-    ? [1, 1, 1, 1, 1]
-    : countryStats.devDensity === "HIGH"
-      ? [1, 1, 1, 1, 0]
-      : countryStats.devDensity === "MEDIUM"
-        ? [1, 1, 1, 0, 0]
-        : [1, 1, 0, 0, 0];
-
-  const baseline = GITMAP_REGION_BASELINES[String(geo?.countryCode || "DEFAULT").toUpperCase()] || GITMAP_REGION_BASELINES.DEFAULT;
-  const starsWin = Number(totalStars || 0) >= baseline.stars;
-  const commitsWin = Number(recentCommits || 0) >= baseline.commits;
-  const languageAligned = String(topLang || "").toLowerCase() === String(countryStats.topLang || "").toLowerCase();
-  const veteranThreshold = 3;
-  const accountAgeNumber = Number(accountAge || 0);
-  const accountAgeWin = accountAgeNumber >= veteranThreshold;
-
-  const emitInsightFallback = () => {
-    const lang = topLang || "JavaScript";
-    return `${lang} from ${geo.city}, ${geo.country} with ${totalStars} stars and ${accountAge} years shows a ${starsWin ? "strong" : "growing"} signal against regional baselines.`;
-  };
-
-  useEffect(() => {
-    const prevOverflow = document.body.style.overflow;
-    document.body.style.overflow = "hidden";
-    return () => {
-      document.body.style.overflow = prevOverflow;
-    };
-  }, []);
-
-  useEffect(() => {
-    const timeout = setTimeout(() => setSequenceStep(1), 400);
-    return () => clearTimeout(timeout);
-  }, []);
-
-  useEffect(() => {
-    let cancelled = false;
-    const timeout = setTimeout(() => setScanTimeoutReached(true), 3000);
-
-    geocodeLocation()
-      .then((result) => {
-        if (cancelled) return;
-        setGeo(result);
-      })
-      .finally(() => {
-        if (cancelled) return;
-        setGeocodeReady(true);
-      });
-
-    return () => {
-      cancelled = true;
-      clearTimeout(timeout);
-    };
-  }, [user?.login, user?.location]); // eslint-disable-line react-hooks/exhaustive-deps
-
-  useEffect(() => {
-    if (sequenceStep !== 1) return;
-    if (!geocodeReady && !scanTimeoutReached) return;
-    const timeout = setTimeout(() => setSequenceStep(2), 80);
-    return () => clearTimeout(timeout);
-  }, [sequenceStep, geocodeReady, scanTimeoutReached]);
-
-  useEffect(() => {
-    if (sequenceStep !== 2) return;
-    const resetTimer = setTimeout(() => {
-      setTypedPlace("");
-      setTypedCoords("");
-    }, 0);
-
-    const placeText = `${geo.city}, ${geo.country}`;
-    const coords = coordsText;
-    let placeIndex = 0;
-    let coordsIndex = 0;
-    let placeTimer = null;
-    let coordsTimer = null;
-
-    const startCoords = () => {
-      coordsTimer = setInterval(() => {
-        coordsIndex += 1;
-        setTypedCoords(coords.slice(0, coordsIndex));
-        if (coordsIndex >= coords.length) {
-          clearInterval(coordsTimer);
-          setTimeout(() => setSequenceStep(3), 800);
-        }
-      }, 16);
-    };
-
-    const signalDelay = setTimeout(() => {
-      placeTimer = setInterval(() => {
-        placeIndex += 1;
-        setTypedPlace(placeText.slice(0, placeIndex));
-        if (placeIndex >= placeText.length) {
-          clearInterval(placeTimer);
-          startCoords();
-        }
-      }, 24);
-    }, 600);
-
-    return () => {
-      clearTimeout(resetTimer);
-      clearTimeout(signalDelay);
-      if (placeTimer) clearInterval(placeTimer);
-      if (coordsTimer) clearInterval(coordsTimer);
-    };
-  }, [sequenceStep, geo.city, geo.country, coordsText]);
-
-  useEffect(() => {
-    if (sequenceStep !== 3) return;
-    const text = `SIGNAL STRENGTH: ${countryStats.signal}/100`;
-    const resetTimer = setTimeout(() => {
-      setTypedSignal("");
-    }, 0);
-    let index = 0;
-    const timer = setInterval(() => {
-      index += 1;
-      setTypedSignal(text.slice(0, index));
-      if (index >= text.length) clearInterval(timer);
-    }, 18);
-    return () => {
-      clearTimeout(resetTimer);
-      clearInterval(timer);
-    };
-  }, [sequenceStep, countryStats.signal]);
-
-  useEffect(() => {
-    if (showMainMap || sequenceStep < 3) return;
-    const onKeyDown = (event) => {
-      if (event.code !== "Space") return;
-      event.preventDefault();
-      setShowMainMap(true);
-    };
-    window.addEventListener("keydown", onKeyDown);
-    return () => window.removeEventListener("keydown", onKeyDown);
-  }, [showMainMap, sequenceStep]);
-
-  useEffect(() => {
-    let cancelled = false;
-    loadGitMapCartography()
-      .then((data) => {
-        if (cancelled) return;
-        setCountries(Array.isArray(data.features) ? data.features : []);
-        setCountryNames(data.nameById instanceof Map ? data.nameById : new Map());
-        setCartographyReady(true);
-      })
-      .catch(() => {
-        if (cancelled) return;
-        setCartographyReady(false);
-        setCartographyFailed(true);
-      })
-      .finally(() => {
-        if (!cancelled) setCartographyLoading(false);
-      });
-
-    return () => {
-      cancelled = true;
-    };
-  }, []);
-
-  const mapData = useMemo(() => {
-    if (!cartographyReady || !countries.length) {
-      return null;
-    }
-
-    try {
-      const width = 1000;
-      const height = 520;
-      const projection = geoNaturalEarth1().fitSize(
-        [width, height],
-        { type: "FeatureCollection", features: countries },
-      );
-      const pathFactory = geoPath(projection);
-      const beacon = projection([geo.lon, geo.lat]) || [width / 2, height / 2];
-
-      let activeCountryId = null;
-      for (const feature of countries) {
-        if (geoContains(feature, [geo.lon, geo.lat])) {
-          activeCountryId = String(feature.id);
-          break;
-        }
-      }
-
-      const paths = countries.map((feature) => {
-        const id = String(feature.id);
-        return {
-          id,
-          d: pathFactory(feature) || "",
-          name: countryNames.get(id) || `Country ${id}`,
-        };
-      });
-
-      return { width, height, beacon, paths, activeCountryId };
-    } catch {
-      return null;
-    }
-  }, [cartographyReady, countries, countryNames, geo.lat, geo.lon]);
-
-  useEffect(() => {
-    if (!showMainMap) return;
-    const timeout = setTimeout(() => setMapEntered(true), 40);
-    return () => clearTimeout(timeout);
-  }, [showMainMap]);
-
-  useEffect(() => {
-    if (!showMainMap) return;
-    const timezoneValue = inferTimezone(geo.countryCode);
-    const updateTime = () => {
-      try {
-        const value = new Date().toLocaleTimeString("en-US", {
-          timeZone: timezoneValue,
-          hour: "2-digit",
-          minute: "2-digit",
-          second: "2-digit",
-        });
-        setLocalTimeNow(value);
-      } catch {
-        setLocalTimeNow(new Date().toUTCString().slice(17, 25));
-      }
-    };
-    updateTime();
-    const interval = setInterval(updateTime, 1000);
-    return () => clearInterval(interval);
-  }, [showMainMap, geo.countryCode]);
-
-  useEffect(() => {
-    if (!showMainMap) return;
-    const target = parseCompactCount(countryStats.devCount);
-    if (!Number.isFinite(target)) {
-      let fallbackFrame = 0;
-      fallbackFrame = requestAnimationFrame(() => {
-        setAnimatedDevCount(countryStats.devCount);
-      });
-      return () => cancelAnimationFrame(fallbackFrame);
-    }
-
-    let start = null;
-    let raf = 0;
-    const duration = 1100;
-    const tick = (timestamp) => {
-      if (!start) start = timestamp;
-      const progress = Math.min((timestamp - start) / duration, 1);
-      const eased = 1 - Math.pow(1 - progress, 3);
-      const value = target * eased;
-      setAnimatedDevCount(formatCompactCount(value));
-      if (progress < 1) {
-        raf = requestAnimationFrame(tick);
-      } else {
-        setAnimatedDevCount(countryStats.devCount);
-      }
-    };
-    raf = requestAnimationFrame(tick);
-    return () => cancelAnimationFrame(raf);
-  }, [showMainMap, countryStats.devCount]);
-
-  useEffect(() => {
-    if (!showMainMap) return;
-    const insightKey = `${user?.login || "unknown"}:${geo.countryCode}:${topLang || "unknown"}:${totalStars}:${accountAge}`;
-    if (insightRef.current.has(insightKey)) {
-      setInsight(insightRef.current.get(insightKey));
-      return;
-    }
-    if (GITMAP_INSIGHT_CACHE.has(insightKey)) {
-      const cached = GITMAP_INSIGHT_CACHE.get(insightKey);
-      insightRef.current.set(insightKey, cached);
-      setInsight(cached);
-      return;
-    }
-
-    let cancelled = false;
-    setInsightLoading(true);
-    fetch(`${API_URL}/api/gitmap-insight`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json", Accept: "application/json" },
-      body: JSON.stringify({
-        username: user?.login || "unknown",
-        city: geo.city,
-        country: geo.country,
-        topLang: topLang || "JavaScript",
-        totalStars: Number(totalStars || 0),
-        accountAge: Number(accountAge || 0),
-        recentCommits: Number(recentCommits || 0),
-      }),
-    })
-      .then(async (response) => {
-        if (!response.ok) throw new Error("Failed to fetch insight");
-        return response.json();
-      })
-      .then((payload) => {
-        if (cancelled) return;
-        const text = String(payload?.insight || "").trim() || emitInsightFallback();
-        insightRef.current.set(insightKey, text);
-        GITMAP_INSIGHT_CACHE.set(insightKey, text);
-        setInsight(text);
-      })
-      .catch(() => {
-        if (cancelled) return;
-        const fallbackText = emitInsightFallback();
-        insightRef.current.set(insightKey, fallbackText);
-        GITMAP_INSIGHT_CACHE.set(insightKey, fallbackText);
-        setInsight(fallbackText);
-      })
-      .finally(() => {
-        if (!cancelled) setInsightLoading(false);
-      });
-
-    return () => {
-      cancelled = true;
-    };
-  }, [showMainMap, API_URL, user?.login, geo.city, geo.country, geo.countryCode, topLang, totalStars, accountAge, recentCommits]); // eslint-disable-line react-hooks/exhaustive-deps
-
-  useEffect(() => {
-    if (typeof window === "undefined") return;
-    const onResize = () => setIsMobile(window.innerWidth < 600);
-    window.addEventListener("resize", onResize);
-    return () => window.removeEventListener("resize", onResize);
-  }, []);
-
-  useEffect(() => {
-    return () => {
-      if (closeTimeoutRef.current) {
-        clearTimeout(closeTimeoutRef.current);
-        closeTimeoutRef.current = null;
-      }
-    };
-  }, []);
-
-  const closeGitMap = () => {
-    if (isClosing) return;
-    setIsClosing(true);
-    setShowReturning(true);
-    closeTimeoutRef.current = setTimeout(() => {
-      onClose?.();
-    }, 600);
-  };
-
-  const onShare = async () => {
-    const summary = `@${user?.login || "unknown"} is transmitting from ${geo.city}, ${geo.country}. #${countryStats.rank} developer nation globally. ${countryStats.devCount} devs and counting. gitdna.vercel.app #GitDNA #GitMap`;
-    try {
-      if (navigator?.clipboard?.writeText) {
-        await navigator.clipboard.writeText(summary);
-      }
-      setShareCopied(true);
-      setTimeout(() => setShareCopied(false), 1600);
-    } catch {
-      // Ignore clipboard failures.
-    }
-  };
-
-  const broadcastX = (() => {
-    const lon = Number(geo.lon || 0);
-    return Math.max(20, Math.min(980, ((lon + 180) / 360) * 960 + 20));
-  })();
-
-  const densityColor = countryStats.devDensity === "EXTREME"
-    ? "#FFD700"
-    : countryStats.devDensity === "HIGH"
-      ? "#00dcff"
-      : countryStats.devDensity === "MEDIUM"
-        ? "#39ff14"
-        : "#ffb300";
-
-  if (typeof document === "undefined") return null;
-
-  return createPortal(
-    <div className={`gm-overlay${isClosing ? " closing" : ""}`}>
-      <style>{GITMAP_STYLES}</style>
-
-      {!showMainMap ? (
-        <div className={`gm-open step-${sequenceStep}`} onClick={() => sequenceStep >= 3 && setShowMainMap(true)}>
-          {sequenceStep === 0 && (
-            <>
-              <div className="gm-scan-line" />
-              <svg className="gm-open-world" viewBox="0 0 1000 400" aria-hidden="true">
-                <path d="M30 210 C 100 180, 180 240, 260 210 C 330 190, 410 235, 490 205 C 560 186, 640 220, 730 198 C 810 176, 880 214, 970 196" />
-                <path d="M90 170 C 150 146, 210 194, 280 174 C 360 150, 430 186, 520 166 C 600 149, 670 180, 760 160 C 830 145, 900 170, 950 156" />
-              </svg>
-            </>
-          )}
-
-          {sequenceStep >= 1 && <div className="gm-grid" />}
-
-          {sequenceStep === 1 && (
-            <>
-              <div className="gm-kicker">INITIALIZING GEOGRAPHIC SCAN</div>
-              <div className="gm-scan-bars" aria-hidden="true">
-                <span />
-                <span />
-                <span />
-              </div>
-            </>
-          )}
-
-          {sequenceStep === 2 && (
-            <>
-              <div className="gm-acquired">SIGNAL ACQUIRED</div>
-              <div className="gm-place">{typedPlace}</div>
-              <div className="gm-coords">{typedCoords}</div>
-            </>
-          )}
-
-          {sequenceStep >= 3 && (
-            <>
-              <div className="gm-signal-line">{typedSignal}</div>
-              <div className="gm-signal-track">
-                <div className="gm-signal-fill" style={{ width: `${countryStats.signal}%`, background: signalColor }} />
-              </div>
-              <div className="gm-hint">PRESS SPACE OR CLICK TO VIEW MAP</div>
-            </>
-          )}
-
-          {sequenceStep >= 1 && (
-            <button
-              className="gm-skip"
-              onClick={(event) => {
-                event.stopPropagation();
-                setShowMainMap(true);
-              }}
-            >
-              SKIP ›
-            </button>
-          )}
-        </div>
-      ) : (
-        <div className="gm-main">
-          <div className="gm-topbar">
-            <div className="gm-title">MISSION CONTROL // GITMAP</div>
-            <button className="gm-exit" onClick={closeGitMap}>✕ EXIT GITMAP</button>
-          </div>
-
-          <div className="gm-map-wrap">
-            {cartographyLoading && (
-              <div style={{ position: "absolute", inset: 0, display: "grid", placeItems: "center", fontFamily: "Share Tech Mono,monospace", fontSize: "0.7rem", letterSpacing: "0.2em", color: "rgba(0,220,255,0.5)" }}>
-                LOADING CARTOGRAPHIC DATA...
-              </div>
-            )}
-
-            {!cartographyLoading && (cartographyFailed || !mapData) && (
-              <div style={{ position: "absolute", inset: 0, display: "grid", placeItems: "center", padding: 20 }}>
-                <div className="gm-card" style={{ maxWidth: 560 }}>
-                  <div className="gm-card-label">MAP DATA UNAVAILABLE — SIGNAL STATS ACTIVE</div>
-                  <div className="gm-city">{geo.city}</div>
-                  <div className="gm-country">{geo.country}</div>
-                  <div className="gm-small" style={{ marginTop: 8 }}>{coordsText}</div>
-                  <div className="gm-row" style={{ marginTop: 10 }}>
-                    <span className="gm-small">SIGNAL STRENGTH</span>
-                    <span className="gm-small" style={{ color: signalColor }}>{countryStats.signal}/100</span>
-                  </div>
-                  <div className="gm-signal-track" style={{ width: "100%" }}>
-                    <div className="gm-signal-fill" style={{ width: `${countryStats.signal}%`, background: signalColor }} />
-                  </div>
-                </div>
-              </div>
-            )}
-
-            {!cartographyLoading && !cartographyFailed && mapData && (
-              <>
-                <svg className="gm-map-svg" viewBox={`0 0 ${mapData.width} ${mapData.height}`}>
-                  <g
-                    className="gm-map-layer"
-                    style={{
-                      transformOrigin: `${mapData.beacon[0]}px ${mapData.beacon[1]}px`,
-                      transform: mapEntered ? "scale(1)" : "scale(1.8)",
-                      opacity: mapEntered ? 1 : 0,
-                    }}
-                  >
-                    {mapData.paths.map((country) => (
-                      <path
-                        key={`country-${country.id}`}
-                        d={country.d}
-                        className={`gm-country${country.id === mapData.activeCountryId ? " gm-country-active" : ""}`}
-                        onMouseMove={(event) => {
-                          setCountryTooltip({
-                            name: country.id === mapData.activeCountryId ? (geo.country || country.name) : country.name,
-                            x: event.clientX,
-                            y: event.clientY,
-                          });
-                        }}
-                        onMouseLeave={() => setCountryTooltip(null)}
-                      />
-                    ))}
-
-                    {mapData.activeCountryId && (
-                      <path
-                        d={mapData.paths.find((item) => item.id === mapData.activeCountryId)?.d || ""}
-                        className="gm-country-flow"
-                      />
-                    )}
-
-                    <circle cx={mapData.beacon[0]} cy={mapData.beacon[1]} r="4" className="gm-ripple" />
-                    <circle cx={mapData.beacon[0]} cy={mapData.beacon[1]} r="4" className="gm-ripple r2" />
-                    <circle cx={mapData.beacon[0]} cy={mapData.beacon[1]} r="4" className="gm-ripple r3" />
-
-                    <circle cx={mapData.beacon[0]} cy={mapData.beacon[1]} r="5" className="gm-beacon-dot" />
-                    <line x1={mapData.beacon[0]} y1={mapData.beacon[1] - 5} x2={mapData.beacon[0]} y2={mapData.beacon[1] - 18} stroke="rgba(0,220,255,.6)" strokeWidth="1" />
-                    <text x={mapData.beacon[0]} y={mapData.beacon[1] - 22} textAnchor="middle" className="gm-beacon-label">{geo.city}</text>
-                  </g>
-                </svg>
-                <div className="gm-map-scan" />
-              </>
-            )}
-
-            {countryTooltip && (
-              <div className="gm-map-tooltip" style={{ left: countryTooltip.x + 10, top: countryTooltip.y + 10 }}>
-                {countryTooltip.name}
-              </div>
-            )}
-          </div>
-
-          <div className="gm-panel">
-            <div className="gm-grid3">
-              <div className="gm-card">
-                <div className="gm-card-label">// ORIGIN NODE</div>
-                <div className="gm-city">{geo.city}</div>
-                <div className="gm-country">{geo.country}</div>
-                <div className="gm-small" style={{ marginTop: 6 }}>{coordsText}</div>
-                <div className="gm-row">
-                  <span className="gm-small">SIGNAL STRENGTH</span>
-                  <span className="gm-small" style={{ color: signalColor }}>{countryStats.signal}/100</span>
-                </div>
-                <div className="gm-signal-track" style={{ width: "100%", marginTop: 4 }}>
-                  <div className="gm-signal-fill" style={{ width: `${countryStats.signal}%`, background: signalColor }} />
-                </div>
-                <div className="gm-row"><span className="gm-small">TIMEZONE</span><span className="gm-small">{countryStats.timezoneName}</span></div>
-                <div className="gm-row"><span className="gm-small">LOCAL TIME NOW</span><span className="gm-small">{localTimeNow || "--:--:--"}</span></div>
-                <div className="gm-row"><span className="gm-small">COMMITS IN LOCAL TIME</span><span className="gm-small">{String(localCommitHour).padStart(2, "0")}:00</span></div>
-                <div className="gm-fact" style={{ marginTop: 6 }}>{commitChrono}</div>
-              </div>
-
-              <div className="gm-card">
-                <div className="gm-card-label">// REGIONAL ECOSYSTEM</div>
-                <div className="gm-signal-chip" style={{ color: rankColor }}>#{countryStats.rank} DEVELOPER NATION</div>
-                <div className="gm-small" style={{ marginTop: 4 }}>{animatedDevCount} ACTIVE DEVELOPERS</div>
-
-                <div style={{ marginTop: 10 }}>
-                  {[
-                    { label: countryStats.topLang, pct: 85 },
-                    { label: countryStats.topLang2, pct: 65 },
-                    { label: countryStats.topLang3, pct: 45 },
-                  ].map((lang, index) => (
-                    <div key={`gm-lang-${lang.label}-${index}`} style={{ marginBottom: 7 }}>
-                      <div className="gm-row" style={{ marginTop: 0 }}>
-                        <span className="gm-small">{lang.label}</span>
-                        <span className="gm-small">{lang.pct}%</span>
-                      </div>
-                      <div style={{ height: 3, borderRadius: 2, background: "rgba(255,255,255,.05)", overflow: "hidden" }}>
-                        <div style={{ height: "100%", width: `${lang.pct}%`, background: `linear-gradient(90deg,${getLangColor(lang.label)}88,${getLangColor(lang.label)})`, animation: `bar-expand .8s cubic-bezier(.2,.8,.2,1) ${index * 120}ms both`, "--w": `${lang.pct}%` }} />
-                      </div>
-                    </div>
-                  ))}
-                </div>
-
-                <div style={{ marginTop: 8, display: "inline-flex", alignItems: "center", gap: 6, border: "1px solid rgba(255,179,0,.45)", color: "#ffb300", padding: "3px 8px", borderRadius: 999, fontFamily: "Share Tech Mono,monospace", fontSize: "0.6rem", letterSpacing: "0.11em", animation: "gm-pulse 1.4s ease-in-out infinite" }}>
-                  RISING IN {geo.country.toUpperCase()}: {countryStats.risingTech}
-                </div>
-
-                <div className="gm-row" style={{ marginTop: 10 }}>
-                  <span className="gm-small">DEVELOPER DENSITY: {countryStats.devDensity}</span>
-                  <span className="gm-density" aria-hidden="true">
-                    {densityBars.map((on, index) => (
-                      <span key={`bar-${index}`} style={{ height: 4 + index * 2, background: on ? densityColor : "rgba(255,255,255,.15)" }} />
-                    ))}
-                  </span>
-                </div>
-                <div className="gm-fact">{countryStats.funFact}</div>
-              </div>
-
-              <div className="gm-card">
-                <div className="gm-card-label">// YOUR SIGNAL vs REGION</div>
-                <div className="gm-table">
-                  <div className="gm-tr">
-                    <span>STARS EARNED</span>
-                    <span>{totalStars}</span>
-                    <span>vs</span>
-                    <span>{baseline.stars}</span>
-                    <span className={starsWin ? "gm-chip-you" : "gm-chip-region"}>{starsWin ? "▲ YOU" : "◎ REGION"}</span>
-                  </div>
-                  <div className="gm-tr">
-                    <span>COMMIT FREQUENCY</span>
-                    <span>{recentCommits}</span>
-                    <span>vs</span>
-                    <span>{baseline.commits}</span>
-                    <span className={commitsWin ? "gm-chip-you" : "gm-chip-region"}>{commitsWin ? "▲ YOU" : "◎ REGION"}</span>
-                  </div>
-                  <div className="gm-tr">
-                    <span>LANGUAGE MATCH</span>
-                    <span>{topLang || "Unknown"}</span>
-                    <span>vs</span>
-                    <span>{countryStats.topLang}</span>
-                    <span className={languageAligned ? "gm-chip-you" : "gm-chip-region"}>{languageAligned ? "ALIGNED" : "UNIQUE"}</span>
-                  </div>
-                  <div className="gm-tr">
-                    <span>ACCOUNT AGE</span>
-                    <span>{accountAge}y</span>
-                    <span>vs</span>
-                    <span>{veteranThreshold}y</span>
-                    <span className={accountAgeWin ? "gm-chip-you" : "gm-chip-region"}>{accountAgeWin ? "▲ YOU" : "◎ REGION"}</span>
-                  </div>
-                </div>
-                <div className="gm-insight">
-                  {insightLoading ? "Computing regional comparison insight..." : insight}
-                </div>
-              </div>
-            </div>
-
-            <div className="gm-broadcast">
-              <div className="gm-broadcast-line">// DEV SIGNAL BROADCAST</div>
-
-              {!isMobile && (
-                <svg className="gm-broadcast-visual" viewBox="0 0 1000 170" aria-hidden="true">
-                  <path className="gm-broadcast-path" d="M20 90 C 120 78, 220 102, 320 89 C 430 74, 540 104, 640 87 C 740 74, 850 102, 980 88" />
-
-                  {[80, 140, 200].map((distance, index) => (
-                    <path
-                      key={`arc-r-${distance}`}
-                      className="gm-arc"
-                      style={{ opacity: 0.45 - index * 0.12 }}
-                      d={`M ${broadcastX} 90 Q ${broadcastX + distance / 2} ${90 - (26 + index * 10)} ${broadcastX + distance} 90`}
-                    />
-                  ))}
-                  {[80, 140, 200].map((distance, index) => (
-                    <path
-                      key={`arc-l-${distance}`}
-                      className="gm-arc"
-                      style={{ opacity: 0.45 - index * 0.12 }}
-                      d={`M ${broadcastX} 90 Q ${broadcastX - distance / 2} ${90 - (26 + index * 10)} ${broadcastX - distance} 90`}
-                    />
-                  ))}
-
-                  {GITMAP_TECH_HUBS.map((hub) => {
-                    const x = Math.max(18, Math.min(980, ((hub.lon + 180) / 360) * 960 + 20));
-                    const activeHub = hub.city.toLowerCase() === String(geo.city || "").toLowerCase();
-                    return (
-                      <g
-                        key={`hub-${hub.city}`}
-                        onMouseEnter={() => setHoveredHub(hub.city)}
-                        onMouseLeave={() => setHoveredHub("")}
-                      >
-                        <path className="gm-link" d={`M ${broadcastX} 90 Q ${(broadcastX + x) / 2} 62 ${x} 90`} />
-                        <circle cx={x} cy={90} r="3" className={`gm-hub-dot${activeHub ? " active" : ""}`} />
-                        <text x={x} y={106} textAnchor="middle" className="gm-hub-name">{hub.city}</text>
-                      </g>
-                    );
-                  })}
-
-                  <circle cx={broadcastX} cy={90} r="6" className="gm-beacon-dot" />
-                </svg>
-              )}
-
-              <div className="gm-broadcast-copy">
-                TRANSMITTING FROM {String(geo.city || "Unknown").toUpperCase()} — SIGNAL REACH: GLOBAL
-                {hoveredHub ? ` // LINK: ${hoveredHub.toUpperCase()}` : ""}
-              </div>
-            </div>
-          </div>
-
-          <div className="gm-footer">
-            <div className="gm-footer-left">
-              📡 {geo.city}, {geo.country} — {countryStats.devDensity} DEV ZONE — RANK #{countryStats.rank} GLOBALLY
-              {shareCopied ? " // SHARED" : ""}
-            </div>
-            <div className="gm-footer-actions">
-              <button className="gm-btn" onClick={onShare}>↗ SHARE GITMAP</button>
-              <button className="gm-btn close" onClick={closeGitMap}>✕ EXIT GITMAP</button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {showReturning && <div className="gm-returning">RETURNING TO PROFILE...</div>}
-    </div>,
-    document.body,
-  );
-}
-
-function TradingCard({
-  user,
-  devScore,
-  totalStars,
-  reposCount,
-  followers,
-  velocity,
-  dnaSequence,
-  tier,
-  devClass,
-  workStyle,
-  traits,
-  strengthReport,
-  warningSign,
-  onClose,
-}) {
-  const cardRef = useRef(null);
-  const [flipped, setFlipped] = useState(false);
-  const [isDownloading, setIsDownloading] = useState(false);
-  const [copied, setCopied] = useState(false);
-
-  useEffect(() => {
-    const onKeyDown = (event) => {
-      if (event.key === "Escape") onClose?.();
-    };
-    window.addEventListener("keydown", onKeyDown);
-    return () => window.removeEventListener("keydown", onKeyDown);
-  }, [onClose]);
-
-  const normalizedTier = String(tier || "RISING").toUpperCase();
-  const isBalatharunr = (user?.login || "").toLowerCase() === BALATHARUNR_HANDLE;
-  const tierBand = {
-    LEGENDARY: "linear-gradient(90deg,#8e5b00,#ffd76a,#9f5f00)",
-    ELITE: "linear-gradient(90deg,#2a103f,#9f4eff,#2d1146)",
-    VETERAN: "linear-gradient(90deg,#063649,#00dcff,#0a3d4d)",
-    RISING: "linear-gradient(90deg,#163c0d,#39ff14,#1f4313)",
-  }[normalizedTier] || "linear-gradient(90deg,#163c0d,#39ff14,#1f4313)";
-  const effectiveTierBand = isBalatharunr
-    ? "linear-gradient(90deg,#3a434f,#d9e1ec,#465463)"
-    : tierBand;
-
-  const scoreValue = clampNumber(Number(devScore) || 0, 0, 100);
-  const rarity = scoreValue >= 90
-    ? { label: "✦ MYTHIC", className: "tc-rarity-mythic" }
-    : scoreValue >= 75
-      ? { label: "◆ LEGENDARY", className: "tc-rarity-legendary" }
-      : scoreValue >= 60
-        ? { label: "◈ RARE", className: "tc-rarity-rare" }
-        : scoreValue >= 40
-          ? { label: "○ UNCOMMON", className: "tc-rarity-uncommon" }
-          : { label: "· COMMON", className: "tc-rarity-common" };
-
-  const safeTraits = useMemo(() => {
-    const fallbackVelocity = Number.isFinite(Number(velocity)) ? Number(velocity) : 50;
-    return [
-      { key: "creativity", label: "CRE", value: clampNumber(Number(traits?.creativity ?? 50), 0, 100) },
-      { key: "discipline", label: "DIS", value: clampNumber(Number(traits?.discipline ?? 50), 0, 100) },
-      { key: "collaboration", label: "COL", value: clampNumber(Number(traits?.collaboration ?? 50), 0, 100) },
-      { key: "boldness", label: "BOL", value: clampNumber(Number(traits?.boldness ?? 50), 0, 100) },
-      { key: "depth", label: "DPT", value: clampNumber(Number(traits?.depth ?? 50), 0, 100) },
-      { key: "velocity", label: "VEL", value: clampNumber(Number(traits?.velocity ?? fallbackVelocity), 0, 100) },
-    ];
-  }, [traits, velocity]);
-
-  const velocityValue = safeTraits.find((item) => item.key === "velocity")?.value || 50;
-  const cardNumber = isBalatharunr
-    ? "#9NX"
-    : `#${String(dnaSequence || "0000").slice(-4).toUpperCase()}`;
-
-  const radarCenter = 90;
-  const radarRadius = 66;
-  const pointFor = (index, multiplier) => {
-    const angle = ((-90 + (index * 360) / safeTraits.length) * Math.PI) / 180;
-    return {
-      x: radarCenter + Math.cos(angle) * radarRadius * multiplier,
-      y: radarCenter + Math.sin(angle) * radarRadius * multiplier,
-    };
-  };
-
-  const radarLevels = [20, 40, 60, 80, 100];
-  const radarGrid = radarLevels.map((level) => safeTraits.map((_, index) => {
-    const p = pointFor(index, level / 100);
-    return `${p.x},${p.y}`;
-  }).join(" "));
-
-  const radarPolygon = safeTraits.map((item, index) => {
-    const p = pointFor(index, item.value / 100);
-    return `${p.x},${p.y}`;
-  }).join(" ");
-
-  const handleHoloMove = (event) => {
-    if (!cardRef.current) return;
-    const rect = cardRef.current.getBoundingClientRect();
-    const mx = clampNumber(((event.clientX - rect.left) / rect.width) * 100, 0, 100);
-    const my = clampNumber(((event.clientY - rect.top) / rect.height) * 100, 0, 100);
-    cardRef.current.style.setProperty("--mx", mx.toFixed(2));
-    cardRef.current.style.setProperty("--my", my.toFixed(2));
-  };
-
-  const resetHolo = () => {
-    if (!cardRef.current) return;
-    cardRef.current.style.setProperty("--mx", "50");
-    cardRef.current.style.setProperty("--my", "50");
-  };
-
-  const handleDownload = async () => {
-    if (!cardRef.current || isDownloading) return;
-    setIsDownloading(true);
-
-    let exportNode = null;
-    try {
-      if (document?.fonts?.ready) {
-        await document.fonts.ready;
-      }
-
-      const sourceNode = cardRef.current;
-      exportNode = sourceNode.cloneNode(true);
-      exportNode.classList.add("tc-export-static");
-
-      const currentMx = sourceNode.style.getPropertyValue("--mx") || "50";
-      const currentMy = sourceNode.style.getPropertyValue("--my") || "50";
-      const currentBand = sourceNode.style.getPropertyValue("--tier-band") || effectiveTierBand;
-
-      exportNode.style.setProperty("--mx", currentMx);
-      exportNode.style.setProperty("--my", currentMy);
-      exportNode.style.setProperty("--tier-band", currentBand);
-      exportNode.style.position = "fixed";
-      exportNode.style.left = "-10000px";
-      exportNode.style.top = "0";
-      exportNode.style.margin = "0";
-      exportNode.style.transform = "none";
-      exportNode.style.width = "320px";
-      exportNode.style.height = "480px";
-      exportNode.style.zIndex = "-1";
-      exportNode.style.pointerEvents = "none";
-
-      const exportInner = exportNode.querySelector(".tc-inner");
-      const exportFront = exportNode.querySelector(".tc-front");
-      const exportBack = exportNode.querySelector(".tc-back");
-
-      if (exportInner) {
-        exportInner.classList.remove("flipped");
-        exportInner.style.transform = "none";
-        exportInner.style.transition = "none";
-      }
-
-      const activateFace = (face, hiddenFace) => {
-        if (hiddenFace) hiddenFace.style.display = "none";
-        if (!face) return;
-        face.style.display = "flex";
-        face.style.position = "relative";
-        face.style.inset = "auto";
-        face.style.transform = "none";
-        face.style.backfaceVisibility = "visible";
-      };
-
-      if (flipped) activateFace(exportBack, exportFront);
-      else activateFace(exportFront, exportBack);
-
-      document.body.appendChild(exportNode);
-      await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
-
-      const canvas = await html2canvas(exportNode, {
-        backgroundColor: null,
-        scale: Math.max(2, window.devicePixelRatio || 1),
-        useCORS: true,
-        allowTaint: false,
-        logging: false,
-        removeContainer: true,
-        width: 320,
-        height: 480,
-        windowWidth: 320,
-        windowHeight: 480,
-      });
-
-      if (exportNode && exportNode.parentNode) {
-        exportNode.parentNode.removeChild(exportNode);
-        exportNode = null;
-      }
-
-      const filename = `gitdna-card-${String(user?.login || "dev")}.png`;
-      const link = document.createElement("a");
-      link.download = filename;
-      link.href = canvas.toDataURL("image/png");
-      link.click();
-
-      const tweetText = `Just got my GitDNA developer card 🃏\nArchetype: ${devClass} | Score: ${scoreValue}/100 | Rarity: ${rarity.label}\nScan any dev → gitdna.vercel.app\n#GitDNA #DevCard #GitHub`;
-      if (navigator?.clipboard?.writeText) {
-        await navigator.clipboard.writeText(tweetText);
-        setCopied(true);
-        setTimeout(() => setCopied(false), 1800);
-      }
-    } catch {
-      // Keep flow silent if browser blocks canvas/clipboard.
-    } finally {
-      if (exportNode && exportNode.parentNode) {
-        exportNode.parentNode.removeChild(exportNode);
-      }
-      setIsDownloading(false);
-    }
-  };
-
-  if (typeof document === "undefined") return null;
-
-  return createPortal(
-    <div className="tc-overlay" onClick={() => onClose?.()}>
-      <style>{TRADING_CARD_STYLES}</style>
-      <div className="tc-shell" onClick={(event) => event.stopPropagation()}>
-        <div
-          ref={cardRef}
-          className={`tc-card ${rarity.className}${isBalatharunr ? " tc-collab-silver" : ""}`}
-          onMouseMove={handleHoloMove}
-          onMouseLeave={resetHolo}
-          onClick={() => setFlipped((prev) => !prev)}
-          style={{ "--tier-band": effectiveTierBand }}
-        >
-          <div className={`tc-inner${flipped ? " flipped" : ""}`}>
-            <article className="tc-face tc-front">
-              <div className="tc-header">
-                <span>GITDNA DEVELOPER SERIES</span>
-                <span>{normalizedTier}</span>
-              </div>
-
-              <div className="tc-portrait">
-                {user?.avatar_url
-                  ? <img src={user.avatar_url} alt={`${user?.login || "user"} avatar`} />
-                  : <div style={{ width: "100%", height: "100%", display: "grid", placeItems: "center", color: "#9ed7ff", fontFamily: "Orbitron,monospace", fontSize: "2rem" }}>?</div>}
-                <div className="tc-holo" />
-                <div className="tc-username">@{user?.login || "unknown"}</div>
-              </div>
-
-              <div className="tc-stats">
-                <div className="tc-stat"><span>⭐ STARS</span><strong>{Number(totalStars || 0).toLocaleString()}</strong></div>
-                <div className="tc-stat"><span>◈ REPOS</span><strong>{Number(reposCount || 0).toLocaleString()}</strong></div>
-                <div className="tc-stat"><span>♟ FOLLOWERS</span><strong>{Number(followers || 0).toLocaleString()}</strong></div>
-                <div className="tc-stat"><span>⚡ VELOCITY</span><strong>{Math.round(velocityValue)}</strong></div>
-              </div>
-
-              <div className="tc-devscore">
-                <div className="tc-devscore-label">DEV SCORE</div>
-                <div className="tc-devscore-value">{scoreValue}</div>
-              </div>
-
-              <div className="tc-ability">
-                <div className="tc-ability-title">SIGNATURE ABILITY</div>
-                <div className="tc-ability-main">{devClass || "Unknown Archetype"}</div>
-                <div className="tc-ability-sub">{workStyle || "Adaptive Rhythm Coder"}</div>
-              </div>
-
-              <div className="tc-rarity">{rarity.label}</div>
-
-              <div className="tc-footer">
-                <div className="tc-dna">{String(dnaSequence || "0000000000000000")}</div>
-                <div>gitdna.vercel.app</div>
-                <div className="tc-card-number">{cardNumber}</div>
-              </div>
-            </article>
-
-            <article className="tc-face tc-back">
-              <div className="tc-header">
-                <span>GITDNA DEVELOPER SERIES</span>
-                <span>CARD BACK</span>
-              </div>
-
-              <div className="tc-back-wrap">
-                <div className="tc-radar">
-                  <svg width="180" height="180" viewBox="0 0 180 180" aria-hidden="true">
-                    {radarGrid.map((polygon, index) => (
-                      <polygon
-                        key={`grid-${index}`}
-                        points={polygon}
-                        fill="none"
-                        stroke="rgba(0,220,255,0.16)"
-                        strokeWidth="1"
-                      />
-                    ))}
-
-                    {safeTraits.map((item, index) => {
-                      const end = pointFor(index, 1);
-                      const label = pointFor(index, 1.18);
-                      return (
-                        <g key={`axis-${item.key}`}>
-                          <line x1={radarCenter} y1={radarCenter} x2={end.x} y2={end.y} stroke="rgba(0,220,255,0.14)" strokeWidth="1" />
-                          <text x={label.x} y={label.y} fill="rgba(0,220,255,0.64)" fontFamily="Share Tech Mono,monospace" fontSize="8" textAnchor="middle" dominantBaseline="middle">
-                            {item.label}
-                          </text>
-                        </g>
-                      );
-                    })}
-
-                    <polygon points={radarPolygon} fill="rgba(0,220,255,0.24)" stroke="rgba(0,220,255,0.85)" strokeWidth="1.4" />
-                  </svg>
-                </div>
-
-                <div className="tc-textbox">
-                  <h4>STRENGTH REPORT</h4>
-                  <p>{strengthReport || "No strength report available."}</p>
-                </div>
-
-                <div className="tc-textbox">
-                  <h4>WARNING SIGN</h4>
-                  <p>{warningSign || "No warning signal available."}</p>
-                </div>
-
-                <div className="tc-logo">GITDNA</div>
-              </div>
-
-              <div className="tc-rarity">{rarity.label}</div>
-            </article>
-          </div>
-        </div>
-
-        <div className="tc-actions">
-          <button className="gd-btn" onClick={handleDownload} disabled={isDownloading} style={{ padding: "8px 14px", fontSize: "0.64rem" }}>
-            {isDownloading ? "RENDERING..." : "DOWNLOAD CARD"}
-          </button>
-          <button className="gd-btn" onClick={() => onClose?.()} style={{ padding: "8px 14px", fontSize: "0.64rem" }}>
-            CLOSE
-          </button>
-        </div>
-
-        {copied && <div className="tc-copy">Tweet text copied to clipboard.</div>}
-        <div className="tc-hint">Click card to flip</div>
-      </div>
-    </div>,
-    document.body,
-  );
-}
-
-const NEWSPAPER_PORTAL_STYLES = `
-.np-overlay{position:fixed;inset:0;z-index:9999;background:radial-gradient(circle at 20% 0%,rgba(0,220,255,.18),transparent 45%),radial-gradient(circle at 88% 100%,rgba(255,179,0,.12),transparent 40%),#05070c;overflow:auto;padding:26px 14px 132px}
-.np-overlay.np-closing{animation:np-fade-out .22s ease forwards}
-.np-shell{position:relative;max-width:980px;margin:0 auto}
-.np-paper{position:relative;background:linear-gradient(180deg,#f5ecd6 0%,#efe3c8 52%,#e8d8b8 100%);color:#25170c;border:1px solid rgba(92,64,33,.5);border-radius:6px;padding:22px 24px 28px;box-shadow:0 22px 60px rgba(0,0,0,.55),0 0 0 1px rgba(255,255,255,.2) inset;animation:np-paper-in .35s cubic-bezier(.2,.8,.2,1)}
-.np-paper::before{content:'';position:absolute;inset:0;border-radius:6px;background:radial-gradient(circle at 0% 100%,rgba(122,82,43,.14),transparent 48%),radial-gradient(circle at 100% 0%,rgba(122,82,43,.16),transparent 40%);pointer-events:none}
-.np-paper::after{content:'';position:absolute;inset:0;border-radius:6px;opacity:.12;background-image:repeating-linear-gradient(0deg,rgba(54,35,17,.18) 0px,rgba(54,35,17,.18) 1px,transparent 1px,transparent 3px);pointer-events:none}
-.np-masthead-row{display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;position:relative;z-index:1}
-.np-edition{font-family:'Share Tech Mono',monospace;font-size:.64rem;letter-spacing:.14em;color:#5b3f24}
-.np-date{font-family:'Share Tech Mono',monospace;font-size:.62rem;letter-spacing:.12em;color:#5b3f24}
-.np-corner-close{margin-left:auto;display:inline-flex;align-items:center;justify-content:center;width:29px;height:29px;border-radius:999px;border:1px solid rgba(124,55,55,.64);background:linear-gradient(135deg,rgba(87,30,30,.92),rgba(124,37,37,.92));color:#ffe3e3;font-family:'Share Tech Mono',monospace;font-size:.9rem;line-height:1;cursor:pointer;box-shadow:0 2px 8px rgba(69,25,25,.35)}
-.np-corner-close:hover{transform:translateY(-1px);filter:brightness(1.07)}
-.np-masthead{margin-top:8px;text-align:center;font-family:'Baskerville','Palatino Linotype','Book Antiqua',serif;font-size:clamp(2rem,7vw,3.35rem);font-weight:700;letter-spacing:.1em;line-height:1;color:#2d1a0b;position:relative;z-index:1}
-.np-rule{height:2px;background:linear-gradient(90deg,transparent,rgba(74,49,28,.75),transparent);margin:10px 0 9px;position:relative;z-index:1}
-.np-ticker{font-family:'Share Tech Mono',monospace;font-size:.68rem;letter-spacing:.08em;color:#5f4125;border-top:1px solid rgba(84,56,30,.35);border-bottom:1px solid rgba(84,56,30,.35);padding:7px 0;position:relative;z-index:1}
-.np-page-header{margin-top:15px;display:flex;align-items:center;justify-content:space-between;gap:10px;position:relative;z-index:1}
-.np-page-kicker{font-family:'Share Tech Mono',monospace;font-size:.6rem;letter-spacing:.14em;color:#5f4125;text-transform:uppercase}
-.np-page-count{font-family:'Share Tech Mono',monospace;font-size:.58rem;letter-spacing:.14em;color:#765130}
-.np-toolbar{margin-top:10px;display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;position:relative;z-index:1}
-.np-refresh-stamp{font-family:'Share Tech Mono',monospace;font-size:.54rem;letter-spacing:.12em;color:#6b4828;text-transform:uppercase}
-.np-toolbar-actions{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
-.np-toolbar .gd-btn{padding:7px 12px;font-size:.56rem;letter-spacing:.1em;border:1px solid rgba(88,64,39,.65);background:linear-gradient(135deg,#2f1f11,#5a3a20);color:#f8ecd9;box-shadow:0 2px 8px rgba(53,29,9,.25)}
-.np-toolbar .gd-btn:hover{transform:translateY(-1px)}
-.np-toolbar .np-share-btn{border-color:rgba(68,131,170,.72);background:linear-gradient(135deg,#102738,#24547b);color:#d8f1ff}
-.np-toolbar .np-close-btn{border-color:rgba(171,72,72,.72);background:linear-gradient(135deg,#3a1515,#6a1f1f);color:#ffdede}
-.np-page-window{margin-top:10px;overflow:hidden;border:1px solid rgba(92,64,33,.3);border-radius:6px;background:rgba(255,250,240,.3);position:relative;z-index:1;perspective:1700px;transform-style:preserve-3d}
-.np-page-window::before{content:'';position:absolute;inset:0;opacity:0;pointer-events:none;mix-blend-mode:multiply;background:radial-gradient(circle at 50% 50%,rgba(40,24,8,.28),transparent 70%)}
-.np-page-window::after{content:'';position:absolute;inset:-8% -30% -8% auto;width:58%;opacity:0;pointer-events:none;background:linear-gradient(108deg,rgba(255,255,255,0) 0%,rgba(255,255,255,.28) 26%,rgba(104,72,41,.24) 54%,rgba(0,0,0,0) 100%)}
-.np-page-window.np-turn-next{transform-origin:left center;animation:np-book-turn-next .62s cubic-bezier(.2,.74,.24,1)}
-.np-page-window.np-turn-prev{transform-origin:right center;animation:np-book-turn-prev .62s cubic-bezier(.2,.74,.24,1)}
-.np-page-window.np-turning::before{animation:np-turn-shadow .62s ease}
-.np-page-window.np-turn-next::after{animation:np-curl-next .62s cubic-bezier(.2,.74,.24,1)}
-.np-page-window.np-turn-prev::after{left:-30%;right:auto;background:linear-gradient(252deg,rgba(255,255,255,0) 0%,rgba(255,255,255,.28) 26%,rgba(104,72,41,.24) 54%,rgba(0,0,0,0) 100%);animation:np-curl-prev .62s cubic-bezier(.2,.74,.24,1)}
-.np-page-track{display:flex;width:100%;transition:transform .66s cubic-bezier(.2,.82,.25,1);will-change:transform}
-.np-page{min-width:100%;padding:14px 14px 10px;box-sizing:border-box}
-.np-grid{display:grid;grid-template-columns:minmax(0,2fr) minmax(230px,1fr);gap:24px;position:relative;z-index:1}
-.np-main-column{display:flex;flex-direction:column;gap:14px}
-.np-headline{font-family:'Baskerville','Palatino Linotype','Book Antiqua',serif;font-size:clamp(1.5rem,4.2vw,2.5rem);line-height:1.13;letter-spacing:.01em;color:#1f1208}
-.np-subheadline{font-family:'Rajdhani',sans-serif;font-size:1rem;line-height:1.45;color:#3f2916;font-weight:500}
-.np-story{font-family:'Georgia',serif;font-size:.96rem;line-height:1.75;color:#2b1c0d}
-.np-quote{margin:3px 0;border-left:3px solid rgba(92,64,33,.55);padding:6px 0 6px 10px;font-family:'Baskerville','Palatino Linotype','Book Antiqua',serif;font-style:italic;font-size:1rem;line-height:1.6;color:#3d2814}
-.np-secondary{border-top:1px solid rgba(92,64,33,.35);padding-top:12px}
-.np-secondary-title{font-family:'Baskerville','Palatino Linotype','Book Antiqua',serif;font-size:1.16rem;letter-spacing:.05em;color:#25170c;margin-bottom:6px}
-.np-sidebar{display:flex;flex-direction:column;gap:12px}
-.np-sidebar-card{border:1px solid rgba(92,64,33,.34);background:rgba(255,250,240,.4);padding:12px 11px;border-radius:4px}
-.np-sidebar-title{font-family:'Share Tech Mono',monospace;font-size:.62rem;letter-spacing:.14em;text-transform:uppercase;color:#5f4125;margin-bottom:7px}
-.np-sidebar-list{list-style:none;display:flex;flex-direction:column;gap:6px}
-.np-sidebar-list li{font-family:'Rajdhani',sans-serif;font-size:.84rem;color:#2e1d10;line-height:1.4}
-.np-editorial{font-family:'Georgia',serif;font-size:.9rem;line-height:1.62;color:#2f2011}
-.np-hot-grid{display:grid;grid-template-columns:minmax(0,2fr) minmax(240px,1fr);gap:18px}
-.np-hot-cards{display:grid;grid-template-columns:minmax(0,1fr);gap:10px}
-.np-hot-card{border:1px solid rgba(92,64,33,.34);background:rgba(255,249,236,.45);border-radius:5px;padding:9px 10px}
-.np-hot-tag{display:inline-flex;font-family:'Share Tech Mono',monospace;font-size:.53rem;letter-spacing:.12em;color:#704c2d;margin-bottom:6px}
-.np-market-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}
-.np-repo-board{display:flex;flex-direction:column;gap:7px}
-.np-repo-row,.np-lang-row{display:flex;align-items:center;justify-content:space-between;gap:10px;border-bottom:1px dashed rgba(92,64,33,.24);padding-bottom:6px}
-.np-repo-row:last-child,.np-lang-row:last-child{border-bottom:none;padding-bottom:0}
-.np-repo-name,.np-lang-name{font-family:'Rajdhani',sans-serif;font-size:.86rem;color:#2b1c0d;line-height:1.35}
-.np-repo-meta,.np-lang-meta{font-family:'Share Tech Mono',monospace;font-size:.56rem;letter-spacing:.08em;color:#6b4828;text-align:right;white-space:nowrap}
-.np-small-note{font-family:'Rajdhani',sans-serif;font-size:.82rem;color:#2d1f12;line-height:1.5}
-.np-opinion-stack{display:flex;flex-direction:column;gap:10px}
-.np-opinion-card{border:1px solid rgba(92,64,33,.32);background:rgba(255,249,236,.4);border-radius:5px;padding:9px 10px}
-.np-timeline{display:flex;flex-direction:column;gap:8px;list-style:none;padding:0;margin:0}
-.np-timeline li{position:relative;padding-left:14px;font-family:'Rajdhani',sans-serif;font-size:.84rem;color:#2d1e10;line-height:1.45}
-.np-timeline li::before{content:'';position:absolute;left:0;top:.45em;width:6px;height:6px;border-radius:50%;background:#7f542f}
-.np-footer{margin-top:18px;padding-top:11px;border-top:1px solid rgba(92,64,33,.4);font-family:'Share Tech Mono',monospace;font-size:.62rem;letter-spacing:.11em;color:#5f4125;text-align:center;position:relative;z-index:1}
-.np-loading-wrap{display:flex;flex-direction:column;gap:12px;margin-top:15px;position:relative;z-index:1}
-.np-loading-title{font-family:'Share Tech Mono',monospace;font-size:.72rem;letter-spacing:.2em;color:#5f4125}
-.np-skeleton{height:11px;border-radius:4px;background:linear-gradient(90deg,rgba(120,87,52,.16),rgba(120,87,52,.31),rgba(120,87,52,.16));background-size:250% 100%;animation:np-shimmer 1.25s linear infinite}
-.np-skeleton.short{width:38%}
-.np-skeleton.mid{width:64%}
-.np-skeleton.long{width:100%}
-.np-load-error{margin-top:10px;font-family:'Share Tech Mono',monospace;font-size:.6rem;letter-spacing:.08em;color:#7a1e1e;background:rgba(122,30,30,.08);border:1px solid rgba(122,30,30,.28);padding:6px 8px;border-radius:4px}
-.np-bottom-bar{position:fixed;left:50%;bottom:18px;transform:translateX(-50%);z-index:10001;display:grid;grid-template-columns:repeat(4,minmax(130px,1fr));gap:8px;width:min(96vw,760px);padding:9px;border-radius:14px;border:1px solid rgba(0,220,255,.35);background:linear-gradient(180deg,rgba(6,16,28,.95),rgba(4,10,18,.95));box-shadow:0 0 22px rgba(0,220,255,.24)}
-.np-control-btn{position:relative;overflow:hidden;padding:10px 12px;font-size:.58rem;letter-spacing:.1em;border-radius:10px;border:1px solid rgba(0,220,255,.35);background:linear-gradient(135deg,rgba(0,220,255,.13),rgba(17,40,66,.52));color:#c8f5ff}
-.np-control-btn::after{content:'';position:absolute;inset:0;background:linear-gradient(100deg,transparent 30%,rgba(255,255,255,.2) 50%,transparent 70%);opacity:0;transform:translateX(-120%)}
-.np-control-btn:hover::after{opacity:.55;animation:np-control-sweep .55s linear}
-.np-control-btn.np-prev{border-color:rgba(255,213,140,.45);background:linear-gradient(135deg,rgba(255,213,140,.15),rgba(68,39,12,.5));color:#ffe6ba}
-.np-control-btn.np-next{border-color:rgba(140,255,202,.45);background:linear-gradient(135deg,rgba(140,255,202,.16),rgba(9,66,53,.48));color:#c7ffe7}
-.np-control-btn.np-refresh{border-color:rgba(255,173,92,.5);background:linear-gradient(135deg,rgba(255,173,92,.2),rgba(85,43,11,.53));color:#ffd9b4}
-.np-control-btn.np-print{border-color:rgba(192,167,255,.48);background:linear-gradient(135deg,rgba(192,167,255,.18),rgba(35,22,73,.54));color:#ece0ff}
-.np-control-btn.np-close-dock{grid-column:1 / -1;max-width:290px;justify-self:center;border-color:rgba(255,121,121,.58);background:linear-gradient(135deg,rgba(255,121,121,.24),rgba(104,27,27,.62));color:#ffe0e0}
-.np-control-btn:disabled{opacity:.45;cursor:not-allowed}
-@media (max-width:900px){
-  .np-paper{padding:16px 14px 20px}
-  .np-grid,.np-hot-grid{grid-template-columns:minmax(0,1fr);gap:14px}
-  .np-market-grid{grid-template-columns:minmax(0,1fr)}
-  .np-headline{font-size:clamp(1.36rem,6.1vw,2.12rem)}
-  .np-subheadline{font-size:.92rem}
-  .np-story{font-size:.9rem}
-  .np-page{padding:11px 10px 8px}
-  .np-toolbar{flex-direction:column;align-items:flex-start}
-  .np-corner-close{width:30px;height:30px}
-  .np-bottom-bar{grid-template-columns:repeat(2,minmax(0,1fr));width:min(96vw,460px);padding:8px;border-radius:12px;bottom:10px}
-  .np-control-btn{padding:9px 10px}
-  .np-control-btn.np-close-dock{max-width:none;width:100%}
-}
-@keyframes np-shimmer{0%{background-position:200% 0}100%{background-position:-120% 0}}
-@keyframes np-paper-in{from{opacity:0;transform:translateY(24px) scale(.97)}to{opacity:1;transform:translateY(0) scale(1)}}
-@keyframes np-fade-out{from{opacity:1}to{opacity:0}}
-@keyframes np-book-turn-next{0%{transform:rotateY(0deg)}45%{transform:rotateY(-7deg)}100%{transform:rotateY(0deg)}}
-@keyframes np-book-turn-prev{0%{transform:rotateY(0deg)}45%{transform:rotateY(7deg)}100%{transform:rotateY(0deg)}}
-@keyframes np-turn-shadow{0%{opacity:0}40%{opacity:.45}100%{opacity:0}}
-@keyframes np-curl-next{0%{opacity:0;transform:translateX(35%) skewY(0deg)}45%{opacity:.62}100%{opacity:0;transform:translateX(-10%) skewY(-4deg)}}
-@keyframes np-curl-prev{0%{opacity:0;transform:translateX(-35%) skewY(0deg)}45%{opacity:.62}100%{opacity:0;transform:translateX(10%) skewY(4deg)}}
-@keyframes np-control-sweep{0%{transform:translateX(-120%)}100%{transform:translateX(120%)}}
-`;
-
-function GitHubNewspaperPortal({ username, profilePayload, getEdition, onClose }) {
-  const paperRef = useRef(null);
-  const closeTimerRef = useRef(null);
-  const turnTimerRef = useRef(null);
-  const shareCopiedTimerRef = useRef(null);
-  const [isLoading, setIsLoading] = useState(true);
-  const [isRefreshing, setIsRefreshing] = useState(false);
-  const [isDownloading, setIsDownloading] = useState(false);
-  const [shareCopied, setShareCopied] = useState(false);
-  const [isClosing, setIsClosing] = useState(false);
-  const [loadError, setLoadError] = useState("");
-  const [activePageIndex, setActivePageIndex] = useState(0);
-  const [turnDirection, setTurnDirection] = useState("");
-  const [lastUpdatedLabel, setLastUpdatedLabel] = useState(() => `LAST UPDATE ${getReadableLocalDate()}`);
-
-  const fallbackEdition = useMemo(
-    () => buildNewspaperFallback(profilePayload, username),
-    [profilePayload, username],
-  );
-  const [edition, setEdition] = useState(fallbackEdition);
-
-  const resolvedEdition = useMemo(
-    () => normalizeNewspaperPayload(edition, fallbackEdition),
-    [edition, fallbackEdition],
-  );
-
-  const pages = useMemo(
-    () => buildNewspaperPages(resolvedEdition, profilePayload),
-    [resolvedEdition, profilePayload],
-  );
-
-  const totalPages = Math.max(1, pages.length);
-  const boundedPageIndex = clampNumber(activePageIndex, 0, totalPages - 1);
-  const activePage = pages[boundedPageIndex] || pages[0] || {
-    id: "front-page",
-    kind: "front",
-    label: "Front Page",
-    kicker: "Main Edition",
-    title: resolvedEdition.headline,
-  };
-  const canGoPrev = boundedPageIndex > 0;
-  const canGoNext = boundedPageIndex < totalPages - 1;
-
-  const triggerPageTurn = (direction) => {
-    if (turnTimerRef.current) {
-      clearTimeout(turnTimerRef.current);
-      turnTimerRef.current = null;
-    }
-
-    setTurnDirection(direction);
-    turnTimerRef.current = setTimeout(() => {
-      setTurnDirection("");
-      turnTimerRef.current = null;
-    }, 620);
-  };
-
-  const goToPage = (nextPage) => {
-    if (isLoading || isRefreshing) return;
-    const targetPage = clampNumber(nextPage, 0, totalPages - 1);
-    if (targetPage === boundedPageIndex) return;
-    triggerPageTurn(targetPage > boundedPageIndex ? "next" : "prev");
-    setActivePageIndex(targetPage);
-  };
-
-  const handlePrevPage = () => {
-    if (!canGoPrev || isLoading || isRefreshing) return;
-    goToPage(boundedPageIndex - 1);
-  };
-
-  const handleNextPage = () => {
-    if (!canGoNext || isLoading || isRefreshing) return;
-    goToPage(boundedPageIndex + 1);
-  };
-
-  useEffect(() => {
-    let cancelled = false;
-    setIsLoading(true);
-    setLoadError("");
-    setActivePageIndex(0);
-
-    const run = async () => {
-      try {
-        const generated = typeof getEdition === "function"
-          ? await getEdition(profilePayload, { forceRefresh: false })
-          : fallbackEdition;
-        if (!cancelled) {
-          setEdition(normalizeNewspaperPayload(generated, fallbackEdition));
-          setLastUpdatedLabel(`LAST UPDATE ${getReadableLocalDate()}`);
-        }
-      } catch (error) {
-        if (!cancelled) {
-          setEdition(fallbackEdition);
-          setLoadError(error?.message || "Newspaper generation failed.");
-        }
-      } finally {
-        if (!cancelled) {
-          setIsLoading(false);
-        }
-      }
-    };
-
-    run();
-
-    return () => {
-      cancelled = true;
-    };
-  }, [getEdition, profilePayload, fallbackEdition]);
-
-  useEffect(() => {
-    const previousOverflow = document.body.style.overflow;
-    document.body.style.overflow = "hidden";
-
-    const onKeyDown = (event) => {
-      if (event.key === "Escape") {
-        if (closeTimerRef.current) {
-          clearTimeout(closeTimerRef.current);
-        }
-        setIsClosing(true);
-        closeTimerRef.current = setTimeout(() => onClose?.(), 180);
-        return;
-      }
-
-      if (event.key === "ArrowRight") {
-        event.preventDefault();
-        if (!isLoading && !isRefreshing) {
-          goToPage(boundedPageIndex + 1);
-        }
-        return;
-      }
-
-      if (event.key === "ArrowLeft") {
-        event.preventDefault();
-        if (!isLoading && !isRefreshing) {
-          goToPage(boundedPageIndex - 1);
-        }
-      }
-    };
-
-    window.addEventListener("keydown", onKeyDown);
-
-    return () => {
-      document.body.style.overflow = previousOverflow;
-      window.removeEventListener("keydown", onKeyDown);
-      if (closeTimerRef.current) {
-        clearTimeout(closeTimerRef.current);
-        closeTimerRef.current = null;
-      }
-      if (turnTimerRef.current) {
-        clearTimeout(turnTimerRef.current);
-        turnTimerRef.current = null;
-      }
-      if (shareCopiedTimerRef.current) {
-        clearTimeout(shareCopiedTimerRef.current);
-        shareCopiedTimerRef.current = null;
-      }
-    };
-  }, [onClose, totalPages, boundedPageIndex, isLoading, isRefreshing]); // eslint-disable-line react-hooks/exhaustive-deps
-
-  const handleClose = () => {
-    if (isClosing) return;
-    if (closeTimerRef.current) {
-      clearTimeout(closeTimerRef.current);
-    }
-    setIsClosing(true);
-    closeTimerRef.current = setTimeout(() => onClose?.(), 180);
-  };
-
-  const handleRefreshToday = async () => {
-    if (isLoading || isRefreshing) return;
-
-    setIsRefreshing(true);
-    setLoadError("");
-
-    try {
-      const generated = typeof getEdition === "function"
-        ? await getEdition(profilePayload, { forceRefresh: true })
-        : fallbackEdition;
-      const normalized = normalizeNewspaperPayload(generated, fallbackEdition);
-      setEdition(normalized);
-      setLastUpdatedLabel(`LAST UPDATE ${getReadableLocalDate()}`);
-    } catch (error) {
-      setLoadError(error?.message || "Daily refresh failed.");
-    } finally {
-      setIsRefreshing(false);
-    }
-  };
-
-  const handleDownload = async () => {
-    if (!paperRef.current || isDownloading) return;
-    setIsDownloading(true);
-
-    try {
-      await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
-      const canvas = await html2canvas(paperRef.current, {
-        backgroundColor: "#efe3c8",
-        scale: Math.max(2, window.devicePixelRatio || 1),
-        useCORS: true,
-        allowTaint: false,
-        logging: false,
-        removeContainer: true,
-      });
-
-      const filenameBase = String(username || "developer").replace(/[^a-zA-Z0-9_-]/g, "") || "developer";
-      const link = document.createElement("a");
-      link.download = `github-newspaper-${filenameBase}-page-${boundedPageIndex + 1}.png`;
-      link.href = canvas.toDataURL("image/png");
-      link.click();
-    } catch {
-      // Keep flow resilient if capture fails in restricted browsers.
-    } finally {
-      setIsDownloading(false);
-    }
-  };
-
-  const handleShare = async () => {
-    const summary = `${resolvedEdition.masthead} • ${resolvedEdition.editionLabel}\nPAGE ${boundedPageIndex + 1}/${totalPages} — ${activePage.label}\n${activePage.title || resolvedEdition.headline}\n${resolvedEdition.footerNote}`;
-
-    try {
-      if (navigator?.clipboard?.writeText) {
-        await navigator.clipboard.writeText(summary);
-      }
-      setShareCopied(true);
-      if (shareCopiedTimerRef.current) {
-        clearTimeout(shareCopiedTimerRef.current);
-      }
-      shareCopiedTimerRef.current = setTimeout(() => {
-        setShareCopied(false);
-        shareCopiedTimerRef.current = null;
-      }, 1500);
-    } catch {
-      // Ignore clipboard failures.
-    }
-  };
-
-  const renderPageContent = (page) => {
-    if (page.kind === "front") {
-      return (
-        <section className="np-grid">
-          <main className="np-main-column">
-            <h2 className="np-headline">{resolvedEdition.headline}</h2>
-            <p className="np-subheadline">{resolvedEdition.subheadline}</p>
-            <p className="np-story">{resolvedEdition.leadStory}</p>
-
-            <blockquote className="np-quote">"{resolvedEdition.pullQuote}"</blockquote>
-
-            <section className="np-secondary">
-              <h3 className="np-secondary-title">{resolvedEdition.secondaryTitle}</h3>
-              <p className="np-story">{resolvedEdition.secondaryStory}</p>
-            </section>
-          </main>
-
-          <aside className="np-sidebar">
-            <section className="np-sidebar-card">
-              <h4 className="np-sidebar-title">{resolvedEdition.sidebarTitle}</h4>
-              <ul className="np-sidebar-list">
-                {resolvedEdition.sidebarBullets.map((line, index) => (
-                  <li key={`np-line-${index}`}>• {line}</li>
-                ))}
-              </ul>
-            </section>
-
-            <section className="np-sidebar-card">
-              <h4 className="np-sidebar-title">{resolvedEdition.editorialTitle}</h4>
-              <p className="np-editorial">{resolvedEdition.editorial}</p>
-            </section>
-          </aside>
-        </section>
-      );
-    }
-
-    if (page.kind === "hot") {
-      return (
-        <section className="np-hot-grid">
-          <main className="np-main-column">
-            <h2 className="np-headline">{page.title}</h2>
-            <p className="np-subheadline">{page.lead}</p>
-
-            <div className="np-hot-cards">
-              {(Array.isArray(page.cards) ? page.cards : []).map((line, index) => (
-                <article key={`np-hot-line-${index}`} className="np-hot-card">
-                  <span className="np-hot-tag">HOT DESK {String(index + 1).padStart(2, "0")}</span>
-                  <p className="np-story">{line}</p>
-                </article>
-              ))}
-            </div>
-
-            <blockquote className="np-quote">"{page.bulletin}"</blockquote>
-          </main>
-
-          <aside className="np-sidebar">
-            <section className="np-sidebar-card">
-              <h4 className="np-sidebar-title">ACTIVITY TALLY</h4>
-              <ul className="np-sidebar-list">
-                {(Array.isArray(page.sideStats) ? page.sideStats : []).map((line, index) => (
-                  <li key={`np-hot-stat-${index}`}>• {line}</li>
-                ))}
-              </ul>
-            </section>
-
-            <section className="np-sidebar-card">
-              <h4 className="np-sidebar-title">WIRE NOTE</h4>
-              <p className="np-editorial">Signals update as public telemetry changes. Reload the edition for a fresh desk snapshot.</p>
-            </section>
-          </aside>
-        </section>
-      );
-    }
-
-    if (page.kind === "market") {
-      return (
-        <section className="np-grid">
-          <main className="np-main-column">
-            <h2 className="np-headline">{page.title}</h2>
-            <p className="np-subheadline">Top repos and language balance reveal where engineering energy is concentrated right now.</p>
-
-            <div className="np-market-grid">
-              <section className="np-sidebar-card np-repo-board">
-                <h4 className="np-sidebar-title">TOP REPOSITORIES</h4>
-                {(Array.isArray(page.repoRows) && page.repoRows.length > 0) ? page.repoRows.map((repo) => (
-                  <div key={`np-repo-${repo.id}`} className="np-repo-row">
-                    <span className="np-repo-name">{repo.name}</span>
-                    <span className="np-repo-meta">{repo.stars.toLocaleString()}★ · {repo.forks.toLocaleString()} forks · {repo.updated}</span>
-                  </div>
-                )) : (
-                  <div className="np-small-note">No repositories available yet.</div>
-                )}
-              </section>
-
-              <section className="np-sidebar-card np-repo-board">
-                <h4 className="np-sidebar-title">LANGUAGE BOARD</h4>
-                {(Array.isArray(page.languageRows) && page.languageRows.length > 0) ? page.languageRows.map((entry, index) => (
-                  <div key={`np-lang-${entry.lang}-${index}`} className="np-lang-row">
-                    <span className="np-lang-name">{entry.lang}</span>
-                    <span className="np-lang-meta">{Number(entry.pct || 0).toFixed(1)}%</span>
-                  </div>
-                )) : (
-                  <div className="np-small-note">Language telemetry is currently unavailable.</div>
-                )}
-              </section>
-            </div>
-          </main>
-
-          <aside className="np-sidebar">
-            <section className="np-sidebar-card">
-              <h4 className="np-sidebar-title">MARKET WATCH</h4>
-              <ul className="np-sidebar-list">
-                {(Array.isArray(page.marketWatch) ? page.marketWatch : []).map((line, index) => (
-                  <li key={`np-market-line-${index}`}>• {line}</li>
-                ))}
-              </ul>
-            </section>
-          </aside>
-        </section>
-      );
-    }
-
-    return (
-      <section className="np-grid">
-        <main className="np-main-column">
-          <h2 className="np-headline">{page.title}</h2>
-          <p className="np-subheadline">Opinion desk blends qualitative signals with long-horizon timeline markers.</p>
-
-          <div className="np-opinion-stack">
-            {(Array.isArray(page.opinionDeck) ? page.opinionDeck : []).map((line, index) => (
-              <article key={`np-opinion-${index}`} className="np-opinion-card">
-                <p className="np-story">{line}</p>
-              </article>
-            ))}
-          </div>
-
-          <blockquote className="np-quote">"{page.quote}"</blockquote>
-        </main>
-
-        <aside className="np-sidebar">
-          <section className="np-sidebar-card">
-            <h4 className="np-sidebar-title">TIMELINE DESK</h4>
-            <ol className="np-timeline">
-              {(Array.isArray(page.timeline) ? page.timeline : []).map((line, index) => (
-                <li key={`np-timeline-${index}`}>{line}</li>
-              ))}
-            </ol>
-          </section>
-        </aside>
-      </section>
-    );
-  };
-
-  if (typeof document === "undefined") return null;
-
-  return createPortal(
-    <div className={`np-overlay${isClosing ? " np-closing" : ""}`}>
-      <style>{NEWSPAPER_PORTAL_STYLES}</style>
-
-      <div className="np-shell">
-        <article ref={paperRef} className="np-paper">
-          <div className="np-masthead-row">
-            <span className="np-edition">{resolvedEdition.editionLabel}</span>
-            <span className="np-date">{resolvedEdition.dateLine}</span>
-            <button
-              className="np-corner-close"
-              onClick={handleClose}
-              aria-label="Close newspaper"
-              title="Close newspaper"
-              type="button"
-            >
-              ×
-            </button>
-          </div>
-
-          <h1 className="np-masthead">{resolvedEdition.masthead}</h1>
-          <div className="np-rule" />
-          <div className="np-ticker">{resolvedEdition.ticker}</div>
-
-          {isLoading ? (
-            <div className="np-loading-wrap">
-              <div className="np-loading-title">THE PRESSES ARE RUNNING...</div>
-              <div className="np-skeleton long" />
-              <div className="np-skeleton mid" />
-              <div className="np-skeleton long" />
-              <div className="np-skeleton short" />
-              <div className="np-skeleton long" />
-              <div className="np-skeleton mid" />
-              <div className="np-skeleton long" />
-            </div>
-          ) : (
-            <>
-              <div className="np-page-header">
-                <span className="np-page-kicker">{activePage.kicker}</span>
-                <span className="np-page-count">PAGE {boundedPageIndex + 1} OF {totalPages}</span>
-              </div>
-
-              <div className="np-toolbar">
-                <span className="np-refresh-stamp">
-                  {isRefreshing ? "REFRESHING TODAY'S EDITION..." : lastUpdatedLabel}
-                </span>
-                <div className="np-toolbar-actions">
-                  <button className="gd-btn np-share-btn" onClick={handleShare} disabled={isLoading || isRefreshing}>
-                    {shareCopied ? "CLIP COPIED" : "SHARE CLIP"}
-                  </button>
-                  <button className="gd-btn np-close-btn" onClick={handleClose}>EXIT PRESSROOM</button>
-                </div>
-              </div>
-
-              <section className={`np-page-window${turnDirection ? ` np-turning np-turn-${turnDirection}` : ""}`}>
-                <div className="np-page-track" style={{ transform: `translateX(-${boundedPageIndex * 100}%)` }}>
-                  {pages.map((page) => (
-                    <section key={page.id} className="np-page" aria-hidden={page.id !== activePage.id}>
-                      {renderPageContent(page)}
-                    </section>
-                  ))}
-                </div>
-              </section>
-            </>
-          )}
-
-          {loadError && <div className="np-load-error">{loadError}</div>}
-          <div className="np-footer">{resolvedEdition.footerNote}</div>
-        </article>
-      </div>
-
-      <div className="np-bottom-bar">
-        <button className="gd-btn np-control-btn np-prev" onClick={handlePrevPage} disabled={isLoading || isRefreshing || !canGoPrev}>
-          ◀ PREV SPREAD
-        </button>
-        <button className="gd-btn np-control-btn np-refresh" onClick={handleRefreshToday} disabled={isLoading || isRefreshing}>
-          {isRefreshing ? "⟳ UPDATING WIRE..." : "⟳ REFRESH TODAY"}
-        </button>
-        <button className="gd-btn np-control-btn np-print" onClick={handleDownload} disabled={isDownloading || isLoading || isRefreshing}>
-          {isDownloading ? "PRINTING PAGE..." : "🖨 PRINT PAGE"}
-        </button>
-        <button className="gd-btn np-control-btn np-next" onClick={handleNextPage} disabled={isLoading || isRefreshing || !canGoNext}>
-          NEXT SPREAD ▶
-        </button>
-        <button className="gd-btn np-control-btn np-close-dock" onClick={handleClose} type="button">
-          ✕ CLOSE NEWSPAPER
-        </button>
-      </div>
-    </div>,
-    document.body,
   );
 }
 
@@ -7488,13 +4887,13 @@ function Dashboard({
     }
   }
 
-  const triggerDashboardWake = () => {
+  const triggerDashboardWake = useCallback(() => {
     setShowDashboardWake(true);
     if (dashboardWakeTimeoutRef.current) {
       clearTimeout(dashboardWakeTimeoutRef.current);
     }
     dashboardWakeTimeoutRef.current = setTimeout(() => setShowDashboardWake(false), 220);
-  };
+  }, []);
 
   useEffect(() => {
     setAchievementRevealReady(false);
@@ -7520,36 +4919,36 @@ function Dashboard({
       document.body.style.overflow = previousOverflow;
       window.removeEventListener("keydown", onKeyDown);
     };
-  }, [showAchievementVaultPanel]);
+  }, [showAchievementVaultPanel, triggerDashboardWake]);
 
-  const handleOpenAchievementVault = () => {
+  const handleOpenAchievementVault = useCallback(() => {
     setShowAchievementVaultPanel(true);
-  };
+  }, []);
 
-  const handleCloseAchievementVault = () => {
+  const handleCloseAchievementVault = useCallback(() => {
     setShowAchievementVaultPanel(false);
     triggerDashboardWake();
-  };
+  }, [triggerDashboardWake]);
 
-  const handleCloseTimeMachine = () => {
+  const handleCloseTimeMachine = useCallback(() => {
     setShowTimeMachine(false);
     triggerDashboardWake();
-  };
+  }, [triggerDashboardWake]);
 
-  const handleCloseGitMap = () => {
+  const handleCloseGitMap = useCallback(() => {
     setShowGitMap(false);
     triggerDashboardWake();
-  };
+  }, [triggerDashboardWake]);
 
-  const handleCloseTradingCard = () => {
+  const handleCloseTradingCard = useCallback(() => {
     setShowTradingCard(false);
     triggerDashboardWake();
-  };
+  }, [triggerDashboardWake]);
 
-  const handleCloseNewspaper = () => {
+  const handleCloseNewspaper = useCallback(() => {
     setShowNewspaper(false);
     triggerDashboardWake();
-  };
+  }, [triggerDashboardWake]);
 
   const scrollToRoastSection = (behavior = "smooth") => {
     const roastNode = roastSectionRef.current;
@@ -7875,6 +5274,8 @@ function Dashboard({
       // Two paint frames ensure the offscreen export card is fully laid out before capture.
       await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
 
+      const html2canvas = await loadHtml2Canvas();
+
       const canvas = await html2canvas(captureNode, {
         backgroundColor: "#060b12",
         scale: window.devicePixelRatio > 1 ? 2 : 1,
@@ -7990,7 +5391,7 @@ function Dashboard({
               <div style={{ position: "absolute", inset: -4, borderRadius: "50%", border: "1.5px solid rgba(0,220,255,0.3)", animation: "ring-spin 8s linear infinite", pointerEvents: "none" }} />
               <div style={{ position: "absolute", inset: -8, borderRadius: "50%", border: "1px solid rgba(179,71,234,0.2)", animation: "ring-spin 12s linear infinite reverse", pointerEvents: "none" }} />
               {user.avatar_url ? (
-                <img src={user.avatar_url} alt={`${user.login} profile`} style={{ width: 72, height: 72, borderRadius: "50%", border: "2px solid rgba(0,220,255,0.35)", display: "block" }} />
+                <img src={user.avatar_url} alt={`${user.login} profile`} width="72" height="72" loading="lazy" decoding="async" onError={(event) => { event.currentTarget.style.visibility = "hidden"; }} style={{ width: 72, height: 72, borderRadius: "50%", border: "2px solid rgba(0,220,255,0.35)", display: "block" }} />
               ) : (
                 <div style={{ width: 72, height: 72, borderRadius: "50%", background: "rgba(0,220,255,0.1)", border: "2px solid rgba(0,220,255,0.3)", display: "flex", alignItems: "center", justifyContent: "center", fontFamily: "Orbitron,monospace", fontSize: "1.4rem", color: "#00dcff" }}>
                   {(user.login || "?")[0].toUpperCase()}
@@ -8067,7 +5468,7 @@ function Dashboard({
                     }}
                   />
                   <div style={{ position: "relative", zIndex: 1 }}>
-                    <ScoreRing
+                    <MemoScoreRing
                       score={devScore}
                       specialMode={founderActive || isTorvalds ? "gold" : null}
                       percentileText={scorePercentileLabel}
@@ -8181,15 +5582,15 @@ function Dashboard({
           {/* DNA SEQUENCE */}
           <div className="gd-card gd-enter-scan" style={{ padding: "12px 18px", marginBottom: 16, ...cardEntranceStyle(1) }}>
             <div className="gd-section-label" style={{ marginBottom: 8 }}>DEV DNA SEQUENCE</div>
-            <DNASequence seq={dna} goldMode={founderActive} />
+            <MemoDNASequence seq={dna} goldMode={founderActive} />
           </div>
 
           {/* VITALS */}
           <div className="gd-vitals-row">
-            <StatCard label="STARS EARNED" value={totalStars} delay={2} sub="across all repos" enterIndex={2} ticker={true} />
-            <StatCard label="FOLLOWERS" value={user.followers} delay={3} sub="in the network" enterIndex={3} ticker={true} />
-            <StatCard label="REPOSITORIES" value={user.public_repos} delay={4} sub="public codebases" enterIndex={4} ticker={true} />
-            <StatCard label="COMMITS" value={recentCommits} delay={5} sub="recent activity" enterIndex={5} />
+            <MemoStatCard label="STARS EARNED" value={totalStars} delay={2} sub="across all repos" enterIndex={2} ticker={true} />
+            <MemoStatCard label="FOLLOWERS" value={user.followers} delay={3} sub="in the network" enterIndex={3} ticker={true} />
+            <MemoStatCard label="REPOSITORIES" value={user.public_repos} delay={4} sub="public codebases" enterIndex={4} ticker={true} />
+            <MemoStatCard label="COMMITS" value={recentCommits} delay={5} sub="recent activity" enterIndex={5} />
           </div>
 
           <div className="gd-card gd-enter-scan" style={{ padding: "18px 18px", marginBottom: 12, ...cardEntranceStyle(6) }}>
@@ -8721,7 +6122,7 @@ function Dashboard({
         <div style={{ display: "flex", gap: 12, marginBottom: 12, flexWrap: "wrap" }}>
           <div className="gd-card gd-enter-scan" style={{ flex: "1 1 220px", padding: "18px 18px", ...cardEntranceStyle(7) }}>
             <div className="gd-section-label">SKILL TOPOLOGY</div>
-            {langs.map((l, i) => <SkillBar key={l.lang} lang={l.lang} pct={l.pct} delay={i + 1} />)}
+            {langs.map((l, i) => <MemoSkillBar key={l.lang} lang={l.lang} pct={l.pct} delay={i + 1} />)}
             {langs.length === 0 && <div style={{ color: "rgba(200,232,255,0.3)", fontFamily: "Share Tech Mono,monospace", fontSize: "0.7rem" }}>No language data</div>}
           </div>
 
@@ -8740,7 +6141,7 @@ function Dashboard({
 
           <div className="gd-card gd-enter-scan" style={{ flex: "1 1 180px", padding: "18px 18px", ...cardEntranceStyle(9) }}>
             <div className="gd-section-label">NEURAL TRAITS</div>
-            <TraitsRadar traits={traits} />
+            <MemoTraitsRadar traits={traits} />
           </div>
         </div>
 
@@ -8917,54 +6318,72 @@ function Dashboard({
         </div>
       </div>
 
-      {showTimeMachine && (
-        <TimeMachine
-          repos={repos}
-          events={events}
-          user={user}
-          aiData={aiData}
-          onClose={handleCloseTimeMachine}
-        />
-      )}
+      {(showTimeMachine || showGitMap || showTradingCard || showNewspaper) && (
+        <Suspense fallback={null}>
+          {showTimeMachine && (
+            <TimeMachine
+              repos={repos}
+              events={events}
+              user={user}
+              onClose={handleCloseTimeMachine}
+              getLangColor={getLangColor}
+            />
+          )}
 
-      {showGitMap && (
-        <GitMap
-          user={user}
-          avgCommitHour={avgCommitHour}
-          totalStars={totalStars}
-          topLang={topLang}
-          accountAge={accountAgeYears}
-          recentCommits={recentCommits}
-          onClose={handleCloseGitMap}
-        />
-      )}
+          {showGitMap && (
+            <GitMap
+              user={user}
+              avgCommitHour={avgCommitHour}
+              totalStars={totalStars}
+              topLang={topLang}
+              accountAge={accountAgeYears}
+              recentCommits={recentCommits}
+              onClose={handleCloseGitMap}
+              cityCoords={CITY_COORDS}
+              countryDevData={COUNTRY_DEV_DATA}
+              regionBaselines={GITMAP_REGION_BASELINES}
+              techHubs={GITMAP_TECH_HUBS}
+              inferTimezone={inferTimezone}
+              loadGitMapCartography={loadGitMapCartography}
+              geocodeCache={GITMAP_GEOCODE_CACHE}
+              insightCache={GITMAP_INSIGHT_CACHE}
+              getLangColor={getLangColor}
+            />
+          )}
 
-      {showTradingCard && (
-        <TradingCard
-          user={user}
-          devScore={devScore}
-          totalStars={totalStars}
-          reposCount={user.public_repos}
-          followers={user.followers}
-          velocity={traits?.velocity}
-          dnaSequence={dna}
-          tier={tierMeta.label}
-          devClass={effectiveDevClass}
-          workStyle={chronotype?.workStyle}
-          traits={traits}
-          strengthReport={strengthReport}
-          warningSign={warningSign}
-          onClose={handleCloseTradingCard}
-        />
-      )}
+          {showTradingCard && (
+            <TradingCard
+              user={user}
+              devScore={devScore}
+              totalStars={totalStars}
+              reposCount={user.public_repos}
+              followers={user.followers}
+              velocity={traits?.velocity}
+              dnaSequence={dna}
+              tier={tierMeta.label}
+              devClass={effectiveDevClass}
+              workStyle={chronotype?.workStyle}
+              traits={traits}
+              strengthReport={strengthReport}
+              warningSign={warningSign}
+              onClose={handleCloseTradingCard}
+            />
+          )}
 
-      {showNewspaper && (
-        <GitHubNewspaperPortal
-          username={user.login || username || "developer"}
-          profilePayload={newspaperPayload}
-          getEdition={getNewspaperEdition}
-          onClose={handleCloseNewspaper}
-        />
+          {showNewspaper && (
+            <GitHubNewspaperPortal
+              username={user.login || username || "developer"}
+              profilePayload={newspaperPayload}
+              getEdition={getNewspaperEdition}
+              onClose={handleCloseNewspaper}
+              buildNewspaperFallback={buildNewspaperFallback}
+              normalizeNewspaperPayload={normalizeNewspaperPayload}
+              buildNewspaperPages={buildNewspaperPages}
+              getReadableLocalDate={getReadableLocalDate}
+              clampNumber={clampNumber}
+            />
+          )}
+        </Suspense>
       )}
 
       {showLongSessionToast && (
@@ -9004,6 +6423,8 @@ function Dashboard({
             <img
               src={user.avatar_url}
               alt={`${user.login} profile enlarged`}
+              decoding="async"
+              onError={(event) => { event.currentTarget.style.visibility = "hidden"; }}
               style={{ width: "100%", display: "block", borderRadius: 8, border: "1px solid rgba(0,220,255,0.34)" }}
             />
             <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, marginTop: 10 }}>
@@ -9151,6 +6572,7 @@ function BattleIntro({ leftUsername, rightUsername, ultraMode = false }) {
 
 function CompareView({ battleData, onBack, onShareBattle, ultraMode = false }) {
   const { left, right, analysis } = battleData;
+  const recharts = useRechartsModule();
 
   const leftTraits = left?.aiData?.traits || {};
   const rightTraits = right?.aiData?.traits || {};
@@ -9225,7 +6647,7 @@ function CompareView({ battleData, onBack, onShareBattle, ultraMode = false }) {
             <div className="gd-section-label">LEFT // CYAN PROFILE</div>
             <div className="orb" style={{ color: "#00dcff", fontSize: "0.96rem", letterSpacing: "0.05em", marginBottom: 10 }}>{left.username}</div>
             <div style={{ display: "flex", justifyContent: "center" }}>
-              <ScoreRing score={left.devScore} />
+              <MemoScoreRing score={left.devScore} />
             </div>
           </div>
 
@@ -9233,7 +6655,7 @@ function CompareView({ battleData, onBack, onShareBattle, ultraMode = false }) {
             <div className="gd-section-label" style={{ color: "rgba(179,71,234,0.65)" }}>RIGHT // PURPLE PROFILE</div>
             <div className="orb" style={{ color: "#c46ef8", fontSize: "0.96rem", letterSpacing: "0.05em", marginBottom: 10 }}>{right.username}</div>
             <div style={{ display: "flex", justifyContent: "center" }}>
-              <ScoreRing score={right.devScore} />
+              <MemoScoreRing score={right.devScore} />
             </div>
           </div>
         </div>
@@ -9277,14 +6699,20 @@ function CompareView({ battleData, onBack, onShareBattle, ultraMode = false }) {
         <div className="gd-card gd-enter-scan" style={{ padding: "18px 18px", marginBottom: 12 }}>
           <div className="gd-section-label">TRAIT RADAR OVERLAY</div>
           <div style={{ width: "100%", height: 260 }}>
-            <ResponsiveContainer width="100%" height="100%">
-              <RadarChart data={radarData} cx="50%" cy="50%" outerRadius="70%" margin={{ top: 8, right: 28, bottom: 8, left: 28 }}>
-                <PolarGrid stroke="rgba(0,220,255,0.1)" />
-                <PolarAngleAxis dataKey="trait" tick={{ fill: "rgba(0,220,255,0.45)", fontSize: 10, fontFamily: "Share Tech Mono,monospace" }} />
-                <Radar name={left.username} dataKey="left" stroke="#00dcff" fill="#00dcff" fillOpacity={0.15} strokeWidth={1.8} />
-                <Radar name={right.username} dataKey="right" stroke="#b347ea" fill="#b347ea" fillOpacity={0.15} strokeWidth={1.8} />
-              </RadarChart>
-            </ResponsiveContainer>
+            {recharts ? (
+              <recharts.ResponsiveContainer width="100%" height="100%">
+                <recharts.RadarChart data={radarData} cx="50%" cy="50%" outerRadius="70%" margin={{ top: 8, right: 28, bottom: 8, left: 28 }}>
+                  <recharts.PolarGrid stroke="rgba(0,220,255,0.1)" />
+                  <recharts.PolarAngleAxis dataKey="trait" tick={{ fill: "rgba(0,220,255,0.45)", fontSize: 10, fontFamily: "Share Tech Mono,monospace" }} />
+                  <recharts.Radar name={left.username} dataKey="left" stroke="#00dcff" fill="#00dcff" fillOpacity={0.15} strokeWidth={1.8} />
+                  <recharts.Radar name={right.username} dataKey="right" stroke="#b347ea" fill="#b347ea" fillOpacity={0.15} strokeWidth={1.8} />
+                </recharts.RadarChart>
+              </recharts.ResponsiveContainer>
+            ) : (
+              <div style={{ height: "100%", display: "grid", placeItems: "center", color: "rgba(200,232,255,0.42)", fontFamily: "Share Tech Mono,monospace", fontSize: "0.68rem" }}>
+                Initializing trait radar overlay...
+              </div>
+            )}
           </div>
         </div>
 
