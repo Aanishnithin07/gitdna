@@ -41,7 +41,7 @@ GitDNA turns public GitHub activity into behavioral intelligence. It analyzes pa
 | 🎴 Trading Card Generator | Exportable collectible-style developer card with rarity and stats. |
 | 🏆 Achievement Vault | Unlockable profile achievements and progression style milestones. |
 | 🔗 Share + Deep Links | Direct links to profile states and comparison flows. |
-| 🥚 Hidden Layer | ...and 9 hidden easter eggs. |
+| 🥚 Hidden Layer | ...and 9 hidden easter eggs. | try to figure it out!
 
 ## Tech Stack
 
