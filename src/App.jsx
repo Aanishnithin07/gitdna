@@ -5459,14 +5459,18 @@ function Dashboard({
                     }}
                     disabled={!hasLocationData}
                     style={{
-                      padding: "5px 10px",
-                      fontSize: "0.58rem",
-                      letterSpacing: "0.1em",
+                      padding: hasLocationData ? "7px 14px" : "5px 10px",
+                      fontSize: hasLocationData ? "0.62rem" : "0.58rem",
+                      letterSpacing: "0.12em",
+                      fontWeight: 700,
                       opacity: hasLocationData ? 1 : 0.45,
                       cursor: hasLocationData ? "pointer" : "not-allowed",
+                      borderColor: hasLocationData ? "rgba(0,220,255,0.78)" : undefined,
+                      background: hasLocationData ? "linear-gradient(135deg,rgba(0,220,255,0.3),rgba(179,71,234,0.24))" : undefined,
+                      boxShadow: hasLocationData ? "0 0 16px rgba(0,220,255,0.35)" : "none",
                     }}
                   >
-                    🌐 GITMAP
+                    🌐 OPEN GITMAP
                   </button>
                 </span>
                 <span className="gd-badge gd-badge-gold">⌛ {acctYears}yr veteran</span>
