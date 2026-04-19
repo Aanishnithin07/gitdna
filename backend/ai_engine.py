@@ -10,47 +10,43 @@ from typing import Any
 
 from dotenv import load_dotenv
 from groq import AsyncGroq
-import google.generativeai as genai  # type: ignore[reportMissingImports]
 
 load_dotenv()
 
 groq_client = AsyncGroq(api_key=os.getenv("GROQ_API_KEY"))
 
-GEMINI_MODEL_CANDIDATES = [
-    "gemini-1.5-flash",
-    "gemini-1.5-flash-latest",
-    "gemini-2.0-flash",
-    "gemini-2.5-flash",
-]
-
-
-def _build_gemini_model(model_name: str):
-    return genai.GenerativeModel(
-        model_name=model_name,
-        generation_config={
-            "response_mime_type": "application/json",
-            "temperature": 0.7,
-            "max_output_tokens": 1500,
-        },
+GROQ_FAST_MODEL_NAME = (os.getenv("GROQ_FAST_MODEL") or "llama-3.1-8b-instant").strip() or "llama-3.1-8b-instant"
+GROQ_STRUCTURED_MODEL_ENV = (os.getenv("GROQ_STRUCTURED_MODEL") or "").strip()
+GROQ_STRUCTURED_MODEL_CANDIDATES = [
+    model
+    for model in (
+        GROQ_STRUCTURED_MODEL_ENV,
+        "llama-3.3-70b-versatile",
+        "llama-3.1-70b-versatile",
+        GROQ_FAST_MODEL_NAME,
     )
+    if model
+]
+GROQ_FAST_TIMEOUT_SECONDS = 6.0
+GROQ_STRUCTURED_TIMEOUT_SECONDS = 12.0
 
 
-gemini_models = []
-if genai is not None:
-    genai.configure(api_key=os.getenv("GEMINI_API_KEY"))
-    gemini_models = [_build_gemini_model(model_name) for model_name in GEMINI_MODEL_CANDIDATES]
+def _dedupe_models(models: list[str]) -> list[str]:
+    seen: set[str] = set()
+    ordered: list[str] = []
+    for model in models:
+        if model in seen:
+            continue
+        seen.add(model)
+        ordered.append(model)
+    return ordered
 
-GROQ_MODEL_NAME = "llama-3.1-8b-instant"
-GROQ_TIMEOUT_SECONDS = 6.0
-GEMINI_TIMEOUT_SECONDS = 12.0
+
+GROQ_STRUCTURED_MODEL_CANDIDATES = _dedupe_models(GROQ_STRUCTURED_MODEL_CANDIDATES)
 
 
 def _has_groq_key() -> bool:
     return bool((os.getenv("GROQ_API_KEY") or "").strip())
-
-
-def _has_gemini_key() -> bool:
-    return bool((os.getenv("GEMINI_API_KEY") or "").strip()) and len(gemini_models) > 0
 
 
 async def _with_timeout(coro, timeout_seconds: float, fallback: str = "") -> str:
@@ -66,49 +62,38 @@ async def call_groq(
     max_tokens: int = 800,
     temperature: float = 0.6,
     fallback: str = "",
+    model_candidates: list[str] | None = None,
+    timeout_seconds: float | None = None,
 ) -> str:
-    async def _request() -> str:
-        response = await groq_client.chat.completions.create(
-            model=GROQ_MODEL_NAME,
-            max_tokens=max_tokens,
-            temperature=temperature,
-            messages=[
-                {"role": "system", "content": system},
-                {"role": "user", "content": prompt},
-            ],
-        )
+    if not _has_groq_key():
+        return str(fallback or "").strip()
 
-        content = response.choices[0].message.content if response.choices else ""
-        if isinstance(content, list):
-            return "".join(part.get("text", "") for part in content if isinstance(part, dict)).strip()
-        return str(content or "").strip()
+    models = _dedupe_models(model_candidates or [GROQ_FAST_MODEL_NAME])
+    timeout = timeout_seconds if isinstance(timeout_seconds, (int, float)) and timeout_seconds > 0 else GROQ_FAST_TIMEOUT_SECONDS
 
-    result = await _with_timeout(_request(), GROQ_TIMEOUT_SECONDS, fallback=fallback)
-    return str(result or fallback).strip()
+    for model_name in models:
+        async def _request(selected_model: str = model_name) -> str:
+            response = await groq_client.chat.completions.create(
+                model=selected_model,
+                max_tokens=max_tokens,
+                temperature=temperature,
+                messages=[
+                    {"role": "system", "content": system},
+                    {"role": "user", "content": prompt},
+                ],
+            )
 
+            content = response.choices[0].message.content if response.choices else ""
+            if isinstance(content, list):
+                return "".join(part.get("text", "") for part in content if isinstance(part, dict)).strip()
+            return str(content or "").strip()
 
-async def call_gemini(prompt: str, fallback: str = "") -> str:
-    if not gemini_models:
-        return fallback
+        result = await _with_timeout(_request(), timeout, fallback="")
+        cleaned = str(result or "").strip()
+        if cleaned:
+            return cleaned
 
-    async def _generate_with_model(model) -> str:
-        loop = asyncio.get_running_loop()
-        response = await loop.run_in_executor(
-            None,
-            lambda m=model: m.generate_content(prompt),
-        )
-        return str(getattr(response, "text", "") or "").strip()
-
-    for model in gemini_models:
-        text = await _with_timeout(
-            _generate_with_model(model),
-            GEMINI_TIMEOUT_SECONDS,
-            fallback="",
-        )
-        if text:
-            return text
-
-    return fallback
+    return str(fallback or "").strip()
 
 
 SYSTEM_PROMPT = (
@@ -830,15 +815,19 @@ async def analyze_newspaper(profile_payload: dict[str, Any]) -> dict[str, Any]:
     fallback = _fallback_newspaper(profile_payload)
     context = _extract_newspaper_context(profile_payload)
 
-    if not _has_gemini_key():
+    if not _has_groq_key():
         return fallback
 
     try:
-        prompt = (
-            f"{NEWSPAPER_SYSTEM_PROMPT}\n\n"
-            f"{_build_newspaper_user_prompt(context, profile_payload)}"
+        user_prompt = _build_newspaper_user_prompt(context, profile_payload)
+        raw_content = await call_groq(
+            user_prompt,
+            NEWSPAPER_SYSTEM_PROMPT,
+            max_tokens=1200,
+            temperature=0.55,
+            model_candidates=GROQ_STRUCTURED_MODEL_CANDIDATES,
+            timeout_seconds=GROQ_STRUCTURED_TIMEOUT_SECONDS,
         )
-        raw_content = await call_gemini(prompt)
 
         parsed = _safe_json_parse(raw_content)
         if parsed is None:
@@ -876,15 +865,18 @@ async def analyze_roast(profile_payload: dict[str, Any]) -> dict[str, Any]:
     fallback = _fallback_roast(profile_payload)
     metrics = _extract_roast_metrics(profile_payload)
 
-    if not _has_gemini_key():
+    if not _has_groq_key():
         return fallback
 
     try:
-        prompt = (
-            f"{ROAST_SYSTEM_PROMPT}\n\n"
-            f"{_build_roast_user_prompt(metrics, profile_payload)}"
+        raw_content = await call_groq(
+            _build_roast_user_prompt(metrics, profile_payload),
+            ROAST_SYSTEM_PROMPT,
+            max_tokens=900,
+            temperature=0.7,
+            model_candidates=GROQ_STRUCTURED_MODEL_CANDIDATES,
+            timeout_seconds=GROQ_STRUCTURED_TIMEOUT_SECONDS,
         )
-        raw_content = await call_gemini(prompt)
 
         parsed = _safe_json_parse(raw_content)
         if parsed is None:
@@ -934,7 +926,7 @@ def _fallback_time_machine_narration(payload: dict[str, Any]) -> dict[str, Any]:
 
 async def analyze_time_machine_narration(payload: dict[str, Any]) -> dict[str, Any]:
     fallback = _fallback_time_machine_narration(payload)
-    if not _has_gemini_key():
+    if not _has_groq_key():
         return fallback
 
     username = str(payload.get("username") or "unknown")
@@ -967,9 +959,15 @@ async def analyze_time_machine_narration(payload: dict[str, Any]) -> dict[str, A
         f"Total years active: {total_years_active}."
     )
 
-    prompt = f"{TIME_MACHINE_SYSTEM_PROMPT}\n\n{user_prompt}"
     try:
-        raw_content = await call_gemini(prompt)
+        raw_content = await call_groq(
+            user_prompt,
+            TIME_MACHINE_SYSTEM_PROMPT,
+            max_tokens=1100,
+            temperature=0.62,
+            model_candidates=GROQ_STRUCTURED_MODEL_CANDIDATES,
+            timeout_seconds=GROQ_STRUCTURED_TIMEOUT_SECONDS,
+        )
         parsed = _safe_json_parse(raw_content)
         if parsed is None:
             return fallback
@@ -1692,7 +1690,7 @@ async def analyze_developer(github_data: dict) -> dict:
     }
 
     fallback = _fallback_analysis(github_data, base_traits)
-    if not _has_gemini_key():
+    if not _has_groq_key():
         return fallback
 
     try:
@@ -1740,7 +1738,7 @@ async def analyze_developer(github_data: dict) -> dict:
         commit_sample = "\n".join(str(message) for message in commit_msgs[:10]) or "No recent commits"
         primary_lang_ref = lang_str.split(",")[0].strip() if lang_str and lang_str != "Unknown" else "Unknown"
 
-        gemini_prompt = f"""Analyze this GitHub developer profile and return ONLY valid JSON.
+        structured_prompt = f"""Analyze this GitHub developer profile and return ONLY valid JSON.
 No markdown, no backticks, no explanation.
 
 DEVELOPER DATA:
@@ -1803,7 +1801,14 @@ specific to this developer's actual data - never generic:
   "warningSign": "1 sentence about their most visible blindspot from the commit patterns."
 }}"""
 
-        raw = await call_gemini(gemini_prompt)
+        raw = await call_groq(
+            structured_prompt,
+            SYSTEM_PROMPT,
+            max_tokens=1300,
+            temperature=0.45,
+            model_candidates=GROQ_STRUCTURED_MODEL_CANDIDATES,
+            timeout_seconds=GROQ_STRUCTURED_TIMEOUT_SECONDS,
+        )
         cleaned = (raw or "").strip()
         if cleaned.startswith("```"):
             cleaned = cleaned.split("\n", 1)[1].rsplit("```", 1)[0]
@@ -1820,7 +1825,7 @@ specific to this developer's actual data - never generic:
 
         return result
     except Exception as exc:
-        print(f"[GitDNA] Gemini analysis failed: {exc}")
+        print(f"[GitDNA] Structured Groq analysis failed: {exc}")
         return fallback
 
 
@@ -1830,7 +1835,7 @@ class GroqAIEngine:
     def __init__(self, api_key: str | None = None, model: str | None = None) -> None:
         if api_key:
             os.environ["GROQ_API_KEY"] = api_key
-        self.model = model or GROQ_MODEL_NAME
+        self.model = model or GROQ_FAST_MODEL_NAME
 
     async def generate_profile_insights(self, github_data: dict[str, Any]) -> dict[str, Any]:
         return await analyze_developer(github_data)
