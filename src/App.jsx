@@ -595,15 +595,21 @@ html,body{max-width:100%;overflow-x:hidden}
 .gd-recent-pill{border:1px solid rgba(0,220,255,0.28);background:rgba(0,8,20,0.8);color:rgba(0,220,255,0.88);padding:6px 10px;border-radius:999px;font-family:'Share Tech Mono',monospace;font-size:.62rem;letter-spacing:.08em;cursor:pointer;transition:all .2s ease}
 .gd-recent-pill:hover{background:rgba(0,220,255,0.14);box-shadow:0 0 12px rgba(0,220,255,0.24)}
 
-.gd-helix{transform-origin:50% 50%;animation:helix-spin 4.5s linear infinite;filter:drop-shadow(0 0 18px rgba(0,220,255,0.2))}
+.gd-loading-helix-wrap{position:relative;width:min(260px,74vw);height:148px;margin:0 auto 40px;display:grid;place-items:center}
+.gd-helix{width:min(240px,72vw);height:auto;transform-origin:50% 50%;animation:helix-spin 4.5s linear infinite;filter:drop-shadow(0 0 18px rgba(0,220,255,0.2))}
 .gd-helix-a{fill:none;stroke:#00dcff;stroke-width:3;stroke-linecap:round;stroke-dasharray:14 8;animation:helix-wave-a 1.1s linear infinite}
 .gd-helix-b{fill:none;stroke:#b347ea;stroke-width:3;stroke-linecap:round;stroke-dasharray:14 8;animation:helix-wave-b 1.1s linear infinite}
 
-.gd-loading-title{margin-top:4px;display:flex;justify-content:center;gap:4px;animation:loading-title-flicker 2.5s ease-in-out infinite;position:relative;z-index:3}
+.gd-loading-title{margin-top:0;display:flex;justify-content:center;gap:4px;animation:loading-title-flicker 2.5s ease-in-out infinite;position:relative;z-index:3}
 .gd-loading-title span{display:inline-block;font-family:'Orbitron',monospace;font-weight:900;font-size:clamp(1.1rem,4.2vw,1.8rem);letter-spacing:.08em;text-shadow:0 0 14px rgba(0,220,255,.55);animation:loading-letter-drift 2.8s ease-in-out infinite;animation-delay:calc(var(--i) * 120ms)}
 .gd-loading-title span:nth-child(odd){color:#00dcff}
 .gd-loading-title span:nth-child(even){color:#b347ea}
 .gd-loading-status{position:relative;z-index:3}
+
+@media (max-width:520px){
+  .gd-loading-helix-wrap{height:138px;margin-bottom:34px}
+  .gd-loading-title span{font-size:clamp(1rem,7vw,1.42rem)}
+}
 
 .gd-share-export-card{border:1px solid rgba(0,220,255,0.3);border-radius:12px;background:linear-gradient(160deg,#071424,#0a1324 50%,#110a1f);box-shadow:0 0 24px rgba(0,220,255,0.24);padding:24px;color:#dff7ff;font-family:'Rajdhani',sans-serif}
 .gd-share-export-row{display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap;margin-top:14px}
@@ -4185,7 +4191,36 @@ function LandingPage({ onAnalyze, ultraMode = false, isOnline = true }) {
 function LoadingPage({ step, message, feed, steps = LOADING_STEPS, ultraMode = false }) {
   const safeSteps = Array.isArray(steps) && steps.length > 0 ? steps : LOADING_STEPS;
   const safeStep = Math.max(0, Math.min(step, safeSteps.length - 1));
-  const pct = Math.round(((safeStep + 1) / safeSteps.length) * 100);
+  const targetPct = Math.round(((safeStep + 1) / safeSteps.length) * 100);
+  const [displayPct, setDisplayPct] = useState(() => Math.max(6, Math.min(targetPct, 18)));
+
+  useEffect(() => {
+    const timer = setInterval(() => {
+      setDisplayPct((prev) => {
+        const isFinalStep = safeStep >= safeSteps.length - 1;
+        const hardCap = isFinalStep ? 100 : 96;
+        const boundedTarget = Math.max(8, Math.min(hardCap, targetPct));
+
+        if (prev < boundedTarget) {
+          const diff = boundedTarget - prev;
+          const increment = diff > 18 ? 3.4 : diff > 9 ? 2 : diff > 4 ? 1 : 0.45;
+          return Math.min(boundedTarget, prev + increment);
+        }
+
+        const trickleCap = isFinalStep ? 100 : Math.min(hardCap, boundedTarget + 5);
+        if (prev < trickleCap) {
+          return Math.min(trickleCap, prev + 0.08);
+        }
+
+        return prev;
+      });
+    }, 45);
+
+    return () => clearInterval(timer);
+  }, [safeStep, safeSteps.length, targetPct]);
+
+  const pct = Math.max(1, Math.min(100, Math.round(displayPct)));
+  const displayProcess = Math.max(1, Math.min(safeSteps.length, Math.ceil((pct / 100) * safeSteps.length)));
   const currentMessage = message || safeSteps[safeStep] || safeSteps[0];
   const displayFeed = Array.isArray(feed) && feed.length > 0 ? feed : safeSteps.slice(0, Math.max(safeStep + 1, 1));
   return (
@@ -4194,13 +4229,11 @@ function LoadingPage({ step, message, feed, steps = LOADING_STEPS, ultraMode = f
       <div className="gd-scanlines" />
 
       <div style={{ width: "100%", maxWidth: 480, textAlign: "center" }}>
-        <div style={{ position: "relative", width: "100%", maxWidth: 260, height: 140, margin: "0 auto 28px", display: "flex", alignItems: "center", justifyContent: "center" }}>
+        <div className="gd-loading-helix-wrap">
           <svg className="gd-helix" viewBox="0 0 240 120" width="240" height="120" aria-hidden="true">
             <path className="gd-helix-a" d="M10 60 C 30 12, 50 12, 70 60 C 90 108, 110 108, 130 60 C 150 12, 170 12, 190 60 C 210 108, 230 108, 230 60" />
             <path className="gd-helix-b" d="M10 60 C 30 108, 50 108, 70 60 C 90 12, 110 12, 130 60 C 150 108, 170 108, 190 60 C 210 12, 230 12, 230 60" />
           </svg>
-          <div style={{ position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center", pointerEvents: "none" }}>
-          </div>
         </div>
 
         <div className="gd-loading-title" aria-hidden="true">
@@ -4210,7 +4243,7 @@ function LoadingPage({ step, message, feed, steps = LOADING_STEPS, ultraMode = f
         </div>
 
         <div className="gd-loading-status" style={{ fontFamily: "Share Tech Mono,monospace", fontSize: "0.68rem", color: "rgba(0,220,255,0.72)", letterSpacing: "0.15em", marginBottom: 10, marginTop: 10 }}>
-          SYSTEM PROCESS {String(safeStep + 1).padStart(2, "0")}/{safeSteps.length}
+          SYSTEM PROCESS {String(displayProcess).padStart(2, "0")}/{safeSteps.length}
         </div>
         <div className="gd-loading-status" style={{ fontFamily: "Orbitron,monospace", fontSize: "clamp(0.78rem,2.2vw,1rem)", color: "#7feaff", letterSpacing: "0.12em", fontWeight: 700, marginBottom: 28, textShadow: "0 0 14px rgba(0,220,255,0.7)", minHeight: 24 }}>
           {currentMessage}
@@ -7153,7 +7186,7 @@ export default function GitDNA() {
         streamRef.current = null;
       }
 
-      const fetchStep = Math.max(1, Math.min(3, selectedLoadingSteps.length - 1));
+      const fetchStep = 1;
       const fetchMessage = selectedLoadingSteps[fetchStep] || selectedLoadingSteps[0] || LOADING_STEPS[0];
       setLoadingStep(fetchStep);
       setLoadingMessage(fetchMessage);
@@ -7181,7 +7214,7 @@ export default function GitDNA() {
         console.groupEnd();
       }
 
-      const aiStep = Math.max(0, selectedLoadingSteps.length - 2);
+      const aiStep = Math.max(fetchStep + 1, selectedLoadingSteps.length - 4);
       const aiMessage = selectedLoadingSteps[aiStep] || selectedLoadingSteps[0] || LOADING_STEPS[0];
       setLoadingStep(aiStep);
       setLoadingMessage(aiMessage);
