@@ -2169,19 +2169,21 @@ async function buildFrontendAnalyzePayload(username) {
       .filter(Boolean),
   ).size;
 
-  const topStarredRepo = repos
-    .map((repo) => ({
+  const topStarredRepo = repos.reduce((best, repo) => {
+    const candidate = {
       name: String(repo?.name || "").trim(),
       stars: Number(repo?.stargazers_count || 0),
-    }))
-    .sort((left, right) => right.stars - left.stars)[0] || { name: "", stars: 0 };
+    };
+    return candidate.stars > best.stars ? candidate : best;
+  }, { name: "", stars: 0 });
 
-  const largestRepo = repos
-    .map((repo) => ({
+  const largestRepo = repos.reduce((best, repo) => {
+    const candidate = {
       name: String(repo?.name || "").trim(),
       size_kb: Number(repo?.size || 0),
-    }))
-    .sort((left, right) => right.size_kb - left.size_kb)[0] || { name: "", size_kb: 0 };
+    };
+    return candidate.size_kb > best.size_kb ? candidate : best;
+  }, { name: "", size_kb: 0 });
 
   const baseTraits = calculateBaseTraits({
     totalStars,
