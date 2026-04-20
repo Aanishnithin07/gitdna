@@ -83,9 +83,14 @@ async def call_groq(
                 ],
             )
 
-            content = response.choices[0].message.content if response.choices else ""
+            choices = getattr(response, "choices", None) or []
+            first_choice = choices[0] if choices else None
+            message = getattr(first_choice, "message", None) if first_choice is not None else None
+            content = getattr(message, "content", "")
             if isinstance(content, list):
                 return "".join(part.get("text", "") for part in content if isinstance(part, dict)).strip()
+            if content is None:
+                return ""
             return str(content or "").strip()
 
         result = await _with_timeout(_request(), timeout, fallback="")
