@@ -1017,7 +1017,8 @@ async def analyze_gitmap_insight(payload: dict[str, Any]) -> str:
         if not text:
             return fallback
 
-        sentence = re.split(r"(?<=[.!?])\s+", text)[0].strip()
+        split_sentences = re.split(r"(?<=[.!?])\s+", text)
+        sentence = split_sentences[0].strip() if split_sentences else ""
         if not sentence:
             return fallback
         if sentence[-1] not in ".!?":
