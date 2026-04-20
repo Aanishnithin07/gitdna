@@ -15,7 +15,6 @@ Live Website: https://gitdna.xyz
 [![License: MIT](https://img.shields.io/badge/License-MIT-22c55e?style=for-the-badge)](./LICENSE)
 [![Made with React](https://img.shields.io/badge/Made%20with-React-61DAFB?style=for-the-badge&logo=react&logoColor=black)](https://react.dev/)
 [![Powered by Groq](https://img.shields.io/badge/Powered%20by-Groq-F55036?style=for-the-badge)](https://console.groq.com/)
-[![Deploy on Vercel](https://img.shields.io/badge/Deploy%20on-Vercel-000000?style=for-the-badge&logo=vercel)](https://vercel.com/new/clone?repository-url=https://github.com/Aanishnithin07/gitdna)
 
 ![GitDNA Demo](./docs/demo.gif)
 
