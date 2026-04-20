@@ -56,7 +56,20 @@ const TRADING_CARD_STYLES = `
 .tc-export-static,.tc-export-static *{animation:none!important;transition:none!important}
 @keyframes tc-hue{from{filter:hue-rotate(0deg)}to{filter:hue-rotate(360deg)}}
 @keyframes tc-shimmer{0%{transform:translateX(-45%) translateY(-10%)}100%{transform:translateX(55%) translateY(10%)}}
-@media (max-width:430px){.tc-overlay{padding:10px}.tc-card{transform:scale(.92);transform-origin:center top;margin-bottom:-34px}}
+@media (max-width:520px){
+  .tc-overlay{padding:12px}
+  .tc-card{transform:scale(.9);transform-origin:center top;margin-bottom:-30px}
+  .tc-actions{width:100%}
+  .tc-actions .gd-btn{flex:1 1 140px;justify-content:center}
+}
+@media (max-width:430px){
+  .tc-overlay{padding:10px}
+  .tc-card{transform:scale(.82);transform-origin:center top;margin-bottom:-58px}
+  .tc-hint{text-align:center}
+}
+@media (max-width:360px){
+  .tc-card{transform:scale(.74);margin-bottom:-90px}
+}
 `;
 
 function TradingCard({

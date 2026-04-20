@@ -739,6 +739,18 @@ html,body{max-width:100%;overflow-x:hidden}
 .gd-duel-label{font-family:'Share Tech Mono',monospace;font-size:.58rem;letter-spacing:.16em;margin-bottom:8px}
 .gd-duel-sub{margin-top:16px;text-align:center;font-family:'Share Tech Mono',monospace;font-size:.64rem;letter-spacing:.16em;color:rgba(255,179,0,.66)}
 
+@media (max-width:900px){
+  .gd-btn{padding:10px 16px;font-size:.68rem;letter-spacing:.1em}
+  .gd-modal-overlay{padding:12px}
+  .gd-modal-card{padding:16px 14px}
+}
+
+@media (max-width:820px){
+  .gd-duel-stage{grid-template-columns:1fr;gap:10px;max-width:520px}
+  .gd-duel-vs{width:72px;height:72px;font-size:1.05rem;justify-self:center}
+  .gd-duel-sub{font-size:.58rem;letter-spacing:.14em}
+}
+
 .gd-global-badge{position:fixed;z-index:9999;pointer-events:none;padding:4px 10px;border-radius:999px;font-family:'Share Tech Mono',monospace;font-size:.58rem;letter-spacing:.1em;text-transform:uppercase}
 .gd-ultra-badge{left:12px;bottom:12px;background:rgba(57,255,20,.14);border:1px solid rgba(57,255,20,.4);color:#39ff14}
 
@@ -792,11 +804,18 @@ html,body{max-width:100%;overflow-x:hidden}
 @media (max-width:640px){
   .gd-vitals-row{flex-wrap:nowrap;overflow-x:auto;padding-bottom:8px;scroll-snap-type:x proximity;-webkit-overflow-scrolling:touch}
   .gd-vitals-row > *{flex:0 0 auto;min-width:170px;scroll-snap-align:start}
+  .gd-btn{white-space:normal;line-height:1.2}
+  .gd-commit-row{flex-wrap:wrap;align-items:flex-start}
+  .gd-commit-row > div:last-child{flex:1 1 100%}
+  .gd-commit-eye-bubble{right:auto;left:0;bottom:135%;width:min(220px,78vw)}
+  .gd-achievement-grid{grid-template-columns:repeat(auto-fill,minmax(138px,1fr))}
+  .gd-achievement-vault-top{padding-right:54px}
 }
 
 @media (max-width:500px){
   .gd-header-card{flex-direction:column;align-items:flex-start!important;gap:14px!important}
   .gd-header-ring{align-self:center}
+  .gd-toast{left:12px!important;right:12px!important;transform:none!important;max-width:none}
 }
 `;
 

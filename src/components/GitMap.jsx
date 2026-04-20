@@ -177,12 +177,25 @@ function GitMap({
   .gm-btn.close{border-color:rgba(255,120,120,.4);color:#ff9b9b;background:linear-gradient(135deg,rgba(255,70,70,.15),rgba(80,20,20,.3))}
   .gm-returning{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;background:rgba(0,0,0,.82);font-family:'Share Tech Mono',monospace;font-size:.75rem;letter-spacing:.2em;color:#fff;animation:gm-return-fade .6s ease forwards;pointer-events:none}
 
-  @media (max-width:900px){.gm-grid3{grid-template-columns:1fr;}}
+  @media (max-width:900px){
+    .gm-grid3{grid-template-columns:1fr;}
+    .gm-panel{padding:16px 14px 142px}
+  }
+  @media (max-width:760px){
+    .gm-topbar{padding:0 12px}
+    .gm-title{font-size:.63rem;letter-spacing:.11em}
+    .gm-tr{display:flex;flex-wrap:wrap;gap:4px 8px}
+    .gm-tr > span:first-child{flex:1 1 100%;font-size:.56rem;color:rgba(0,220,255,.6)}
+    .gm-tr > span:last-child{margin-left:auto}
+  }
   @media (max-width:600px){
     .gm-map-wrap{height:45vw;min-height:200px}
     .gm-broadcast-visual{display:none}
-    .gm-footer{padding:10px 12px;flex-direction:column;align-items:flex-start}
+    .gm-panel{padding:14px 12px 158px}
+    .gm-card{padding:12px 10px 10px}
+    .gm-footer{padding:10px 12px calc(10px + env(safe-area-inset-bottom,0px));flex-direction:column;align-items:flex-start}
     .gm-footer-actions{width:100%;justify-content:flex-start}
+    .gm-footer-actions .gm-btn{flex:1 1 140px}
     .gm-place{font-size:clamp(1.1rem,6vw,1.45rem)}
   }
 

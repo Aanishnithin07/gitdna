@@ -103,13 +103,25 @@ const TIME_MACHINE_PORTAL_STYLES = `
 .tm-level-up-text{position:fixed;left:0;top:0;font-family:'Orbitron',monospace;font-size:.7rem;letter-spacing:.08em;animation:tm-float-up-fade 1s ease-out forwards;white-space:nowrap}
 .tm-returning{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-family:'Share Tech Mono',monospace;font-size:.75rem;letter-spacing:.2em;color:#fff;pointer-events:none;animation:tm-return-fade .6s ease forwards;background:rgba(0,0,0,.82)}
 
+@media (max-width:860px){
+  .tm-exit{top:10px;right:10px}
+  .tm-scroll{max-width:100%;padding:72px 12px 120px}
+  .tm-spine{left:24px}
+  .tm-row{justify-content:flex-end!important;min-height:162px}
+  .tm-node-wrap{left:24px}
+  .tm-card{width:calc(100% - 46px);margin-left:46px!important;margin-right:0!important;text-align:left!important;border-left:2px solid var(--tier-color)!important;border-right:none!important}
+  .tm-card-head{flex-direction:row!important}
+  .tm-level-row,.tm-lang,.tm-bars{justify-content:flex-start!important}
+  .tm-final{padding:22px 16px}
+}
+
 @media (max-width:600px){
   .tm-open-username{font-size:clamp(.95rem,5.2vw,1.1rem)}
   .tm-origin{font-size:clamp(.74rem,3.3vw,.82rem);max-width:88vw}
-  .tm-spine{left:28px}
+  .tm-spine{left:20px}
   .tm-row{justify-content:flex-end!important}
-  .tm-node-wrap{left:28px}
-  .tm-card{width:calc(100% - 52px);margin-left:52px!important;margin-right:0!important;text-align:left!important;border-left:2px solid var(--tier-color)!important;border-right:none!important}
+  .tm-node-wrap{left:20px}
+  .tm-card{width:calc(100% - 40px);margin-left:40px!important;margin-right:0!important;text-align:left!important;border-left:2px solid var(--tier-color)!important;border-right:none!important}
   .tm-card-head{flex-direction:row!important}
   .tm-level-row,.tm-lang,.tm-bars{justify-content:flex-start!important}
 }

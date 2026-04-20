@@ -3,7 +3,7 @@ import { createPortal } from "react-dom";
 import html2canvas from "html2canvas";
 
 const NEWSPAPER_PORTAL_STYLES = `
-.np-overlay{position:fixed;inset:0;z-index:9999;background:radial-gradient(circle at 20% 0%,rgba(0,220,255,.18),transparent 45%),radial-gradient(circle at 88% 100%,rgba(255,179,0,.12),transparent 40%),#05070c;overflow:auto;padding:26px 14px 132px}
+.np-overlay{position:fixed;inset:0;z-index:9999;background:radial-gradient(circle at 20% 0%,rgba(0,220,255,.18),transparent 45%),radial-gradient(circle at 88% 100%,rgba(255,179,0,.12),transparent 40%),#05070c;overflow:auto;padding:26px 14px calc(132px + env(safe-area-inset-bottom,0px))}
 .np-overlay.np-closing{animation:np-fade-out .22s ease forwards}
 .np-shell{position:relative;max-width:980px;margin:0 auto}
 .np-paper{position:relative;background:linear-gradient(180deg,#f5ecd6 0%,#efe3c8 52%,#e8d8b8 100%);color:#25170c;border:1px solid rgba(92,64,33,.5);border-radius:6px;padding:22px 24px 28px;box-shadow:0 22px 60px rgba(0,0,0,.55),0 0 0 1px rgba(255,255,255,.2) inset;animation:np-paper-in .35s cubic-bezier(.2,.8,.2,1)}
@@ -75,7 +75,7 @@ const NEWSPAPER_PORTAL_STYLES = `
 .np-skeleton.mid{width:64%}
 .np-skeleton.long{width:100%}
 .np-load-error{margin-top:10px;font-family:'Share Tech Mono',monospace;font-size:.6rem;letter-spacing:.08em;color:#7a1e1e;background:rgba(122,30,30,.08);border:1px solid rgba(122,30,30,.28);padding:6px 8px;border-radius:4px}
-.np-bottom-bar{position:fixed;left:50%;bottom:18px;transform:translateX(-50%);z-index:10001;display:grid;grid-template-columns:repeat(4,minmax(130px,1fr));gap:8px;width:min(96vw,760px);padding:9px;border-radius:14px;border:1px solid rgba(0,220,255,.35);background:linear-gradient(180deg,rgba(6,16,28,.95),rgba(4,10,18,.95));box-shadow:0 0 22px rgba(0,220,255,.24)}
+.np-bottom-bar{position:fixed;left:50%;bottom:18px;transform:translateX(-50%);z-index:10001;display:grid;grid-template-columns:repeat(4,minmax(130px,1fr));gap:8px;width:min(96vw,760px);padding:9px 9px calc(9px + env(safe-area-inset-bottom,0px));border-radius:14px;border:1px solid rgba(0,220,255,.35);background:linear-gradient(180deg,rgba(6,16,28,.95),rgba(4,10,18,.95));box-shadow:0 0 22px rgba(0,220,255,.24)}
 .np-control-btn{position:relative;overflow:hidden;padding:10px 12px;font-size:.58rem;letter-spacing:.1em;border-radius:10px;border:1px solid rgba(0,220,255,.35);background:linear-gradient(135deg,rgba(0,220,255,.13),rgba(17,40,66,.52));color:#c8f5ff}
 .np-control-btn::after{content:'';position:absolute;inset:0;background:linear-gradient(100deg,transparent 30%,rgba(255,255,255,.2) 50%,transparent 70%);opacity:0;transform:translateX(-120%)}
 .np-control-btn:hover::after{opacity:.55;animation:np-control-sweep .55s linear}
@@ -94,10 +94,19 @@ const NEWSPAPER_PORTAL_STYLES = `
   .np-story{font-size:.9rem}
   .np-page{padding:11px 10px 8px}
   .np-toolbar{flex-direction:column;align-items:flex-start}
+  .np-toolbar-actions{width:100%}
   .np-corner-close{width:30px;height:30px}
-  .np-bottom-bar{grid-template-columns:repeat(2,minmax(0,1fr));width:min(96vw,460px);padding:8px;border-radius:12px;bottom:10px}
+  .np-bottom-bar{grid-template-columns:repeat(2,minmax(0,1fr));width:min(96vw,460px);padding:8px 8px calc(8px + env(safe-area-inset-bottom,0px));border-radius:12px;bottom:10px}
   .np-control-btn{padding:9px 10px}
   .np-control-btn.np-close-dock{max-width:none;width:100%}
+}
+@media (max-width:560px){
+  .np-overlay{padding:14px 10px calc(176px + env(safe-area-inset-bottom,0px))}
+  .np-paper{padding:14px 10px 16px}
+  .np-masthead{letter-spacing:.06em}
+  .np-page{padding:9px 6px 6px}
+  .np-bottom-bar{grid-template-columns:1fr;width:min(96vw,340px);bottom:8px;padding:8px 8px calc(8px + env(safe-area-inset-bottom,0px))}
+  .np-control-btn{width:100%}
 }
 @keyframes np-shimmer{0%{background-position:200% 0}100%{background-position:-120% 0}}
 @keyframes np-paper-in{from{opacity:0;transform:translateY(24px) scale(.97)}to{opacity:1;transform:translateY(0) scale(1)}}
