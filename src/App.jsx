@@ -972,6 +972,12 @@ function createAchievement(definition) {
   };
 }
 
+function safeCreatedYear(value) {
+  const timestamp = new Date(value).getTime();
+  if (!Number.isFinite(timestamp)) return null;
+  return new Date(timestamp).getUTCFullYear();
+}
+
 const ACHIEVEMENTS = [
   createAchievement({
     id: "first_blood",
@@ -1216,7 +1222,10 @@ const ACHIEVEMENTS = [
     name: "THE ANCIENT",
     description: "Account created before 2015",
     rarity: "RARE",
-    condition: (data) => new Date(data.createdAt).getFullYear() <= 2015,
+    condition: (data) => {
+      const createdYear = safeCreatedYear(data.createdAt);
+      return createdYear !== null && createdYear <= 2015;
+    },
     unlockedText: "You were here before the gold rush.",
     lockedText: "Have a GitHub account created before 2015.",
   }),
@@ -1316,7 +1325,10 @@ const ACHIEVEMENTS = [
     name: "ORIGIN STORY",
     description: "Account created before 2012",
     rarity: "EPIC",
-    condition: (data) => new Date(data.createdAt).getFullYear() <= 2012,
+    condition: (data) => {
+      const createdYear = safeCreatedYear(data.createdAt);
+      return createdYear !== null && createdYear <= 2012;
+    },
     unlockedText: "You were here at the beginning. A true original.",
     lockedText: "Have a GitHub account from before 2012.",
   }),
