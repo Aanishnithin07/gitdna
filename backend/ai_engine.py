@@ -1,4 +1,5 @@
 import asyncio
+import copy
 import hashlib
 import json
 import math
@@ -613,7 +614,7 @@ def _build_roast_user_prompt(metrics: dict[str, Any], profile_payload: dict[str,
 
 
 def _normalize_roast_result(parsed: dict[str, Any], fallback: dict[str, Any], lazy_ratio: float) -> dict[str, Any]:
-    result = json.loads(json.dumps(fallback))
+    result = copy.deepcopy(fallback)
     if not isinstance(parsed, dict):
         result["roastLines"] = _add_lazy_commit_line_if_needed(result["roastLines"], lazy_ratio)
         return result
@@ -783,7 +784,7 @@ def _build_newspaper_user_prompt(context: dict[str, Any], profile_payload: dict[
 
 
 def _normalize_newspaper_result(parsed: dict[str, Any], fallback: dict[str, Any]) -> dict[str, Any]:
-    result = json.loads(json.dumps(fallback))
+    result = copy.deepcopy(fallback)
     if not isinstance(parsed, dict):
         return result
 
@@ -1508,7 +1509,7 @@ def _is_generic_label(value: str) -> bool:
 
 
 def _normalize_result(parsed: dict[str, Any], fallback: dict[str, Any]) -> dict[str, Any]:
-    result = json.loads(json.dumps(fallback))
+    result = copy.deepcopy(fallback)
     if not isinstance(parsed, dict):
         return result
 
