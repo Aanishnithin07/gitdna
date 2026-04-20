@@ -9,7 +9,8 @@
 
 Your code has a fingerprint. We read it.
 
-Live Website: https://gitdna.xyz
+[<img src="./public/favicon.svg" alt="GitDNA Logo" width="52" />](https://gitdna.xyz)
+[![Live Website](https://img.shields.io/badge/Live-gitdna.xyz-00dcff?style=for-the-badge&logo=googlechrome&logoColor=black)](https://gitdna.xyz)
 
 [![GitHub stars](https://img.shields.io/github/stars/Aanishnithin07/gitdna?style=for-the-badge)](https://github.com/Aanishnithin07/gitdna/stargazers)
 [![License: MIT](https://img.shields.io/badge/License-MIT-22c55e?style=for-the-badge)](./LICENSE)
