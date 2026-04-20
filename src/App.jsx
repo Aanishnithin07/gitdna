@@ -128,6 +128,19 @@ function getReadableLocalDate(value = Date.now()) {
   });
 }
 
+function getLocalBackendFallbackBase() {
+  if (typeof window === "undefined") return "";
+  const host = window.location.hostname;
+  if (host === "localhost") return "http://localhost:8000";
+  if (host === "127.0.0.1") return "http://127.0.0.1:8000";
+  return "";
+}
+
+function resolveBackendApiBase() {
+  const configured = String(import.meta.env.VITE_API_URL || "").trim().replace(/\/$/, "");
+  return configured || getLocalBackendFallbackBase();
+}
+
 const CITY_COORDS = {
   bangalore: [12.9716, 77.5946],
   mumbai: [19.076, 72.8777],
@@ -4400,7 +4413,7 @@ function Dashboard({
   const hasLocationData = Boolean(String(user.location || "").trim());
   const topLang = Array.isArray(langs) && langs[0]?.lang ? langs[0].lang : "Unknown";
   const avgCommitHour = Number.isFinite(Number(github.avg_commit_hour)) ? Number(github.avg_commit_hour) : 12;
-  const API_URL = (import.meta.env.VITE_API_URL || "http://localhost:8000").replace(/\/$/, "");
+  const API_URL = useMemo(() => resolveBackendApiBase(), []);
   const tierVisualKey = founderActive ? "LEGENDARY" : String(archetype.tier || "RISING").toUpperCase();
   const tierVisual = {
     LEGENDARY: {
@@ -6871,28 +6884,30 @@ export default function GitDNA() {
   const konamiFlashTimeoutRef = useRef(null);
   const konamiMessageTimeoutRef = useRef(null);
   const nightOwlShownRef = useRef(false);
-  const preferredHost = typeof window !== "undefined" && window.location.hostname === "localhost"
-    ? "http://localhost:8000"
-    : "http://127.0.0.1:8000";
-  const [apiBaseUrl, setApiBaseUrl] = useState(() => {
-    const configured = String(import.meta.env.VITE_API_URL || "").trim().replace(/\/$/, "");
-    return configured || preferredHost;
-  });
+  const preferredHost = getLocalBackendFallbackBase();
+  const isLocalFrontend = Boolean(preferredHost);
+  const [apiBaseUrl, setApiBaseUrl] = useState(() => resolveBackendApiBase());
   const API_URL = apiBaseUrl;
   const apiBaseCandidates = useMemo(() => {
     const configured = String(import.meta.env.VITE_API_URL || "").trim().replace(/\/$/, "");
-    const hostMatched = preferredHost;
-    const alternateHost = hostMatched === "http://localhost:8000"
-      ? "http://127.0.0.1:8000"
-      : "http://localhost:8000";
+    const candidates = [apiBaseUrl, configured];
 
-    return Array.from(new Set([
-      apiBaseUrl,
-      configured,
-      hostMatched,
-      alternateHost,
-    ].filter(Boolean)));
-  }, [apiBaseUrl, preferredHost]);
+    if (isLocalFrontend) {
+      candidates.push(preferredHost);
+      candidates.push(
+        preferredHost === "http://localhost:8000"
+          ? "http://127.0.0.1:8000"
+          : "http://localhost:8000",
+      );
+    } else {
+      // In production, prefer same-origin /api so Vercel rewrites can route to the backend.
+      candidates.push("");
+    }
+
+    return Array.from(
+      new Set(candidates.filter((value) => value !== null && value !== undefined)),
+    );
+  }, [apiBaseUrl, isLocalFrontend, preferredHost]);
 
   const isNetworkFetchError = (err) => {
     const msg = String(err?.message || "");
@@ -6917,9 +6932,14 @@ export default function GitDNA() {
       }
     }
 
-    const triedHosts = apiBaseCandidates.join(", ");
+    const triedHosts = apiBaseCandidates
+      .map((base) => (base ? base : "/api (same origin)"))
+      .join(", ");
+    const hint = isLocalFrontend
+      ? "Start FastAPI on port 8000 and try again."
+      : "Check your deployed backend URL/rewrite and try again.";
     throw new Error(
-      `Cannot reach backend at ${triedHosts}. Start FastAPI on port 8000 and try again.`,
+      `Cannot reach backend at ${triedHosts}. ${hint}`,
       { cause: lastNetworkError || undefined },
     );
   };

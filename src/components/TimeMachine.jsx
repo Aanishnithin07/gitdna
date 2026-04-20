@@ -136,7 +136,14 @@ const TIME_MACHINE_PORTAL_STYLES = `
 
 function TimeMachine({ repos, events, user, onClose, getLangColor }) {
   const resolveLangColor = typeof getLangColor === "function" ? getLangColor : fallbackGetLangColor;
-  const API_URL = (import.meta.env.VITE_API_URL || "http://localhost:8000").replace(/\/$/, "");
+  const API_URL = useMemo(() => {
+    const configured = String(import.meta.env.VITE_API_URL || "").trim().replace(/\/$/, "");
+    if (configured) return configured;
+    if (typeof window === "undefined") return "";
+    if (window.location.hostname === "localhost") return "http://localhost:8000";
+    if (window.location.hostname === "127.0.0.1") return "http://127.0.0.1:8000";
+    return "";
+  }, []);
   const safeRepos = useMemo(() => (Array.isArray(repos) ? repos : []), [repos]);
   const safeEvents = useMemo(() => (Array.isArray(events) ? events : []), [events]);
   const cardRefs = useRef(new Map());
