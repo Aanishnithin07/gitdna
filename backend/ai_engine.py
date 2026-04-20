@@ -1404,7 +1404,8 @@ def _fallback_analysis(github_data: dict[str, Any], base_traits: dict[str, int])
     repos = _to_int(metrics.get("public_repos"), 0)
     account_age = max(0.0, _to_float(metrics.get("account_age_years"), 1.0) or 1.0)
     top_langs = metrics.get("top_languages") if isinstance(metrics.get("top_languages"), list) else []
-    top_lang = str(top_langs[0].get("language") or "code") if top_langs else "code"
+    first_top_lang = top_langs[0] if top_langs and isinstance(top_langs[0], dict) else {}
+    top_lang = str(first_top_lang.get("language") or "code")
     followers = _to_int(metrics.get("followers"), 0)
 
     safe_traits = {
