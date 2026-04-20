@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { geoContains, geoNaturalEarth1, geoPath } from "d3-geo";
+import { resolveBackendApiBase } from "../utils/backendApi";
 
 const DEFAULT_COUNTRY_DEV_DATA = {
   DEFAULT: {
@@ -65,14 +66,7 @@ function GitMap({
     [getLangColor],
   );
 
-  const API_URL = useMemo(() => {
-    const configured = String(import.meta.env.VITE_API_URL || "").trim().replace(/\/$/, "");
-    if (configured) return configured;
-    if (typeof window === "undefined") return "";
-    if (window.location.hostname === "localhost") return "http://localhost:8000";
-    if (window.location.hostname === "127.0.0.1") return "http://127.0.0.1:8000";
-    return "";
-  }, []);
+  const API_URL = useMemo(() => resolveBackendApiBase(), []);
   const geocodeRef = useRef(new Map());
   const insightRef = useRef(new Map());
   const closeTimeoutRef = useRef(null);

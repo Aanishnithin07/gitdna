@@ -1,4 +1,9 @@
 import { Suspense, lazy, memo, useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
+import {
+  getLocalBackendFallbackBase,
+  resolveBackendApiBase,
+  sanitizeConfiguredBackendBase,
+} from "./utils/backendApi";
 
 const TimeMachine = lazy(() => import("./components/TimeMachine"));
 const GitMap = lazy(() => import("./components/GitMap"));
@@ -126,19 +131,6 @@ function getReadableLocalDate(value = Date.now()) {
     day: "2-digit",
     year: "numeric",
   });
-}
-
-function getLocalBackendFallbackBase() {
-  if (typeof window === "undefined") return "";
-  const host = window.location.hostname;
-  if (host === "localhost") return "http://localhost:8000";
-  if (host === "127.0.0.1") return "http://127.0.0.1:8000";
-  return "";
-}
-
-function resolveBackendApiBase() {
-  const configured = String(import.meta.env.VITE_API_URL || "").trim().replace(/\/$/, "");
-  return configured || getLocalBackendFallbackBase();
 }
 
 const CITY_COORDS = {
@@ -6889,7 +6881,7 @@ export default function GitDNA() {
   const [apiBaseUrl, setApiBaseUrl] = useState(() => resolveBackendApiBase());
   const API_URL = apiBaseUrl;
   const apiBaseCandidates = useMemo(() => {
-    const configured = String(import.meta.env.VITE_API_URL || "").trim().replace(/\/$/, "");
+    const configured = sanitizeConfiguredBackendBase(import.meta.env.VITE_API_URL);
     const candidates = [apiBaseUrl, configured];
 
     if (isLocalFrontend) {
