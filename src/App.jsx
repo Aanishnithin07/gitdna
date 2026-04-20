@@ -801,12 +801,15 @@ function calcDevScore(user, repos) {
   const stars = Math.min(30, Math.floor(totalStars / 8));
   const followers = Math.min(20, Math.floor(Math.sqrt(user.followers || 0) * 2));
   const repoScore = Math.min(12, Math.floor((user.public_repos || 0) / 4));
-  const ageYears = (Date.now() - new Date(user.created_at)) / (1000 * 60 * 60 * 24 * 365);
+  const createdAtTs = new Date(user.created_at).getTime();
+  const ageYears = Number.isFinite(createdAtTs)
+    ? (Date.now() - createdAtTs) / (1000 * 60 * 60 * 24 * 365)
+    : 0;
   const age = Math.min(14, Math.floor(ageYears * 2.5));
   const completeness = [user.bio, user.location, user.company, user.blog].filter(Boolean).length * 3;
   const activity = Math.min(10, repos.filter(r => {
-    const d = new Date(r.pushed_at);
-    return Date.now() - d < 90 * 24 * 60 * 60 * 1000;
+    const pushedTs = new Date(r.pushed_at).getTime();
+    return Number.isFinite(pushedTs) && (Date.now() - pushedTs) < 90 * 24 * 60 * 60 * 1000;
   }).length);
   return Math.min(100, Math.max(10, Math.round(stars + followers + repoScore + age + completeness + activity)));
 }
@@ -2043,11 +2046,16 @@ async function buildFrontendAnalyzePayload(username) {
   const missingCommitMessages = !Array.isArray(commitData?.messages) || commitData.messages.length === 0;
 
   if (missingCommitMessages) {
+    const toTimestamp = (value) => {
+      const parsed = new Date(value || 0).getTime();
+      return Number.isFinite(parsed) ? parsed : 0;
+    };
+
     const latestRepo = [...repos]
       .filter((repo) => !repo?.fork && String(repo?.name || "").trim())
       .sort((left, right) => {
-        const leftPushed = new Date(left?.pushed_at || left?.updated_at || 0).getTime();
-        const rightPushed = new Date(right?.pushed_at || right?.updated_at || 0).getTime();
+        const leftPushed = toTimestamp(left?.pushed_at || left?.updated_at);
+        const rightPushed = toTimestamp(right?.pushed_at || right?.updated_at);
         return rightPushed - leftPushed;
       })[0];
 
