@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { geoContains, geoNaturalEarth1, geoPath } from "d3-geo";
 import { resolveBackendApiBase } from "../utils/backendApi";
-
+import { resolveBackendApiBase } from "../utils/backendApi";
 const DEFAULT_COUNTRY_DEV_DATA = {
   DEFAULT: {
     devCount: "Unknown",
