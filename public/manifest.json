@@ -1,0 +1,20 @@
+{
+  "name": "GitDNA — Developer Intelligence",
+  "short_name": "GitDNA",
+  "description": "Behavioral developer profiles from GitHub activity",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#060b12",
+  "theme_color": "#00dcff",
+  "orientation": "portrait-primary",
+  "icons": [
+    {
+      "src": "/favicon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    }
+  ],
+  "categories": ["developer tools", "productivity", "utilities"],
+  "lang": "en"
+}
