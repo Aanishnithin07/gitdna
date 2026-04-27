@@ -4106,7 +4106,7 @@ function BackgroundCanvas({ attractRef = null, attractActive = false }) {
   return <canvas ref={canvasRef} className="gd-bg-canvas" aria-hidden="true" />;
 }
 
-function LandingPage({ onAnalyze, ultraMode = false, isOnline = true }) {
+function LandingPage({ onAnalyze, scanCount, ultraMode = false, isOnline = true }) {
   const [username, setUsername] = useState("");
   const [loading, setLoading] = useState(false);
   const [inputError, setInputError] = useState("");
@@ -4140,6 +4140,30 @@ function LandingPage({ onAnalyze, ultraMode = false, isOnline = true }) {
           YOUR CODE HAS A FINGERPRINT. WE READ IT.
         </div>
       </div>
+
+      {scanCount > 0 && (
+        <div style={{
+          fontFamily:'Share Tech Mono,monospace',
+          fontSize:'0.62rem',
+          color:'rgba(57,255,20,0.5)',
+          letterSpacing:'0.15em',
+          marginBottom:16,
+          display:'flex',
+          alignItems:'center',
+          justifyContent:'center',
+          gap:8
+        }}>
+          <div style={{
+            width:6,
+            height:6,
+            borderRadius:'50%',
+            background:'#39ff14',
+            boxShadow:'0 0 6px rgba(57,255,20,0.8)',
+            animation:'blink 1s ease-in-out infinite'
+          }} />
+          {scanCount} DEVELOPER{scanCount !== 1 ? 'S' : ''} SCANNED THIS SESSION
+        </div>
+      )}
 
       <div className="anim-up delay-3" style={{ width: "100%", maxWidth: 520 }}>
         <div className="gd-card" style={{ padding: "28px 28px 24px" }}>
@@ -6961,6 +6985,12 @@ export default function GitDNA() {
     if (typeof window === "undefined") return true;
     return window.navigator.onLine;
   });
+  const [scanCount, setScanCount] = useState(() => {
+    const today = new Date().toDateString()
+    const stored = JSON.parse(localStorage.getItem('gitdna_scans') || '{"date":"","count":0}')
+    if (stored.date === today) return stored.count
+    return 0
+  });
   const autoAnalyzeRef = useRef(false);
   const streamRef = useRef(null);
   const battleIntroTimerRef = useRef(null);
@@ -7264,6 +7294,11 @@ export default function GitDNA() {
     const selectedLoadingSteps = getLoadingSequenceForUsername(parsedUsername);
     const initialMessage = selectedLoadingSteps[0] || LOADING_STEPS[0];
 
+    const today = new Date().toDateString()
+    const newCount = scanCount + 1
+    setScanCount(newCount)
+    localStorage.setItem('gitdna_scans', JSON.stringify({ date: today, count: newCount }))
+
     setPhase("loading");
     setLoadingSteps(selectedLoadingSteps);
     setLoadingStep(0);
@@ -7544,7 +7579,7 @@ export default function GitDNA() {
   if (phase === "landing") return (
     <>
       <style>{CSS}</style>
-      <LandingPage onAnalyze={analyze} ultraMode={ultraMode} isOnline={isOnline} />
+      <LandingPage onAnalyze={analyze} scanCount={scanCount} ultraMode={ultraMode} isOnline={isOnline} />
       <GlobalEasterEggOverlays
         ultraMode={ultraMode}
         showKonamiFlash={showKonamiFlash}
