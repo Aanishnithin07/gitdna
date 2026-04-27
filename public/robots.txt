@@ -1,0 +1,20 @@
+# GitDNA — Developer Intelligence Platform
+# https://gitdna.xyz
+
+User-agent: *
+Allow: /
+Disallow: /api/
+
+Sitemap: https://gitdna.xyz/sitemap.xml
+
+User-agent: Twitterbot
+Allow: /
+
+User-agent: facebookexternalhit
+Allow: /
+
+User-agent: LinkedInBot
+Allow: /
+
+User-agent: WhatsApp
+Allow: /
