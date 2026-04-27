@@ -75,7 +75,13 @@
   </script>
 </head>
   <body>
-    <div id="root"></div>
-    <script type="module" src="/src/main.jsx"></script>
+<div id="app-loader" style="position:fixed;inset:0;background:#060b12;display:flex;align-items:center;justify-content:center;font-family:'Courier New',monospace;z-index:99999;transition:opacity 0.4s ease;">
+  <div style="text-align:center;">
+    <div style="font-size:2rem;letter-spacing:0.2em;color:#00dcff;text-shadow:0 0 20px rgba(0,220,255,0.4);">GIT<span style="color:#b347ea;text-shadow:0 0 20px rgba(179,71,234,0.4);">DNA</span></div>
+    <div style="font-size:0.6rem;letter-spacing:0.25em;color:rgba(0,220,255,0.35);margin-top:10px;">INITIALIZING...</div>
+  </div>
+</div>
+<div id="root"></div>
+<script type="module" src="/src/main.jsx"></script>
   </body>
 </html>
