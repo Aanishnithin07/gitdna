@@ -36,6 +36,16 @@ const LOADING_STEPS = [
 const RATE_LIMIT_MESSAGE = "RATE LIMIT HIT — Add a GitHub token in .env or wait 60 minutes";
 const FOUNDER_HANDLE = "aanishnithin07";
 const TORVALDS_HANDLE = "torvalds";
+const FOOTER_TAGLINES = [
+  "The commit log never lies. We just translate it.",
+  "GitHub stores events. GitDNA reads behavior.",
+  "Your repos are a fingerprint. We lifted it.",
+  "Code style is personality. We mapped yours.",
+  "Every push tells a story. This is yours.",
+  "The pattern was always there. Now you see it.",
+  "Algorithms don't sleep. Neither do their authors.",
+  "Open source. Open identity.",
+];
 const FOUNDER_LOADING_STEPS = [
   "WAIT... THIS SIGNATURE IS FAMILIAR",
   "CROSS-REFERENCING FOUNDER DATABASE",
@@ -4506,6 +4516,11 @@ function Dashboard({
   const [achievementShareCopied, setAchievementShareCopied] = useState(false);
   const [showAchievementVaultPanel, setShowAchievementVaultPanel] = useState(false);
 
+  const footerTagline = useMemo(() =>
+    FOOTER_TAGLINES[Math.floor(Math.random() * FOOTER_TAGLINES.length)],
+    []
+  )
+
   const cardEntranceStyle = (index) => ({
     opacity: 0,
     animation: `card-rise .55s cubic-bezier(.2,.8,.2,1) ${320 + index * 80}ms forwards`,
@@ -6420,6 +6435,16 @@ function Dashboard({
               </button>
               <button className="gd-btn" onClick={onReset} style={{ padding: "8px 16px", fontSize: "0.68rem" }}>◀ NEW SCAN</button>
             </div>
+          </div>
+          <div style={{
+            fontFamily:'Share Tech Mono,monospace',
+            fontSize:'0.58rem',
+            color:'rgba(0,220,255,0.2)',
+            fontStyle:'italic',
+            letterSpacing:'0.08em',
+            marginTop:4
+          }}>
+            "{footerTagline}"
           </div>
           {founderActive && (
             <div style={{ marginTop: 10, fontFamily: "Share Tech Mono,monospace", fontSize: "0.5rem", letterSpacing: "0.08em", color: "rgba(200,232,255,0.25)" }}>
