@@ -7230,6 +7230,12 @@ export default function GitDNA() {
       setLoadingMessage(finalMessage);
       setLoadingFeed((prev) => prev.includes(finalMessage) ? prev : [...prev, finalMessage]);
       setPhase("dashboard");
+      updatePageMeta(
+        github.user.login,
+        aiData?.devClass || 'Developer',
+        devScore,
+        langs[0]?.lang || 'Code'
+      )
     };
 
     const handleFailure = (message) => {
@@ -7517,7 +7523,7 @@ export default function GitDNA() {
         <div className="gd-card" style={{ padding: 28, maxWidth: 440, textAlign: "center", zIndex: 2, position: "relative" }}>
           <div className="orb" style={{ color: "#ff4545", fontSize: "1rem", marginBottom: 12, letterSpacing: "0.1em" }}>⚠ SCAN FAILURE</div>
           <p style={{ color: "rgba(200,232,255,0.6)", marginBottom: 20, fontFamily: "Share Tech Mono,monospace", fontSize: "0.8rem" }}>{error}</p>
-          <button className="gd-btn" onClick={() => setPhase("landing")}>◀ RETRY</button>
+          <button className="gd-btn" onClick={() => { setPhase("landing"); resetPageMeta(); }}>◀ RETRY</button>
         </div>
       </div>
       <GlobalEasterEggOverlays
@@ -7527,6 +7533,35 @@ export default function GitDNA() {
       />
     </>
   );
+
+function updatePageMeta(username, devClass, devScore, topLang) {
+  const title = `${username} — ${devClass} | GitDNA`
+  const desc = `${username} scored ${devScore}/100 on GitDNA. Primary language: ${topLang || 'Unknown'}. Behavioral developer profile powered by AI.`
+  document.title = title
+  const setMeta = (sel, attr, val) => {
+    const el = document.querySelector(sel)
+    if (el) el.setAttribute(attr, val)
+  }
+  setMeta('meta[name="description"]', 'content', desc)
+  setMeta('meta[property="og:title"]', 'content', title)
+  setMeta('meta[property="og:description"]', 'content', desc)
+  setMeta('meta[property="og:url"]', 'content', `https://gitdna.xyz/?u=${username}`)
+  setMeta('meta[name="twitter:title"]', 'content', title)
+  setMeta('meta[name="twitter:description"]', 'content', desc)
+  window.history.pushState({}, '', `/?u=${username}`)
+}
+
+function resetPageMeta() {
+  document.title = 'GitDNA — Developer Intelligence Platform'
+  const setMeta = (sel, attr, val) => {
+    const el = document.querySelector(sel)
+    if (el) el.setAttribute(attr, val)
+  }
+  setMeta('meta[name="description"]', 'content', 'Decode any developer\'s coding DNA. Get a deep behavioral profile from their GitHub activity. Free tool.')
+  setMeta('meta[property="og:title"]', 'content', 'GitDNA — Your Code Has a Fingerprint. We Read It.')
+  setMeta('meta[property="og:url"]', 'content', 'https://gitdna.xyz')
+  window.history.pushState({}, '', '/')
+}
 
   return (
     <>
@@ -7556,6 +7591,7 @@ export default function GitDNA() {
           onGenerateNewspaper={onGenerateNewspaperFromDashboard}
           onReset={() => {
             setPhase("landing");
+            resetPageMeta();
             setLoadingSteps(LOADING_STEPS);
             setBattleData(null);
             setGithub(null);
