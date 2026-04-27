@@ -4194,6 +4194,79 @@ function LandingPage({ onAnalyze, ultraMode = false, isOnline = true }) {
           <button className="gd-btn" onClick={handle} disabled={loading || !username.trim()} style={{ width: "100%", fontSize: "0.8rem" }}>
             {loading ? "INITIALIZING..." : "▶ EXECUTE ANALYSIS"}
           </button>
+
+          <div style={{marginTop:28,textAlign:'center'}}>
+            <div style={{
+              fontFamily:'Share Tech Mono,monospace',
+              fontSize:'0.58rem',
+              letterSpacing:'0.2em',
+              color:'rgba(0,220,255,0.3)',
+              marginBottom:12
+            }}>
+              // TRY THESE LEGENDS
+            </div>
+            <div style={{
+              display:'flex',
+              gap:8,
+              flexWrap:'wrap',
+              justifyContent:'center'
+            }}>
+              {[
+                { username: "torvalds", label: "torvalds", tag: "Linux Creator" },
+                { username: "gaearon", label: "gaearon", tag: "React Core" },
+                { username: "sindresorhus", label: "sindresorhus", tag: "1000+ packages" },
+                { username: "antirez", label: "antirez", tag: "Redis Creator" },
+                { username: "Aanishnithin07", label: "Aanishnithin07", tag: "GitDNA Founder" },
+              ].map(dev => (
+                <button
+                  key={dev.username}
+                  onClick={() => {
+                    setUsername(dev.username)
+                    onAnalyze(dev.username)
+                  }}
+                  style={{
+                    background:'rgba(0,220,255,0.04)',
+                    border:'1px solid rgba(0,220,255,0.18)',
+                    borderRadius:4,
+                    padding:'6px 12px',
+                    cursor:'pointer',
+                    display:'flex',
+                    flexDirection:'column',
+                    alignItems:'center',
+                    gap:2,
+                    transition:'all 0.2s',
+                  }}
+                  onMouseEnter={e => {
+                    e.currentTarget.style.background = 'rgba(0,220,255,0.1)'
+                    e.currentTarget.style.borderColor = 'rgba(0,220,255,0.4)'
+                    e.currentTarget.style.transform = 'translateY(-2px)'
+                  }}
+                  onMouseLeave={e => {
+                    e.currentTarget.style.background = 'rgba(0,220,255,0.04)'
+                    e.currentTarget.style.borderColor = 'rgba(0,220,255,0.18)'
+                    e.currentTarget.style.transform = 'translateY(0)'
+                  }}
+                >
+                  <span style={{
+                    fontFamily:'Share Tech Mono,monospace',
+                    fontSize:'0.7rem',
+                    color:'rgba(0,220,255,0.7)'
+                  }}>
+                    @{dev.label}
+                  </span>
+                  <span style={{
+                    fontFamily:'Rajdhani,sans-serif',
+                    fontSize:'0.58rem',
+                    color:'rgba(200,232,255,0.3)',
+                    letterSpacing:'0.05em'
+                  }}>
+                    {dev.tag}
+                  </span>
+                </button>
+              ))}
+            </div>
+          </div>
+
           <div style={{ marginTop: 10, fontFamily: "Share Tech Mono,monospace", fontSize: "0.62rem", color: "rgba(0,220,255,0.45)", letterSpacing: "0.04em" }}>
             Set VITE_API_URL in .env to your FastAPI backend URL
           </div>
