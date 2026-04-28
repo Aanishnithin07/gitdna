@@ -7579,6 +7579,46 @@ export default function GitDNA() {
     }
   }, []);
 
+  // Handle browser back/forward button presses
+  useEffect(() => {
+    const handlePopState = () => {
+      const params = new URLSearchParams(window.location.search);
+      const battleParam = params.get("battle");
+      const urlBattle = parseBattleParam(battleParam);
+      const urlUsername = params.get("u");
+
+      if (urlBattle) {
+        setBattleData(null);
+        executeBattle(urlBattle.left, urlBattle.right, { showLoading: true }).catch((err) => {
+          setError(err?.message || "Battle analysis failed.");
+          setPhase("error");
+        });
+      } else if (urlUsername && urlUsername.trim()) {
+        const parsedUsername = parseGithubUsername(urlUsername.trim());
+        if (parsedUsername) {
+          setPhase("landing");
+          analyze(parsedUsername);
+        }
+      } else {
+        setPhase("landing");
+        resetPageMeta();
+        setLoadingSteps(LOADING_STEPS);
+        setBattleData(null);
+        setGithub(null);
+        setAiData(null);
+        setDevScore(0);
+        setLangs([]);
+        setActiveUsername("");
+        setIsFounder(false);
+        setStarTier(null);
+        setNightOwlToastVisible(false);
+      }
+    };
+
+    window.addEventListener("popstate", handlePopState);
+    return () => window.removeEventListener("popstate", handlePopState);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
   useEffect(() => {
     if (autoAnalyzeRef.current) return;
     autoAnalyzeRef.current = true;
