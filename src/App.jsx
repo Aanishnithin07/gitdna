@@ -7596,8 +7596,14 @@ export default function GitDNA() {
       } else if (urlUsername && urlUsername.trim()) {
         const parsedUsername = parseGithubUsername(urlUsername.trim());
         if (parsedUsername) {
-          setPhase("landing");
-          analyze(parsedUsername);
+          // Restore previously loaded state and show dashboard instead of re-fetching
+          setActiveUsername(parsedUsername);
+          setPhase("dashboard");
+          updatePageMeta(parsedUsername,
+            aiData?.devClass || "Developer",
+            devScore,
+            langs?.[0]?.label
+          );
         }
       } else {
         setPhase("landing");
@@ -7617,7 +7623,7 @@ export default function GitDNA() {
 
     window.addEventListener("popstate", handlePopState);
     return () => window.removeEventListener("popstate", handlePopState);
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [aiData, devScore, langs]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     if (autoAnalyzeRef.current) return;
