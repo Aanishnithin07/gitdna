@@ -7364,10 +7364,10 @@ export default function GitDNA() {
       setLoadingFeed((prev) => prev.includes(finalMessage) ? prev : [...prev, finalMessage]);
       setPhase("dashboard");
       updatePageMeta(
-        github.user.login,
-        aiData?.devClass || 'Developer',
-        devScore,
-        langs[0]?.lang || 'Code'
+        bundle.github.user.login,
+        bundle.aiData?.devClass || 'Developer',
+        bundle.devScore,
+        bundle.langs[0]?.lang || 'Code'
       )
     };
 
