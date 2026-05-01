@@ -89,6 +89,16 @@ class NewspaperPayload(BaseModel):
     profile: dict[str, Any]
 
 
+class LanguagePredictionPayload(BaseModel):
+    username: str
+    github_data: dict[str, Any]
+
+
+class DeveloperMatchPayload(BaseModel):
+    username: str
+    github_data: dict[str, Any]
+
+
 def _cache_key(username: str) -> str:
     return username.strip().lower()
 
@@ -407,3 +417,31 @@ async def generate_newspaper(request: Request, payload: NewspaperPayload) -> dic
         raise HTTPException(status_code=502, detail="GitHub newspaper generation failed.") from exc
 
     return {"newspaper": newspaper}
+
+
+@app.post("/api/language-prediction")
+@limiter.limit("10/minute")
+async def get_language_prediction(request: Request, payload: LanguagePredictionPayload) -> dict[str, Any]:
+    if not payload.github_data:
+        raise HTTPException(status_code=400, detail="GitHub data required for language prediction.")
+
+    try:
+        prediction = await ai_engine.generate_language_prediction(payload.github_data)
+    except Exception as exc:
+        raise HTTPException(status_code=502, detail="Language prediction failed.") from exc
+
+    return {"prediction": prediction}
+
+
+@app.post("/api/developer-match")
+@limiter.limit("10/minute")
+async def get_developer_match(request: Request, payload: DeveloperMatchPayload) -> dict[str, Any]:
+    if not payload.github_data:
+        raise HTTPException(status_code=400, detail="GitHub data required for developer matching.")
+
+    try:
+        match = await ai_engine.generate_developer_match(payload.github_data)
+    except Exception as exc:
+        raise HTTPException(status_code=502, detail="Developer matching failed.") from exc
+
+    return {"match": match}
