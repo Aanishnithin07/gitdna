@@ -1116,6 +1116,237 @@ async def analyze_commit_linguistics(commit_messages: list[str], username: str, 
         )
 
 
+LANG_RECOMMENDATIONS = {
+    "JavaScript": {
+        "next": ["TypeScript", "Rust", "Go"],
+        "reason": "TypeScript adds type safety to your JS stack, Rust/Go give you systems programming power.",
+    },
+    "TypeScript": {
+        "next": ["Rust", "Go", "Python"],
+        "reason": "Strong typing foundation — explore systems languages or data science.",
+    },
+    "Python": {
+        "next": ["Rust", "Go", "TypeScript"],
+        "reason": "Versatile but slow — Rust/Go give speed, TypeScript gives frontend full-stack.",
+    },
+    "Java": {
+        "next": ["Kotlin", "Rust", "Go"],
+        "reason": "Modernize with Kotlin for Android/JVM, or jump to Rust/Go for cloud-native.",
+    },
+    "C++": {
+        "next": ["Rust", "Go", "Zig"],
+        "reason": "Modernize with Rust's memory safety or explore Go's concurrency model.",
+    },
+    "C": {
+        "next": ["Rust", "C++", "Zig"],
+        "reason": "Rust gives memory safety while keeping low-level control.",
+    },
+    "Ruby": {
+        "next": ["Go", "Rust", "TypeScript"],
+        "reason": "Ruby's productivity paired with Go's speed or TS for frontend.",
+    },
+    "Go": {
+        "next": ["Rust", "TypeScript", "Python"],
+        "reason": "Go excels at servers — add Rust for CLI/tools, TS for frontend, Python for data.",
+    },
+    "Rust": {
+        "next": ["TypeScript", "Python", "Go"],
+        "reason": "Systems power — add TypeScript for web, Python for scripting/data.",
+    },
+    "Swift": {
+        "next": ["Rust", "Kotlin", "TypeScript"],
+        "reason": "Apple ecosystem — Rust for systems, Kotlin for cross-platform, TS for web.",
+    },
+    "Kotlin": {
+        "next": ["Rust", "Swift", "Go"],
+        "reason": "JVM strength — Rust for systems, Swift for Apple, Go for cloud.",
+    },
+    "PHP": {
+        "next": ["TypeScript", "Rust", "Go"],
+        "reason": "Modernize with TypeScript for type-safe web or Rust/Go for performance.",
+    },
+}
+
+TRENDING_LANGS = ["Rust", "Go", "TypeScript", "Zig", "Swift", "Kotlin"]
+
+
+def _algorithmic_language_prediction(github_data: dict) -> dict[str, Any]:
+    metrics = _extract_metrics(github_data)
+    top_langs = metrics.get("top_languages", [])
+    current_primary = top_langs[0].get("language", "Unknown") if top_langs else "Unknown"
+    current_primary_lower = current_primary.lower()
+
+    traits = _calculate_base_traits(metrics, github_data)
+    velocity = _to_float(traits.get("velocity", 50), 50)
+    discipline = _to_float(traits.get("discipline", 50), 50)
+    creativity = _to_float(traits.get("creativity", 50), 50)
+
+    rec = LANG_RECOMMENDATIONS.get(current_primary, {"next": ["TypeScript", "Rust", "Go"], "reason": "Explore TypeScript for web development or Rust for systems programming."})
+    suggestions = rec["next"][:3]
+
+    # Adjust based on traits
+    if velocity > 70 and discipline < 40:
+        suggestions = ["Go", "Python", "TypeScript"]
+    elif discipline > 70 and creativity < 50:
+        suggestions = ["Rust", "C++", "Zig"]
+    elif creativity > 70 and velocity < 50:
+        suggestions = ["Rust", "Swift", "Kotlin"]
+
+    # Add trending if not already in suggestions
+    for lang in TRENDING_LANGS:
+        if lang not in suggestions and len(suggestions) < 3:
+            suggestions.append(lang)
+
+    # Score each suggestion
+    scored = []
+    for lang in suggestions:
+        score = 70
+        if lang in ["Rust", "Go"] and velocity > 70:
+            score += 15
+        if lang in ["TypeScript", "Python"] and discipline > 60:
+            score += 10
+        if lang in ["Rust", "Swift"] and creativity > 65:
+            score += 15
+        scored.append({"lang": lang, "score": min(98, score), "reason": rec["reason"]})
+
+    return {
+        "current_language": current_primary,
+        "suggestions": scored,
+        "analysis": f"As a {current_primary} developer with {'high' if velocity > 65 else 'moderate'} velocity and {'high' if discipline > 65 else 'varying'} discipline, you should consider:",
+    }
+
+
+async def predict_next_language(github_data: dict) -> dict[str, Any]:
+    if not _has_groq_key():
+        return _algorithmic_language_prediction(github_data)
+
+    try:
+        metrics = _extract_metrics(github_data)
+        top_langs = metrics.get("top_languages", [])
+        current_primary = top_langs[0].get("language", "Unknown") if top_langs else "Unknown"
+
+        traits = _calculate_base_traits(metrics, github_data)
+        velocity = _to_float(traits.get("velocity", 50), 50)
+        discipline = _to_float(traits.get("discipline", 50), 50)
+
+        prompt = (
+            f"A {current_primary} developer with velocity={velocity}, discipline={discipline}. "
+            f"Top languages: {', '.join(l.get('language', '?') for l in top_langs[:3])}.\n"
+            "Return ONLY valid JSON with this structure:\n"
+            '{"current_language":"X","suggestions":[{"lang":"Y","score":85,"reason":"why Y fits"}],"analysis":"brief text"}'
+        )
+
+        result = await call_groq(prompt, "You are a programming language advisor. Return only valid JSON.", max_tokens=300, temperature=0.5)
+        if result:
+            try:
+                parsed = json.loads(result)
+                if isinstance(parsed, dict) and "suggestions" in parsed:
+                    return parsed
+            except json.JSONDecodeError:
+                pass
+
+        return _algorithmic_language_prediction(github_data)
+    except Exception:
+        return _algorithmic_language_prediction(github_data)
+
+
+async def match_developers(github_data: dict) -> dict[str, Any]:
+    """Find complementary developers for pairing based on trait differences."""
+    metrics = _extract_metrics(github_data)
+    top_langs = metrics.get("top_languages", [])
+    current_primary = top_langs[0].get("language", "Unknown") if top_langs else "Unknown"
+
+    traits = _calculate_base_traits(metrics, github_data)
+    velocity = _to_float(traits.get("velocity", 50), 50)
+    discipline = _to_float(traits.get("discipline", 50), 50)
+    collaboration = _to_float(traits.get("collaboration", 50), 50)
+    creativity = _to_float(traits.get("creativity", 50), 50)
+    boldness = _to_float(traits.get("boldness", 50), 50)
+    depth = _to_float(traits.get("depth", 50), 50)
+
+    # Find complementary profiles
+    complement_map = {
+        "high_velocity": {"velocity": "<55", "discipline": ">65", "style": "methodical stabilizer"},
+        "high_discipline": {"velocity": ">60", "discipline": "<50", "style": "rapid experimenter"},
+        "low_collaboration": {"collaboration": ">70", "style": "connector"},
+        "high_creativity": {"creativity": "<55", "discipline": ">60", "style": "pragmatic builder"},
+        "low_depth": {"depth": ">65", "creativity": "<50", "style": "specialist"},
+    }
+
+    matches = []
+
+    # Suggest based on opposite traits
+    if velocity > 70:
+        matches.append({
+            "type": "stabilizer",
+            "description": "You code fast — find someone who ensures sustainable pace",
+            "ideal_trait": "discipline > 65, velocity < 55",
+            "reason": "Balances your rapid shipping with methodical review",
+        })
+    if discipline > 70:
+        matches.append({
+            "type": "experimenter",
+            "description": "You plan carefully — pair with someone who ships fast",
+            "ideal_trait": "velocity > 60, discipline < 50",
+            "reason": "Their speed complements your careful approach",
+        })
+    if collaboration < 40:
+        matches.append({
+            "type": "connector",
+            "description": "You prefer solo work — find collaborators who bridge gaps",
+            "ideal_trait": "collaboration > 70",
+            "reason": "They handle the community work you avoid",
+        })
+    if creativity < 50 and depth > 60:
+        matches.append({
+            "type": "generalist",
+            "description": "Deep specialist — pair with a broad builder",
+            "ideal_trait": "creativity > 65, depth < 50",
+            "reason": "Their breadth balances your focused depth",
+        })
+    if boldness > 70:
+        matches.append({
+            "type": "conservative",
+            "description": "You take big risks — find someone who grounds ideas",
+            "ideal_trait": "discipline > 70",
+            "reason": "Their caution prevents over-engineering",
+        })
+
+    # Language synergy suggestions
+    lang_synergies = {
+        "JavaScript": ["TypeScript", "Rust", "Go"],
+        "Python": ["Rust", "Go", "TypeScript"],
+        "Go": ["Rust", "TypeScript", "Python"],
+        "Rust": ["TypeScript", "Go", "Python"],
+    }
+
+    suggested_langs = lang_synergies.get(current_primary, ["TypeScript", "Rust", "Go"])
+    lang_tip = f"Your {current_primary} skills pair well with {', '.join(suggested_langs[:2])} developers"
+
+    if not matches:
+        matches.append({
+            "type": "balanced",
+            "description": "Well-rounded profile — find collaborators with specific strengths",
+            "ideal_trait": "any trait > 75",
+            "reason": "Look for developers who excel in areas you don't",
+        })
+
+    return {
+        "user_profile": {
+            "primary_language": current_primary,
+            "velocity": round(velocity, 1),
+            "discipline": round(discipline, 1),
+            "collaboration": round(collaboration, 1),
+            "creativity": round(creativity, 1),
+            "boldness": round(boldness, 1),
+            "depth": round(depth, 1),
+        },
+        "suggestions": matches[:4],
+        "language_synergy": lang_tip,
+        "summary": f"As a {current_primary} developer, your ideal pairing depends on what you want to develop: shipping speed, code quality, community reach, or architectural depth.",
+    }
+
+
 def _grade_commit_message(message: str) -> dict[str, Any]:
     normalized = re.sub(r"\s+", " ", str(message or "")).strip()
     lowered = normalized.lower()
@@ -1865,3 +2096,9 @@ class GroqAIEngine:
 
     async def generate_newspaper_front_page(self, profile_payload: dict[str, Any]) -> dict[str, Any]:
         return await analyze_newspaper(profile_payload)
+
+    async def generate_language_prediction(self, github_data: dict[str, Any]) -> dict[str, Any]:
+        return await predict_next_language(github_data)
+
+    async def generate_developer_match(self, github_data: dict[str, Any]) -> dict[str, Any]:
+        return await match_developers(github_data)
