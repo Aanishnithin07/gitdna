@@ -9,6 +9,11 @@ const TimeMachine = lazy(() => import("./components/TimeMachine"));
 const GitMap = lazy(() => import("./components/GitMap"));
 const TradingCard = lazy(() => import("./components/TradingCard"));
 const GitHubNewspaperPortal = lazy(() => import("./components/GitNewspaper"));
+const ContributionHeatmap = lazy(() => import("./components/ContributionHeatmap"));
+const RepoAnalysis = lazy(() => import("./components/RepoAnalysis"));
+const LanguagePrediction = lazy(() => import("./components/LanguagePrediction"));
+const BurnoutDetail = lazy(() => import("./components/BurnoutDetail"));
+const DeveloperMatcher = lazy(() => import("./components/DeveloperMatcher"));
 
 const LANG_COLORS = {
   JavaScript:"#f1e05a",TypeScript:"#3178c6",Python:"#3572A5",Rust:"#dea584",
@@ -3413,7 +3418,7 @@ function TraitsRadar({ traits }) {
   );
 }
 
-function ContributionHeatmap({ contributions }) {
+function InlineContributionHeatmap({ contributions }) {
   const tooltipWrapRef = useRef(null);
   const [tooltip, setTooltip] = useState(null);
 
@@ -4503,6 +4508,13 @@ function Dashboard({
   const [showGitMap, setShowGitMap] = useState(false);
   const [showTradingCard, setShowTradingCard] = useState(false);
   const [showNewspaper, setShowNewspaper] = useState(false);
+  const [showContributionHeatmap, setShowContributionHeatmap] = useState(false);
+  const [showRepoAnalysis, setShowRepoAnalysis] = useState(false);
+  const [showLanguagePrediction, setShowLanguagePrediction] = useState(false);
+  const [languagePrediction, setLanguagePrediction] = useState(null);
+  const [showBurnoutDetail, setShowBurnoutDetail] = useState(false);
+  const [showDeveloperMatch, setShowDeveloperMatch] = useState(false);
+  const [developerMatch, setDeveloperMatch] = useState(null);
   const [showAvatarPreview, setShowAvatarPreview] = useState(false);
   const [showDashboardWake, setShowDashboardWake] = useState(false);
   const [showCommitAnalyzer, setShowCommitAnalyzer] = useState(false);
@@ -5141,6 +5153,27 @@ function Dashboard({
     triggerDashboardWake();
   }, [triggerDashboardWake]);
 
+  const handleCloseContributionHeatmap = useCallback(() => {
+    setShowContributionHeatmap(false);
+    triggerDashboardWake();
+  }, [triggerDashboardWake]);
+
+  const handleCloseRepoAnalysis = useCallback(() => {
+    setShowRepoAnalysis(false);
+  }, []);
+
+  const handleCloseLanguagePrediction = useCallback(() => {
+    setShowLanguagePrediction(false);
+  }, []);
+
+  const handleCloseBurnoutDetail = useCallback(() => {
+    setShowBurnoutDetail(false);
+  }, []);
+
+  const handleCloseDeveloperMatch = useCallback(() => {
+    setShowDeveloperMatch(false);
+  }, []);
+
   const scrollToRoastSection = (behavior = "smooth") => {
     const roastNode = roastSectionRef.current;
     if (!roastNode) return;
@@ -5631,6 +5664,54 @@ function Dashboard({
                     🌐 OPEN GITMAP
                   </button>
                 </span>
+                <button
+                  className="gd-btn"
+                  onClick={() => setShowContributionHeatmap(true)}
+                  style={{
+                    padding: "7px 14px",
+                    fontSize: "0.62rem",
+                    letterSpacing: "0.12em",
+                    fontWeight: 700,
+                  }}
+                >
+                  📊 HEATMAP
+                </button>
+                <button
+                  className="gd-btn"
+                  onClick={() => setShowRepoAnalysis(true)}
+                  style={{
+                    padding: "7px 14px",
+                    fontSize: "0.62rem",
+                    letterSpacing: "0.12em",
+                    fontWeight: 700,
+                  }}
+                >
+                  📁 REPOS
+                </button>
+                <button
+                  className="gd-btn"
+                  onClick={() => setShowLanguagePrediction(true)}
+                  style={{
+                    padding: "7px 14px",
+                    fontSize: "0.62rem",
+                    letterSpacing: "0.12em",
+                    fontWeight: 700,
+                  }}
+                >
+                  🔮 NEXT LANG
+                </button>
+                <button
+                  className="gd-btn"
+                  onClick={() => setShowDeveloperMatch(true)}
+                  style={{
+                    padding: "7px 14px",
+                    fontSize: "0.62rem",
+                    letterSpacing: "0.12em",
+                    fontWeight: 700,
+                  }}
+                >
+                  🤝 MATCH
+                </button>
                 <span className="gd-badge gd-badge-gold">⌛ {acctYears}yr veteran</span>
                 {user.blog && <span className="gd-badge gd-badge-green">🔗 blog</span>}
               </div>
@@ -5797,6 +5878,32 @@ function Dashboard({
                   tierLabel={burnoutReport.tier}
                   tierColor={burnoutReport.color}
                 />
+                <button
+                  onClick={() => setShowBurnoutDetail(true)}
+                  style={{
+                    marginTop: "12px",
+                    padding: "6px 12px",
+                    background: "transparent",
+                    border: "1px solid rgba(0,220,255,0.3)",
+                    color: "rgba(0,220,255,0.7)",
+                    fontFamily: "Share Tech Mono,monospace",
+                    fontSize: ".6rem",
+                    letterSpacing: ".1em",
+                    cursor: "pointer",
+                    borderRadius: "4px",
+                    transition: "all .2s ease",
+                  }}
+                  onMouseEnter={(e) => {
+                    e.target.style.borderColor = "rgba(0,220,255,0.6)";
+                    e.target.style.color = "#00dcff";
+                  }}
+                  onMouseLeave={(e) => {
+                    e.target.style.borderColor = "rgba(0,220,255,0.3)";
+                    e.target.style.color = "rgba(0,220,255,0.7)";
+                  }}
+                >
+                  DETAILED VIEW
+                </button>
               </div>
 
               <div style={{ flex: "1 1 360px", minWidth: 240 }}>
@@ -6006,7 +6113,7 @@ function Dashboard({
 
         <div className="gd-card gd-enter-scan" style={{ padding: "18px 18px", marginBottom: 12, ...cardEntranceStyle(7) }}>
           <div className="gd-section-label">CONTRIBUTION GENOME — LAST 52 WEEKS</div>
-          <ContributionHeatmap contributions={contributions} />
+          <InlineContributionHeatmap contributions={contributions} />
         </div>
 
         <div className="gd-card gd-enter-scan" style={{ padding: "18px 18px", marginBottom: 12, ...cardEntranceStyle(7) }}>
@@ -6523,7 +6630,7 @@ function Dashboard({
         </div>
       </div>
 
-      {(showTimeMachine || showGitMap || showTradingCard || showNewspaper) && (
+      {(showTimeMachine || showGitMap || showTradingCard || showNewspaper || showContributionHeatmap) && (
         <Suspense fallback={null}>
           {showTimeMachine && (
             <TimeMachine
@@ -6553,6 +6660,47 @@ function Dashboard({
               geocodeCache={GITMAP_GEOCODE_CACHE}
               insightCache={GITMAP_INSIGHT_CACHE}
               getLangColor={getLangColor}
+            />
+          )}
+
+          {showContributionHeatmap && (
+            <ContributionHeatmap
+              repos={repos}
+              events={events}
+              user={user}
+              onClose={handleCloseContributionHeatmap}
+            />
+          )}
+
+          {showRepoAnalysis && (
+            <RepoAnalysis
+              repos={repos}
+              user={user}
+              onClose={handleCloseRepoAnalysis}
+            />
+          )}
+
+          {showLanguagePrediction && languagePrediction && (
+            <LanguagePrediction
+              prediction={languagePrediction}
+              onClose={handleCloseLanguagePrediction}
+            />
+          )}
+
+          {showBurnoutDetail && (
+            <BurnoutDetail
+              burnoutReport={burnoutReport}
+              events={events}
+              user={user}
+              onClose={handleCloseBurnoutDetail}
+            />
+          )}
+
+          {showDeveloperMatch && developerMatch && (
+            <DeveloperMatcher
+              match={developerMatch}
+              user={user}
+              onClose={handleCloseDeveloperMatch}
             />
           )}
 
@@ -7418,6 +7566,52 @@ export default function GitDNA() {
 
       const data = await fetchProfilePayload(parsedUsername, frontendPayload);
       await applyResult(data);
+
+      // Fetch language prediction
+      try {
+        const predictionResponse = await fetchFromBackend("/api/language-prediction", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            username: parsedUsername,
+            github_data: {
+              user: frontendPayload.user,
+              repos: frontendPayload.repos,
+              events: frontendPayload.events,
+              top_languages: frontendPayload.top_languages,
+              base_traits: frontendPayload.base_traits,
+            },
+          }),
+        });
+        if (predictionResponse?.prediction) {
+          setLanguagePrediction(predictionResponse.prediction);
+        }
+      } catch (predErr) {
+        if (import.meta.env.DEV) console.warn("[GitDNA] Language prediction failed:", predErr);
+      }
+
+      // Fetch developer match
+      try {
+        const matchResponse = await fetchFromBackend("/api/developer-match", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            username: parsedUsername,
+            github_data: {
+              user: frontendPayload.user,
+              repos: frontendPayload.repos,
+              events: frontendPayload.events,
+              top_languages: frontendPayload.top_languages,
+              base_traits: frontendPayload.base_traits,
+            },
+          }),
+        });
+        if (matchResponse?.match) {
+          setDeveloperMatch(matchResponse.match);
+        }
+      } catch (matchErr) {
+        if (import.meta.env.DEV) console.warn("[GitDNA] Developer match failed:", matchErr);
+      }
     } catch (err) {
       const status = Number(err?.status);
       if (Number.isInteger(status) && status > 0) {
