@@ -389,7 +389,7 @@ function TimeMachine({ repos, events, user, onClose, getLangColor }) {
       const key = String(item.year);
       if (journey.totalYearsActive === 1) {
         mapped[key] = "YOUR JOURNEY HAS BEGUN";
-      } else if (placeholderNarrations && aiPendingRef.current && !narrationData?.yearNarrations?.[key]) {
+      } else if (chroniclesLoading && aiPendingRef.current && !narrationData?.yearNarrations?.[key]) {
         mapped[key] = "AI NARRATION LOADING...";
       } else {
         mapped[key] = narrationData?.yearNarrations?.[key] || fallbackNarration.yearNarrations[key] || `${item.year} — ${item.commits} commits. ${item.newRepos} new repos.`;

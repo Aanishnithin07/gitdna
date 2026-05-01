@@ -4,7 +4,7 @@
 
   <url>
     <loc>https://gitdna.xyz/</loc>
-    <lastmod>2025-01-01</lastmod>
+    <lastmod>2026-05-01</lastmod>
     <changefreq>weekly</changefreq>
     <priority>1.0</priority>
     <image:image>
@@ -15,28 +15,28 @@
 
   <url>
     <loc>https://gitdna.xyz/?u=torvalds</loc>
-    <lastmod>2025-01-01</lastmod>
+    <lastmod>2026-05-01</lastmod>
     <changefreq>monthly</changefreq>
     <priority>0.7</priority>
   </url>
 
   <url>
     <loc>https://gitdna.xyz/?u=gaearon</loc>
-    <lastmod>2025-01-01</lastmod>
+    <lastmod>2026-05-01</lastmod>
     <changefreq>monthly</changefreq>
     <priority>0.7</priority>
   </url>
 
   <url>
     <loc>https://gitdna.xyz/?u=sindresorhus</loc>
-    <lastmod>2025-01-01</lastmod>
+    <lastmod>2026-05-01</lastmod>
     <changefreq>monthly</changefreq>
     <priority>0.6</priority>
   </url>
 
   <url>
     <loc>https://gitdna.xyz/?u=antirez</loc>
-    <lastmod>2025-01-01</lastmod>
+    <lastmod>2026-05-01</lastmod>
     <changefreq>monthly</changefreq>
     <priority>0.6</priority>
   </url>
