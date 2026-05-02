@@ -5664,55 +5664,7 @@ function Dashboard({
                     🌐 OPEN GITMAP
                   </button>
                 </span>
-                <button
-                  className="gd-btn"
-                  onClick={() => setShowContributionHeatmap(true)}
-                  style={{
-                    padding: "7px 14px",
-                    fontSize: "0.62rem",
-                    letterSpacing: "0.12em",
-                    fontWeight: 700,
-                  }}
-                >
-                  📊 HEATMAP
-                </button>
-                <button
-                  className="gd-btn"
-                  onClick={() => setShowRepoAnalysis(true)}
-                  style={{
-                    padding: "7px 14px",
-                    fontSize: "0.62rem",
-                    letterSpacing: "0.12em",
-                    fontWeight: 700,
-                  }}
-                >
-                  📁 REPOS
-                </button>
-                <button
-                  className="gd-btn"
-                  onClick={() => setShowLanguagePrediction(true)}
-                  style={{
-                    padding: "7px 14px",
-                    fontSize: "0.62rem",
-                    letterSpacing: "0.12em",
-                    fontWeight: 700,
-                  }}
-                >
-                  🔮 NEXT LANG
-                </button>
-                <button
-                  className="gd-btn"
-                  onClick={() => setShowDeveloperMatch(true)}
-                  style={{
-                    padding: "7px 14px",
-                    fontSize: "0.62rem",
-                    letterSpacing: "0.12em",
-                    fontWeight: 700,
-                  }}
-                >
-                  🤝 MATCH
-                </button>
-                <span className="gd-badge gd-badge-gold">⌛ {acctYears}yr veteran</span>
+                                <span className="gd-badge gd-badge-gold">⌛ {acctYears}yr veteran</span>
                 {user.blog && <span className="gd-badge gd-badge-green">🔗 blog</span>}
               </div>
             </div>
