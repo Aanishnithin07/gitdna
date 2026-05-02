@@ -4342,6 +4342,95 @@ function LandingPage({ onAnalyze, scanCount, ultraMode = false, isOnline = true 
           </div>
         ))}
       </div>
+
+      <div className="anim-up delay-7" style={{
+        marginTop: 28,
+        border: "1px solid rgba(179,71,234,0.22)",
+        borderRadius: 8,
+        background: "rgba(179,71,234,0.04)",
+        padding: "18px 24px",
+        textAlign: "center",
+        maxWidth: 520,
+        width: "100%"
+      }}>
+        <div style={{
+          fontFamily: "Share Tech Mono,monospace",
+          fontSize: "0.58rem",
+          letterSpacing: "0.18em",
+          color: "rgba(179,71,234,0.6)",
+          marginBottom: 8
+        }}>
+          // OPEN SOURCE — SHIP YOUR FEATURE
+        </div>
+        <div style={{
+          fontFamily: "Rajdhani,sans-serif",
+          fontSize: "1rem",
+          color: "rgba(200,232,255,0.82)",
+          fontWeight: 600,
+          letterSpacing: "0.1em",
+          marginBottom: 6
+        }}>
+          CONTRIBUTE TO GITDNA
+        </div>
+        <div style={{
+          fontFamily: "Share Tech Mono,monospace",
+          fontSize: "0.62rem",
+          color: "rgba(200,232,255,0.38)",
+          marginBottom: 16
+        }}>
+          Fork the repo, add features, push PRs. Make developers stronger.
+        </div>
+        <div style={{ display: "flex", gap: 10, justifyContent: "center", flexWrap: "wrap" }}>
+          <a
+            href="https://github.com/Aanishnithin07/gitdna"
+            target="_blank"
+            rel="noopener noreferrer"
+            style={{
+              background: "rgba(179,71,234,0.14)",
+              border: "1px solid rgba(179,71,234,0.45)",
+              borderRadius: 6,
+              padding: "9px 20px",
+              fontFamily: "Share Tech Mono,monospace",
+              fontSize: "0.65rem",
+              color: "#c76ef8",
+              textDecoration: "none",
+              letterSpacing: "0.1em",
+              transition: "all 0.2s",
+              display: "inline-flex",
+              alignItems: "center",
+              gap: 6
+            }}
+            onMouseEnter={e => { e.currentTarget.style.background = "rgba(179,71,234,0.28)"; e.currentTarget.style.borderColor = "rgba(179,71,234,0.7)"; }}
+            onMouseLeave={e => { e.currentTarget.style.background = "rgba(179,71,234,0.14)"; e.currentTarget.style.borderColor = "rgba(179,71,234,0.45)"; }}
+          >
+            ⭐ STAR REPOSITORY
+          </a>
+          <a
+            href="https://github.com/Aanishnithin07/gitdna/issues"
+            target="_blank"
+            rel="noopener noreferrer"
+            style={{
+              background: "rgba(0,220,255,0.06)",
+              border: "1px solid rgba(0,220,255,0.28)",
+              borderRadius: 6,
+              padding: "9px 20px",
+              fontFamily: "Share Tech Mono,monospace",
+              fontSize: "0.65rem",
+              color: "rgba(0,220,255,0.75)",
+              textDecoration: "none",
+              letterSpacing: "0.1em",
+              transition: "all 0.2s",
+              display: "inline-flex",
+              alignItems: "center",
+              gap: 6
+            }}
+            onMouseEnter={e => { e.currentTarget.style.background = "rgba(0,220,255,0.14)"; e.currentTarget.style.borderColor = "rgba(0,220,255,0.55)"; }}
+            onMouseLeave={e => { e.currentTarget.style.background = "rgba(0,220,255,0.06)"; e.currentTarget.style.borderColor = "rgba(0,220,255,0.28)"; }}
+          >
+            🐛 REPORT A BUG
+          </a>
+        </div>
+      </div>
     </div>
   );
 }
