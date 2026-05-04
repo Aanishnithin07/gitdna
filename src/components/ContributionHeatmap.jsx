@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { createPortal } from "react-dom";
+import { createPortal } from "react-dom"; 
 
 const HEATMAP_PORTAL_STYLES = `
 .hm-overlay{position:fixed;inset:0;z-index:9998;background:rgba(0,0,0,0.95);overflow:auto;color:#dff7ff}
