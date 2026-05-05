@@ -2,7 +2,7 @@
 # https://gitdna.xyz
 
 User-agent: *
-Allow: /
+Allow: / 
 Disallow: /api/
 
 Sitemap: https://gitdna.xyz/sitemap.xml
