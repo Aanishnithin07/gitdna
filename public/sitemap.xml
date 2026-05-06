@@ -5,9 +5,9 @@
   <url>
     <loc>https://gitdna.xyz/</loc>
     <lastmod>2026-05-01</lastmod>
-    <changefreq>weekly</changefreq>
+    <changefreq>weekly</changefreq>  
     <priority>1.0</priority>
-    <image:image>
+    <image:image>  
       <image:loc>https://gitdna.xyz/og-image.png</image:loc>
       <image:title>GitDNA — Developer Intelligence Platform</image:title>
     </image:image>
