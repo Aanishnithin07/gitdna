@@ -72,7 +72,6 @@ Vision: make developer identity visible through behavior, not vanity metrics.
 ## License
 
 MIT Licensed.
-
 Free to use, fork, and build on.
 
 
