@@ -17,7 +17,7 @@ from slowapi.util import get_remote_address
 from ai_engine import GroqAIEngine
 from analyzer import GitHubAnalyzer
 
-load_dotenv()
+load_dotenv() 
 
 app = FastAPI(title="GitDNA Backend", version="1.0.0")
 
