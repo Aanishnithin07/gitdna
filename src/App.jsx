@@ -4345,9 +4345,10 @@ function LandingPage({ onAnalyze, scanCount, ultraMode = false, isOnline = true 
 
       <div className="anim-up delay-7" style={{
         marginTop: 28,
-        border: "1px solid rgba(179,71,234,0.22)",
+        border: "2px solid rgba(74,255,255,0.98)",
         borderRadius: 8,
         background: "rgba(179,71,234,0.04)",
+        boxShadow: "0 0 0 1px rgba(74,255,255,0.42) inset, 0 0 18px rgba(0,245,255,0.32), 0 0 44px rgba(0,245,255,0.38)",
         padding: "18px 24px",
         textAlign: "center",
         maxWidth: 520,
