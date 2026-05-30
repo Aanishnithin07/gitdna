@@ -4403,7 +4403,7 @@ function LandingPage({ onAnalyze, scanCount, ultraMode = false, isOnline = true 
             onMouseEnter={e => { e.currentTarget.style.background = "rgba(179,71,234,0.28)"; e.currentTarget.style.borderColor = "rgba(179,71,234,0.7)"; }}
             onMouseLeave={e => { e.currentTarget.style.background = "rgba(179,71,234,0.14)"; e.currentTarget.style.borderColor = "rgba(179,71,234,0.45)"; }}
           >
-            ⭐ STAR REPOSITORY
+            ⭐ <span style={{ color: "#ffd166", textShadow: "0 0 10px rgba(255,209,102,0.45)", fontWeight: 700 }}>STAR MY REPO</span>
           </a>
           <a
             href="https://github.com/Aanishnithin07/gitdna/issues"
