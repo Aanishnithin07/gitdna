@@ -4420,22 +4420,31 @@ function LandingPage({ onAnalyze, scanCount, ultraMode = false, isOnline = true 
             target="_blank"
             rel="noopener noreferrer"
             style={{
-              background: "rgba(0,220,255,0.06)",
-              border: "1px solid rgba(0,220,255,0.28)",
+              background: "rgba(179,71,234,0.14)",
+              border: "1px solid rgba(255,209,102,0.78)",
               borderRadius: 6,
               padding: "9px 20px",
               fontFamily: "Share Tech Mono,monospace",
               fontSize: "0.65rem",
-              color: "rgba(0,220,255,0.75)",
+              color: "#c76ef8",
               textDecoration: "none",
               letterSpacing: "0.1em",
               transition: "all 0.2s",
+              boxShadow: "0 0 0 1px rgba(255,209,102,0.22) inset, 0 0 22px rgba(255,209,102,0.24)",
               display: "inline-flex",
               alignItems: "center",
               gap: 6
             }}
-            onMouseEnter={e => { e.currentTarget.style.background = "rgba(0,220,255,0.14)"; e.currentTarget.style.borderColor = "rgba(0,220,255,0.55)"; }}
-            onMouseLeave={e => { e.currentTarget.style.background = "rgba(0,220,255,0.06)"; e.currentTarget.style.borderColor = "rgba(0,220,255,0.28)"; }}
+            onMouseEnter={e => {
+              e.currentTarget.style.background = "rgba(179,71,234,0.28)";
+              e.currentTarget.style.borderColor = "rgba(255,209,102,0.98)";
+              e.currentTarget.style.boxShadow = "0 0 0 1px rgba(255,209,102,0.35) inset, 0 0 30px rgba(255,209,102,0.48)";
+            }}
+            onMouseLeave={e => {
+              e.currentTarget.style.background = "rgba(179,71,234,0.14)";
+              e.currentTarget.style.borderColor = "rgba(255,209,102,0.78)";
+              e.currentTarget.style.boxShadow = "0 0 0 1px rgba(255,209,102,0.22) inset, 0 0 22px rgba(255,209,102,0.24)";
+            }}
           >
             🐛 REPORT A BUG
           </a>
