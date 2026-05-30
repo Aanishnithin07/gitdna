@@ -4442,22 +4442,31 @@ function LandingPage({ onAnalyze, scanCount, ultraMode = false, isOnline = true 
           <a
             href="mailto:aanishnithin07@gmail.com"
             style={{
-              background: "rgba(57,255,20,0.08)",
-              border: "1px solid rgba(57,255,20,0.42)",
+              background: "rgba(255,111,0,0.12)",
+              border: "2px solid rgba(255,179,71,0.96)",
               borderRadius: 6,
               padding: "9px 20px",
               fontFamily: "Share Tech Mono,monospace",
               fontSize: "0.65rem",
-              color: "rgba(57,255,20,0.82)",
+              color: "#ffd27a",
               textDecoration: "none",
               letterSpacing: "0.1em",
               transition: "all 0.2s",
+              boxShadow: "0 0 0 1px rgba(255,179,71,0.34) inset, 0 0 26px rgba(255,179,71,0.32)",
               display: "inline-flex",
               alignItems: "center",
               gap: 6
             }}
-            onMouseEnter={e => { e.currentTarget.style.background = "rgba(57,255,20,0.16)"; e.currentTarget.style.borderColor = "rgba(57,255,20,0.72)"; }}
-            onMouseLeave={e => { e.currentTarget.style.background = "rgba(57,255,20,0.08)"; e.currentTarget.style.borderColor = "rgba(57,255,20,0.42)"; }}
+            onMouseEnter={e => {
+              e.currentTarget.style.background = "rgba(255,111,0,0.2)";
+              e.currentTarget.style.borderColor = "rgba(255,209,102,1)";
+              e.currentTarget.style.boxShadow = "0 0 0 1px rgba(255,209,102,0.46) inset, 0 0 34px rgba(255,179,71,0.5)";
+            }}
+            onMouseLeave={e => {
+              e.currentTarget.style.background = "rgba(255,111,0,0.12)";
+              e.currentTarget.style.borderColor = "rgba(255,179,71,0.96)";
+              e.currentTarget.style.boxShadow = "0 0 0 1px rgba(255,179,71,0.34) inset, 0 0 26px rgba(255,179,71,0.32)";
+            }}
           >
             ✉ MAIL ME
           </a>
