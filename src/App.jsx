@@ -4439,6 +4439,28 @@ function LandingPage({ onAnalyze, scanCount, ultraMode = false, isOnline = true 
           >
             🐛 REPORT A BUG
           </a>
+          <a
+            href="mailto:aanishnithin07@gmail.com"
+            style={{
+              background: "rgba(57,255,20,0.08)",
+              border: "1px solid rgba(57,255,20,0.42)",
+              borderRadius: 6,
+              padding: "9px 20px",
+              fontFamily: "Share Tech Mono,monospace",
+              fontSize: "0.65rem",
+              color: "rgba(57,255,20,0.82)",
+              textDecoration: "none",
+              letterSpacing: "0.1em",
+              transition: "all 0.2s",
+              display: "inline-flex",
+              alignItems: "center",
+              gap: 6
+            }}
+            onMouseEnter={e => { e.currentTarget.style.background = "rgba(57,255,20,0.16)"; e.currentTarget.style.borderColor = "rgba(57,255,20,0.72)"; }}
+            onMouseLeave={e => { e.currentTarget.style.background = "rgba(57,255,20,0.08)"; e.currentTarget.style.borderColor = "rgba(57,255,20,0.42)"; }}
+          >
+            ✉ MAIL ME
+          </a>
         </div>
       </div>
     </div>
