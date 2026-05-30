@@ -4387,7 +4387,7 @@ function LandingPage({ onAnalyze, scanCount, ultraMode = false, isOnline = true 
             rel="noopener noreferrer"
             style={{
               background: "rgba(179,71,234,0.14)",
-              border: "1px solid rgba(179,71,234,0.45)",
+              border: "1px solid rgba(255,209,102,0.78)",
               borderRadius: 6,
               padding: "9px 20px",
               fontFamily: "Share Tech Mono,monospace",
@@ -4396,12 +4396,21 @@ function LandingPage({ onAnalyze, scanCount, ultraMode = false, isOnline = true 
               textDecoration: "none",
               letterSpacing: "0.1em",
               transition: "all 0.2s",
+              boxShadow: "0 0 0 1px rgba(255,209,102,0.22) inset, 0 0 22px rgba(255,209,102,0.24)",
               display: "inline-flex",
               alignItems: "center",
               gap: 6
             }}
-            onMouseEnter={e => { e.currentTarget.style.background = "rgba(179,71,234,0.28)"; e.currentTarget.style.borderColor = "rgba(179,71,234,0.7)"; }}
-            onMouseLeave={e => { e.currentTarget.style.background = "rgba(179,71,234,0.14)"; e.currentTarget.style.borderColor = "rgba(179,71,234,0.45)"; }}
+            onMouseEnter={e => {
+              e.currentTarget.style.background = "rgba(179,71,234,0.28)";
+              e.currentTarget.style.borderColor = "rgba(255,209,102,0.98)";
+              e.currentTarget.style.boxShadow = "0 0 0 1px rgba(255,209,102,0.35) inset, 0 0 30px rgba(255,209,102,0.48)";
+            }}
+            onMouseLeave={e => {
+              e.currentTarget.style.background = "rgba(179,71,234,0.14)";
+              e.currentTarget.style.borderColor = "rgba(255,209,102,0.78)";
+              e.currentTarget.style.boxShadow = "0 0 0 1px rgba(255,209,102,0.22) inset, 0 0 22px rgba(255,209,102,0.24)";
+            }}
           >
             ⭐ <span style={{ color: "#ffd166", textShadow: "0 0 10px rgba(255,209,102,0.45)", fontWeight: 700 }}>STAR MY REPO</span>
           </a>
