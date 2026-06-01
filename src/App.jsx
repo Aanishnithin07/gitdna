@@ -4347,9 +4347,6 @@ function LandingPage({ onAnalyze, scanCount, ultraMode = false, isOnline = true 
             </div>
           </div>
 
-          <div style={{ marginTop: 10, fontFamily: "Share Tech Mono,monospace", fontSize: "0.62rem", color: "rgba(0,220,255,0.45)", letterSpacing: "0.04em" }}>
-            Set VITE_API_URL in .env to your FastAPI backend URL
-          </div>
           <div style={{ marginTop: 12 }}>
             <div style={{ fontFamily: "Share Tech Mono,monospace", fontSize: "0.58rem", color: "rgba(0,220,255,0.36)", letterSpacing: "0.14em", marginBottom: 8 }}>
               RECENTLY ANALYZED
