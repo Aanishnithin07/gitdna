@@ -1,6 +1,6 @@
 /* global process */
 
-const BASE_URL = process.env.API_URL || 'http://localhost:8000'
+const BASE_URL = process.env.API_URL || 'http://localhost:8000' 
 
 async function safeParseJson(res) {
   try {
