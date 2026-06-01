@@ -4181,7 +4181,7 @@ function LandingPage({ onAnalyze, scanCount, ultraMode = false, isOnline = true 
       )}
 
       <div className="anim-up delay-3" style={{ width: "100%", maxWidth: 520 }}>
-        <div className="gd-card" style={{ padding: "28px 28px 24px" }}>
+        <div className="gd-card" style={{ padding: "28px 28px 24px", border: "1px solid rgba(255,179,0,0.55)", boxShadow: "0 0 18px rgba(255,179,0,0.24)" }}>
           <div className="gd-section-label">INITIALIZE SCAN</div>
           <div style={{ position: "relative", marginBottom: 14 }}>
             <div style={{ fontFamily: "Share Tech Mono,monospace", fontSize: "0.75rem", color: "rgba(0,220,255,0.5)", marginBottom: 8 }}>
