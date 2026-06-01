@@ -567,6 +567,11 @@ html,body{max-width:100%;overflow-x:hidden}
 .gd-input{background:rgba(0,8,20,0.95);border:1px solid rgba(0,220,255,0.35);color:#00dcff;font-family:'Share Tech Mono',monospace;font-size:1.05rem;padding:15px 18px;outline:none;width:100%;transition:all .3s;letter-spacing:.04em;border-radius:4px}
 .gd-input:focus{border-color:rgba(0,220,255,0.8);box-shadow:0 0 24px rgba(0,220,255,0.2),inset 0 0 10px rgba(0,220,255,0.04)}
 .gd-input::placeholder{color:rgba(0,220,255,0.25)}
+.gd-input-shell{display:flex;gap:0;align-items:stretch;padding:2px;border-radius:6px;border:1px solid rgba(255,179,0,0.45);background:linear-gradient(180deg,rgba(10,12,20,0.96),rgba(6,10,18,0.98));box-shadow:0 0 12px rgba(255,179,0,0.18),inset 0 0 12px rgba(255,179,0,0.06);transition:box-shadow .25s ease,border-color .25s ease,transform .25s ease}
+.gd-input-shell-active{border-color:rgba(255,179,0,0.72);box-shadow:0 0 22px rgba(255,179,0,0.34),inset 0 0 14px rgba(255,179,0,0.08);transform:translateY(-1px)}
+.gd-input-main{background:transparent;border:none;color:#e8f6ff;letter-spacing:.05em}
+.gd-input-main:focus{border:none;box-shadow:none}
+.gd-input-main::placeholder{color:rgba(255,209,102,0.38)}
 
 .gd-btn{background:linear-gradient(135deg,rgba(0,220,255,0.12),rgba(179,71,234,0.12));border:1px solid rgba(0,220,255,0.45);color:#00dcff;font-family:'Orbitron',monospace;font-size:0.78rem;letter-spacing:.12em;padding:13px 28px;cursor:pointer;transition:all .25s;border-radius:4px;position:relative;overflow:hidden;white-space:nowrap}
 .gd-btn:hover:not(:disabled){background:linear-gradient(135deg,rgba(0,220,255,0.25),rgba(179,71,234,0.25));box-shadow:0 0 24px rgba(0,220,255,0.35);transform:translateY(-1px)}
@@ -4187,14 +4192,14 @@ function LandingPage({ onAnalyze, scanCount, ultraMode = false, isOnline = true 
             <div style={{ fontFamily: "Share Tech Mono,monospace", fontSize: "0.75rem", color: "rgba(0,220,255,0.5)", marginBottom: 8 }}>
               root@gitdna:~$ scan_developer
             </div>
-            <div style={{ display: "flex", gap: 0, alignItems: "stretch" }}>
-              <div style={{ fontFamily: "Share Tech Mono,monospace", fontSize: "1.05rem", color: "rgba(0,220,255,0.5)", padding: "15px 12px 15px 0", background: "transparent", flexShrink: 0 }}>
+            <div className={`gd-input-shell${isInputFocused ? " gd-input-shell-active" : ""}`}>
+              <div style={{ fontFamily: "Share Tech Mono,monospace", fontSize: "1.05rem", color: "rgba(255,209,102,0.7)", padding: "15px 12px", background: "transparent", flexShrink: 0, borderRight: "1px solid rgba(255,179,0,0.25)" }}>
                 @
               </div>
               <input
                 ref={inputRef}
-                className="gd-input"
-                style={{ borderRadius: "0 4px 4px 0", borderLeft: "none" }}
+                className="gd-input gd-input-main"
+                style={{ borderRadius: "0 4px 4px 0" }}
                 placeholder="username or github.com/username"
                 value={username}
                 onFocus={() => setIsInputFocused(true)}
