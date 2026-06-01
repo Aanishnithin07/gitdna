@@ -620,6 +620,12 @@ html,body{max-width:100%;overflow-x:hidden}
 .gd-recent-pill{border:1px solid rgba(0,220,255,0.28);background:rgba(0,8,20,0.8);color:rgba(0,220,255,0.88);padding:6px 10px;border-radius:999px;font-family:'Share Tech Mono',monospace;font-size:.62rem;letter-spacing:.08em;cursor:pointer;transition:all .2s ease}
 .gd-recent-pill:hover{background:rgba(0,220,255,0.14);box-shadow:0 0 12px rgba(0,220,255,0.24)}
 
+.gd-legend-founder-wrap{display:flex;flex-direction:column;align-items:center;gap:6px}
+.gd-legend-founder{position:relative;overflow:hidden;border:1px solid rgba(255,179,0,0.6)!important;background:radial-gradient(circle at 20% 10%,rgba(255,179,0,0.22),rgba(6,12,20,0.96) 55%);box-shadow:0 0 16px rgba(255,179,0,0.25),inset 0 0 12px rgba(255,179,0,0.08)}
+.gd-legend-founder::after{content:'';position:absolute;inset:-40% -10%;background:linear-gradient(110deg,transparent 30%,rgba(255,255,255,0.35) 48%,transparent 66%);animation:founder-shimmer 4.5s linear infinite;pointer-events:none}
+.gd-legend-subbtn{border:1px solid rgba(255,179,0,0.45);background:rgba(12,10,4,0.9);color:#ffd166;font-family:'Share Tech Mono',monospace;font-size:.52rem;letter-spacing:.16em;padding:5px 10px;border-radius:999px;cursor:pointer;transition:all .2s ease}
+.gd-legend-subbtn:hover{background:rgba(255,179,0,0.18);box-shadow:0 0 10px rgba(255,179,0,0.3);transform:translateY(-1px)}
+
 .gd-loading-helix-wrap{position:relative;width:min(260px,74vw);height:148px;margin:0 auto 40px;display:grid;place-items:center}
 .gd-helix{width:min(240px,72vw);height:auto;transform-origin:50% 50%;animation:helix-spin 4.5s linear infinite;filter:drop-shadow(0 0 18px rgba(0,220,255,0.2))}
 .gd-helix-a{fill:none;stroke:#00dcff;stroke-width:3;stroke-linecap:round;stroke-dasharray:14 8;animation:helix-wave-a 1.1s linear infinite}
@@ -4261,53 +4267,83 @@ function LandingPage({ onAnalyze, scanCount, ultraMode = false, isOnline = true 
                 { username: "sindresorhus", label: "sindresorhus", tag: "1000+ packages" },
                 { username: "antirez", label: "antirez", tag: "Redis Creator" },
                 { username: "Aanishnithin07", label: "Aanishnithin07", tag: "GitDNA Founder" },
-              ].map(dev => (
-                <button
-                  key={dev.username}
-                  onClick={() => {
-                    setUsername(dev.username)
-                    onAnalyze(dev.username)
-                  }}
-                  style={{
-                    background:'rgba(0,220,255,0.04)',
-                    border:'1px solid rgba(0,220,255,0.18)',
-                    borderRadius:4,
-                    padding:'6px 12px',
-                    cursor:'pointer',
-                    display:'flex',
-                    flexDirection:'column',
-                    alignItems:'center',
-                    gap:2,
-                    transition:'all 0.2s',
-                  }}
-                  onMouseEnter={e => {
-                    e.currentTarget.style.background = 'rgba(0,220,255,0.1)'
-                    e.currentTarget.style.borderColor = 'rgba(0,220,255,0.4)'
-                    e.currentTarget.style.transform = 'translateY(-2px)'
-                  }}
-                  onMouseLeave={e => {
-                    e.currentTarget.style.background = 'rgba(0,220,255,0.04)'
-                    e.currentTarget.style.borderColor = 'rgba(0,220,255,0.18)'
-                    e.currentTarget.style.transform = 'translateY(0)'
-                  }}
-                >
-                  <span style={{
-                    fontFamily:'Share Tech Mono,monospace',
-                    fontSize:'0.7rem',
-                    color:'rgba(0,220,255,0.7)'
-                  }}>
-                    @{dev.label}
-                  </span>
-                  <span style={{
-                    fontFamily:'Rajdhani,sans-serif',
-                    fontSize:'0.58rem',
-                    color:'rgba(200,232,255,0.3)',
-                    letterSpacing:'0.05em'
-                  }}>
-                    {dev.tag}
-                  </span>
-                </button>
-              ))}
+              ].map(dev => {
+                const isFounder = dev.username === "Aanishnithin07";
+                const baseButton = (
+                  <button
+                    key={dev.username}
+                    onClick={() => {
+                      setUsername(dev.username)
+                      onAnalyze(dev.username)
+                    }}
+                    className={isFounder ? "gd-legend-founder" : undefined}
+                    style={{
+                      background: isFounder ? undefined : 'rgba(0,220,255,0.04)',
+                      border: isFounder ? undefined : '1px solid rgba(0,220,255,0.18)',
+                      borderRadius:4,
+                      padding:'6px 12px',
+                      cursor:'pointer',
+                      display:'flex',
+                      flexDirection:'column',
+                      alignItems:'center',
+                      gap:2,
+                      transition:'all 0.2s',
+                    }}
+                    onMouseEnter={e => {
+                      if (!isFounder) {
+                        e.currentTarget.style.background = 'rgba(0,220,255,0.1)'
+                        e.currentTarget.style.borderColor = 'rgba(0,220,255,0.4)'
+                      }
+                      e.currentTarget.style.transform = 'translateY(-2px)'
+                    }}
+                    onMouseLeave={e => {
+                      if (!isFounder) {
+                        e.currentTarget.style.background = 'rgba(0,220,255,0.04)'
+                        e.currentTarget.style.borderColor = 'rgba(0,220,255,0.18)'
+                      }
+                      e.currentTarget.style.transform = 'translateY(0)'
+                    }}
+                  >
+                    <span style={{
+                      fontFamily:'Share Tech Mono,monospace',
+                      fontSize:'0.7rem',
+                      color: isFounder ? '#ffd166' : 'rgba(0,220,255,0.7)'
+                    }}>
+                      @{dev.label}
+                    </span>
+                    <span style={{
+                      fontFamily:'Rajdhani,sans-serif',
+                      fontSize:'0.58rem',
+                      color: isFounder ? 'rgba(255,209,102,0.6)' : 'rgba(200,232,255,0.3)',
+                      letterSpacing:'0.05em'
+                    }}>
+                      {dev.tag}
+                    </span>
+                  </button>
+                );
+
+                if (!isFounder) {
+                  return baseButton;
+                }
+
+                return (
+                  <div key={dev.username} className="gd-legend-founder-wrap">
+                    {baseButton}
+                    <button
+                      type="button"
+                      className="gd-legend-subbtn"
+                      onClick={() => {
+                        const shouldOpen = window.confirm("Open Aanishnithin07 GitHub profile?");
+                        if (shouldOpen) {
+                          window.open("https://github.com/Aanishnithin07", "_blank", "noopener,noreferrer");
+                        }
+                      }}
+                    >
+                      VIEW GITHUB PROFILE
+                    </button>
+                  </div>
+                );
+              })}
             </div>
           </div>
 
