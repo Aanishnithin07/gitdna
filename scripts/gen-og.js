@@ -89,7 +89,7 @@ ctx.lineWidth = 1
 ctx.beginPath(); ctx.moveTo(70,418); ctx.lineTo(680,418); ctx.stroke()
 
 // Feature pills
-const features = ['AI PROFILING','TIME MACHINE','GITMAP','ROAST MODE','TRADING CARD']
+const features = ['AI PROFILING','TIME MACHINE','GITMAP','ROAST MODE','TRADING CARD'] 
 let px = 70
 ctx.font = '500 11px monospace'
 features.forEach(f => {
