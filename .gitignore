@@ -33,3 +33,7 @@ backend/.env
 backend/.env.*
 !.env.example
 !backend/.env.example
+
+# Python serverless function cache
+__pycache__/
+*.pyc
