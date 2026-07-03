@@ -19,7 +19,6 @@ Your code has a fingerprint. We read it.
 
 ![GitDNA Demo](./docs/demo.gif)
 
-## BACKEND IN WORKING (RAILWAY PLAN EXPIRED)
 
 ## What Is GitDNA
 
